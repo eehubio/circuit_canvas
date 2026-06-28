@@ -6,6 +6,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { useDesignStore } from '../../state/designStore';
 import { PX_PER_MM, footprintBodyRect } from '../../design-core/geometry';
+import { padFootprintFor } from '../../design-core/geometry/footprint-pads';
 import { CATEGORY_DISPLAY } from '../../shared/theme';
 import type { PlacedComponent } from '../../design-core/document/types';
 
@@ -132,22 +133,50 @@ function ComponentGlyph({ comp, selected, multi, overlap, onMouseDown }: {
   comp: PlacedComponent; selected: boolean; multi: boolean; overlap: boolean; onMouseDown: (e: React.MouseEvent) => void;
 }) {
   const disp = CATEGORY_DISPLAY[comp.category];
-  const body = footprintBodyRect(comp.footprint.geometry, { x: comp.placement.xMm, y: comp.placement.yMm }, comp.placement.rotation);
-  // px
-  const px = ORIGIN.x + body.x * PX_PER_MM;
-  const py = ORIGIN.y + body.y * PX_PER_MM;
-  const pw = Math.max(20, body.width * PX_PER_MM);
-  const ph = Math.max(14, body.height * PX_PER_MM);
-  const stroke = overlap ? '#ef4444' : selected ? '#2563eb' : '#94a3b8';
+  const pads = padFootprintFor(comp.footprint.name);
+  // 中心点（px）
+  const cx = ORIGIN.x + comp.placement.xMm * PX_PER_MM;
+  const cy = ORIGIN.y + comp.placement.yMm * PX_PER_MM;
+  const rot = comp.placement.rotation;
+  const courtyard = footprintBodyRect(comp.footprint.geometry, { x: comp.placement.xMm, y: comp.placement.yMm }, comp.placement.rotation);
+  const selW = courtyard.width * PX_PER_MM, selH = courtyard.height * PX_PER_MM;
 
+  if (pads) {
+    // 真实焊盘渲染
+    const bodyStroke = overlap ? '#ef4444' : selected ? '#2563eb' : disp.color;
+    const copper = '#c08a2d'; // 焊盘铜色
+    return (
+      <g transform={`translate(${cx},${cy}) rotate(${rot})`} onMouseDown={onMouseDown} onClick={(e) => e.stopPropagation()} style={{ cursor: 'grab' }}>
+        {(selected || multi) && <rect x={-selW / 2 - 4} y={-selH / 2 - 4} width={selW + 8} height={selH + 8} rx={3} fill="none" stroke={multi ? '#f59e0b' : '#2563eb'} strokeWidth={1.5} strokeDasharray="5 3" />}
+        {/* 丝印本体外框 */}
+        <rect x={-pads.bodyW * PX_PER_MM / 2} y={-pads.bodyH * PX_PER_MM / 2} width={pads.bodyW * PX_PER_MM} height={pads.bodyH * PX_PER_MM} rx={2}
+          fill={overlap ? 'rgba(239,68,68,.06)' : 'rgba(148,163,184,.08)'} stroke={bodyStroke} strokeWidth={selected ? 1.4 : 0.9} />
+        {/* 焊盘 */}
+        {pads.pads.map((p, i) => (
+          <rect key={i} x={(p.x - p.w / 2) * PX_PER_MM} y={(p.y - p.h / 2) * PX_PER_MM} width={p.w * PX_PER_MM} height={p.h * PX_PER_MM}
+            rx={p.round ? p.w * PX_PER_MM / 2 : 0.8} fill={copper} stroke="#8a6420" strokeWidth={0.3} />
+        ))}
+        {/* 引脚1标记 */}
+        {pads.pin1 && <circle cx={pads.pin1.x * PX_PER_MM} cy={pads.pin1.y * PX_PER_MM} r={1.6} fill="#dc2626" />}
+        {/* 位号（不随旋转，反向旋转回正） */}
+        <g transform={`rotate(${-rot})`}>
+          <text x={0} y={-selH / 2 - 6} textAnchor="middle" fontSize={8} fontFamily="monospace" fontWeight={700} fill={disp.color}>{comp.reference}</text>
+        </g>
+      </g>
+    );
+  }
+
+  // 兜底：无焊盘数据时画方块（保持旧行为）
+  const px = ORIGIN.x + courtyard.x * PX_PER_MM;
+  const py = ORIGIN.y + courtyard.y * PX_PER_MM;
+  const pw = Math.max(20, selW), ph = Math.max(14, selH);
+  const stroke = overlap ? '#ef4444' : selected ? '#2563eb' : '#94a3b8';
   return (
     <g transform={`translate(${px},${py})`} onMouseDown={onMouseDown} onClick={(e) => e.stopPropagation()} style={{ cursor: 'grab' }}>
       {multi && <rect x={-5} y={-5} width={pw + 10} height={ph + 10} rx={4} fill="none" stroke="#f59e0b" strokeWidth={2} strokeDasharray="6 3" />}
-      <rect width={pw} height={ph} rx={3} fill={overlap ? '#fff5f5' : '#fff'} stroke={stroke} strokeWidth={selected || overlap ? 2 : 1} strokeDasharray={overlap ? '4 2' : undefined} />
+      <rect width={pw} height={ph} rx={3} fill={overlap ? '#fff5f5' : '#fff'} stroke={stroke} strokeWidth={selected || overlap ? 2 : 1} />
       <text x={pw / 2} y={-5} textAnchor="middle" fontSize={8} fontFamily="monospace" fontWeight={700} fill={disp.color}>{comp.reference}</text>
-      <text x={pw / 2} y={ph / 2} textAnchor="middle" dominantBaseline="middle" fontSize={pw > 60 ? 8 : 6.5} fontFamily="monospace" fontWeight={700} fill="#1e293b">
-        {comp.mpn.length > 14 ? comp.mpn.slice(0, 12) + '..' : comp.mpn}
-      </text>
+      <text x={pw / 2} y={ph / 2} textAnchor="middle" dominantBaseline="middle" fontSize={pw > 60 ? 8 : 6.5} fontFamily="monospace" fontWeight={700} fill="#1e293b">{comp.mpn.length > 14 ? comp.mpn.slice(0, 12) + '..' : comp.mpn}</text>
       <text x={pw / 2} y={ph / 2 + 10} textAnchor="middle" fontSize={6} fontFamily="monospace" fill="#94a3b8">{comp.footprint.name}</text>
     </g>
   );

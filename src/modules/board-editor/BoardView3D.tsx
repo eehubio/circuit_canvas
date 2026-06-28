@@ -1,70 +1,162 @@
 /**
  * modules/board-editor/BoardView3D.tsx
- * 3D 板视图 —— 以板中心为轴旋转，CSS perspective，板不会被裁切。
- * 左键拖拽旋转，滚轮缩放。仅查看。
+ * 真 3D 板视图 —— Three.js WebGL 渲染。
+ * 真实 PCB 板 + 参数化 3D 封装，鼠标拖拽旋转、滚轮缩放。仅查看。
  */
-import { useState, useRef } from 'react';
+import { useRef, useEffect } from 'react';
+import * as THREE from 'three';
 import { useDesignStore } from '../../state/designStore';
-import { PX_PER_MM, footprintBodyRect } from '../../design-core/geometry';
-import { CATEGORY_DISPLAY } from '../../shared/theme';
+import { buildComponent3D, MAT } from './footprint3d';
+import type { CircuitCanvasDocument } from '../../design-core/document/types';
 
 export function BoardView3D() {
   const doc = useDesignStore((s) => s.doc);
-  const [rot, setRot] = useState({ x: 48, z: -12 });
-  const [scale, setScale] = useState(1);
-  const rotRef = useRef({ active: false, sx: 0, sy: 0, rx: 48, rz: -12 });
+  const mountRef = useRef<HTMLDivElement>(null);
+  const stateRef = useRef<{
+    renderer?: THREE.WebGLRenderer; scene?: THREE.Scene; camera?: THREE.PerspectiveCamera;
+    boardGroup?: THREE.Group; raf?: number; updateCamera?: () => void;
+    rotX: number; rotY: number; dist: number;
+  }>({ rotX: -0.9, rotY: 0.3, dist: 220 });
 
-  const bw = doc.board.widthMm * PX_PER_MM;
-  const bh = doc.board.heightMm * PX_PER_MM;
-  const pad = 40;
+  // init scene once
+  useEffect(() => {
+    const mount = mountRef.current;
+    if (!mount) return;
+    const w = mount.clientWidth, h = mount.clientHeight;
 
-  const onDown = (e: React.MouseEvent) => {
-    e.preventDefault();
-    rotRef.current = { active: true, sx: e.clientX, sy: e.clientY, rx: rot.x, rz: rot.z };
-    const onMM = (ev: MouseEvent) => {
-      if (!rotRef.current.active) return;
-      setRot({ x: Math.max(10, Math.min(80, rotRef.current.rx - (ev.clientY - rotRef.current.sy) * 0.3)), z: rotRef.current.rz + (ev.clientX - rotRef.current.sx) * 0.3 });
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0c1520);
+
+    const camera = new THREE.PerspectiveCamera(45, w / h, 1, 2000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(w, h);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    mount.appendChild(renderer.domElement);
+
+    // lights
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    const key = new THREE.DirectionalLight(0xffffff, 0.9); key.position.set(60, 120, 80); scene.add(key);
+    const fill = new THREE.DirectionalLight(0x88aaff, 0.4); fill.position.set(-80, 60, -40); scene.add(fill);
+
+    const boardGroup = new THREE.Group();
+    scene.add(boardGroup);
+
+    const st = stateRef.current;
+    st.renderer = renderer; st.scene = scene; st.camera = camera; st.boardGroup = boardGroup;
+
+    const updateCamera = () => {
+      const { rotX, rotY, dist } = st;
+      // 球面坐标：rotX = 俯仰(负=俯视), rotY = 方位
+      const cosX = Math.cos(rotX);
+      camera.position.set(
+        dist * cosX * Math.sin(rotY),
+        dist * -Math.sin(rotX),
+        dist * cosX * Math.cos(rotY)
+      );
+      camera.lookAt(0, 0, 0);
     };
-    const onMU = () => { rotRef.current.active = false; window.removeEventListener('mousemove', onMM); window.removeEventListener('mouseup', onMU); };
-    window.addEventListener('mousemove', onMM);
-    window.addEventListener('mouseup', onMU);
-  };
+    updateCamera();
+    st.updateCamera = updateCamera;
+
+    const animate = () => { st.raf = requestAnimationFrame(animate); renderer.render(scene, camera); };
+    animate();
+
+    // interactions
+    let dragging = false, sx = 0, sy = 0;
+    const onDown = (e: MouseEvent) => { dragging = true; sx = e.clientX; sy = e.clientY; };
+    const onMove = (e: MouseEvent) => {
+      if (!dragging) return;
+      st.rotY += (e.clientX - sx) * 0.008;
+      st.rotX = Math.max(-1.4, Math.min(-0.1, st.rotX - (e.clientY - sy) * 0.008));
+      sx = e.clientX; sy = e.clientY;
+      updateCamera();
+    };
+    const onUp = () => { dragging = false; };
+    const onWheel = (e: WheelEvent) => { e.preventDefault(); st.dist = Math.max(80, Math.min(600, st.dist * (e.deltaY > 0 ? 1.1 : 0.9))); updateCamera(); };
+    renderer.domElement.addEventListener('mousedown', onDown);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
+
+    const onResize = () => {
+      if (!mount) return;
+      const nw = mount.clientWidth, nh = mount.clientHeight;
+      camera.aspect = nw / nh; camera.updateProjectionMatrix(); renderer.setSize(nw, nh);
+    };
+    window.addEventListener('resize', onResize);
+
+    return () => {
+      if (st.raf) cancelAnimationFrame(st.raf);
+      renderer.domElement.removeEventListener('mousedown', onDown);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      renderer.domElement.removeEventListener('wheel', onWheel);
+      window.removeEventListener('resize', onResize);
+      renderer.dispose();
+      mount.removeChild(renderer.domElement);
+    };
+  }, []);
+
+  // rebuild board + components when doc changes
+  useEffect(() => {
+    const st = stateRef.current;
+    if (!st.boardGroup) return;
+    rebuildBoard(st.boardGroup, doc);
+  }, [doc.board.widthMm, doc.board.heightMm, doc.board.shape, doc.components]);
 
   return (
-    <div style={{ flex: 1, position: 'relative', overflow: 'hidden', background: 'linear-gradient(180deg,#1a2332,#0c1520)', display: 'flex', alignItems: 'center', justifyContent: 'center', perspective: '1600px', cursor: 'grab' }}
-      onMouseDown={onDown}
-      onWheel={(e) => { setScale((s) => Math.min(3, Math.max(0.4, s * (e.deltaY > 0 ? 0.9 : 1.1)))); }}>
-      <svg width={bw + pad * 2} height={bh + pad * 2} viewBox={`${-pad} ${-pad} ${bw + pad * 2} ${bh + pad * 2}`}
-        style={{ overflow: 'visible', transform: `scale(${scale}) rotateX(${rot.x}deg) rotateZ(${rot.z}deg)`, transformOrigin: 'center', transition: rotRef.current.active ? 'none' : 'transform .2s' }}>
-        <BoardShape3D shape={doc.board.shape} w={bw} h={bh} />
-        <text x={bw / 2} y={-12} textAnchor="middle" fontSize={11} fontFamily="monospace" fill="#86efac">{doc.board.widthMm}mm × {doc.board.heightMm}mm</text>
-        <g style={{ pointerEvents: 'none' }}>
-          {doc.components.map((c) => {
-            const body = footprintBodyRect(c.footprint.geometry, { x: c.placement.xMm, y: c.placement.yMm }, c.placement.rotation);
-            const disp = CATEGORY_DISPLAY[c.category];
-            const x = body.x * PX_PER_MM, y = body.y * PX_PER_MM;
-            const w = Math.max(16, body.width * PX_PER_MM), h = Math.max(12, body.height * PX_PER_MM);
-            return (
-              <g key={c.instanceId} transform={`translate(${x},${y})`}>
-                <rect width={w} height={h} rx={2} fill={disp.color} fillOpacity={0.9} stroke="#000" strokeWidth={0.5} style={{ filter: 'drop-shadow(0 6px 8px rgba(0,0,0,.5))' }} />
-                <text x={w / 2} y={h / 2} textAnchor="middle" dominantBaseline="middle" fontSize={6} fontWeight={700} fill="#fff">{c.reference}</text>
-              </g>
-            );
-          })}
-        </g>
-      </svg>
+    <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+      <div ref={mountRef} style={{ width: '100%', height: '100%', cursor: 'grab' }} />
       <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', padding: '5px 14px', borderRadius: 16, background: 'rgba(255,255,255,.08)', border: '1px solid rgba(134,239,172,.25)', color: '#86efac', fontSize: 11, fontWeight: 600, pointerEvents: 'none' }}>
-        🖱 拖拽旋转 · 滚轮缩放 ｜ 俯仰 {Math.round(rot.x)}° · {Math.round(scale * 100)}%
+        🖱 拖拽旋转 · 滚轮缩放 · 真实 3D 封装
       </div>
-      <button onClick={() => { setRot({ x: 48, z: -12 }); setScale(1); }} style={{ position: 'absolute', bottom: 12, right: 12, padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(134,239,172,.3)', background: 'rgba(255,255,255,.08)', color: '#86efac', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>⟳ 复位视角</button>
+      <button onClick={() => { const st = stateRef.current; st.rotX = -0.9; st.rotY = 0.3; st.dist = 220; st.updateCamera?.(); }}
+        style={{ position: 'absolute', bottom: 12, right: 12, padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(134,239,172,.3)', background: 'rgba(255,255,255,.08)', color: '#86efac', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>⟳ 复位视角</button>
     </div>
   );
 }
 
-function BoardShape3D({ shape, w, h }: { shape: string; w: number; h: number }) {
-  const fill = '#0f5132', stroke = '#4ade80';
-  const sh: React.CSSProperties = { filter: 'drop-shadow(0 18px 30px rgba(0,0,0,.55))' };
-  if (shape === 'circle') return <circle cx={w / 2} cy={h / 2} r={Math.min(w, h) / 2} fill={fill} stroke={stroke} strokeWidth={2.5} style={sh} />;
-  if (shape === 'lshape') { const cw = w * 0.45, ch = h * 0.4; return <path d={`M0,0 H${w} V${h - ch} H${w - cw} V${h} H0 Z`} fill={fill} stroke={stroke} strokeWidth={2.5} style={sh} />; }
-  return <rect x={0} y={0} width={w} height={h} rx={shape === 'rounded' ? 18 : 6} fill={fill} stroke={stroke} strokeWidth={2.5} style={sh} />;
+/** 重建板 + 器件。坐标：板中心为原点，x 右、z 下（对应 2D 的 y）、y 上。 */
+function rebuildBoard(group: THREE.Group, doc: CircuitCanvasDocument) {
+  // clear
+  while (group.children.length) { const c = group.children[0]; group.remove(c); disposeObj(c); }
+
+  const W = doc.board.widthMm, H = doc.board.heightMm;
+  // PCB 板（厚 1.6mm）
+  const boardThk = 1.6;
+  let boardGeo: THREE.BufferGeometry;
+  if (doc.board.shape === 'circle') {
+    boardGeo = new THREE.CylinderGeometry(Math.min(W, H) / 2, Math.min(W, H) / 2, boardThk, 48);
+  } else {
+    boardGeo = new THREE.BoxGeometry(W, boardThk, H);
+  }
+  const board = new THREE.Mesh(boardGeo, MAT.pcbGreen);
+  board.position.y = -boardThk / 2;
+  group.add(board);
+
+  // 安装孔（四角）
+  if (doc.board.shape !== 'circle') {
+    for (const [hx, hz] of [[-W / 2 + 4, -H / 2 + 4], [W / 2 - 4, -H / 2 + 4], [-W / 2 + 4, H / 2 - 4], [W / 2 - 4, H / 2 - 4]]) {
+      const hole = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, boardThk + 0.1, 16), MAT.metalCan);
+      hole.position.set(hx, -boardThk / 2, hz);
+      group.add(hole);
+    }
+  }
+
+  // 器件：2D 坐标 (xMm,yMm) 是相对板左上角；转成以板中心为原点
+  for (const comp of doc.components) {
+    const model = buildComponent3D(comp);
+    const localX = comp.placement.xMm - W / 2;
+    const localZ = comp.placement.yMm - H / 2;
+    model.position.set(localX, 0, localZ);
+    model.rotation.y = -(comp.placement.rotation * Math.PI) / 180;
+    group.add(model);
+  }
+}
+
+function disposeObj(obj: THREE.Object3D) {
+  obj.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.geometry) m.geometry.dispose();
+  });
 }

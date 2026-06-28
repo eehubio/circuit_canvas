@@ -42,7 +42,7 @@ export default function App() {
   const loadDocument = useDesignStore((s) => s.loadDocument);
 
   const [rightTab, setRightTab] = useState<'comp' | 'advisor'>('comp');
-  const [bottom, setBottom] = useState<'bom' | 'block' | 'schematic' | null>('bom');
+  const [bottom, setBottom] = useState<'bom' | 'block' | 'schematic' | null>(null);
   const [view, setView] = useState<'2d' | '3d'>('2d');
   const [fullscreen, setFullscreen] = useState<'block' | 'schematic' | null>(null);
   const [aiPrompt, setAiPrompt] = useState('');
@@ -119,7 +119,7 @@ export default function App() {
         </aside>
 
         {/* Center */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
           {/* Toolbar */}
           <div style={{ background: '#fff', borderBottom: '2px solid #E8F3EE', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
             <button onClick={undo} style={tbtn}>↩ 撤销</button>
