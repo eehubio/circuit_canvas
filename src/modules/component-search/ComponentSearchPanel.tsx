@@ -2,7 +2,7 @@
  * modules/component-search/ComponentSearchPanel.tsx
  * 元器件搜索面板 —— 通过 ComponentDataProvider 检索，结果加入画布。
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { getProviders } from '../../providers/factory';
 import { useDesignStore } from '../../state/designStore';
 import { CATEGORY_DISPLAY, CATEGORY_LIST, COLORS, fmtMoney } from '../../shared/theme';
@@ -19,7 +19,8 @@ export function ComponentSearchPanel() {
   const [results, setResults] = useState<ComponentSearchResult[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const addComponent = useDesignStore((s) => s.addComponent);
-  const placedIds = useDesignStore((s) => new Set(s.doc.components.map((c) => c.componentId)));
+  const components = useDesignStore((s) => s.doc.components);
+  const placedIds = useMemo(() => new Set(components.map((c) => c.componentId)), [components]);
 
   const runSearch = useCallback(async () => {
     const res = await providers.components.searchComponents({ keyword, category: category ?? undefined, orgOnly }, ctx);
