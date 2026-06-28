@@ -1,0 +1,32 @@
+{
+  "name": "circuit-canvas",
+  "version": "3.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Circuit Canvas — 电子产品早期架构与PCB预布局智能工具",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint . --ext .ts,.tsx"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^5.0.2",
+    "zod": "^3.24.1",
+    "immer": "^10.1.1",
+    "nanoid": "^5.0.9"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.0",
+    "vitest": "^2.1.8"
+  }
+}
