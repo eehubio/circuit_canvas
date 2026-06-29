@@ -7,6 +7,25 @@ import { footprintCourtyardRect, rectsOverlap, clampRectInside, type Rect } from
 
 export const DEFAULT_GAP_MM = 3;
 export const BOARD_MARGIN_MM = 2;
+export const HOLE_MARGIN_MM = 4; // 定位孔距板边
+export const HOLE_DIAMETER_MM = 3.2;
+
+/** 四角定位孔的中心点 + 禁布矩形（含间隙）。 */
+export function mountingHoleRects(board: BoardDefinition): Rect[] {
+  if (!board.mountingHolesEnabled || board.shape === 'circle') return [];
+  const m = HOLE_MARGIN_MM, r = HOLE_DIAMETER_MM / 2 + DEFAULT_GAP_MM;
+  const W = board.widthMm, H = board.heightMm;
+  return [
+    { x: m, y: m }, { x: W - m, y: m }, { x: m, y: H - m }, { x: W - m, y: H - m },
+  ].map((c) => ({ x: c.x - r, y: c.y - r, width: r * 2, height: r * 2 }));
+}
+
+/** 定位孔中心点（用于渲染）。 */
+export function mountingHoleCenters(board: BoardDefinition): { x: number; y: number }[] {
+  if (!board.mountingHolesEnabled || board.shape === 'circle') return [];
+  const m = HOLE_MARGIN_MM, W = board.widthMm, H = board.heightMm;
+  return [{ x: m, y: m }, { x: W - m, y: m }, { x: m, y: H - m }, { x: W - m, y: H - m }];
+}
 
 /** 取器件的 courtyard 矩形（mm，板坐标系）。 */
 export function componentRect(c: PlacedComponent): Rect {

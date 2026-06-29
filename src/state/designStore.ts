@@ -33,6 +33,7 @@ interface DesignState {
   rotateComponent: (instanceId: string) => void;
   setBoardSize: (w: number, h: number) => void;
   setBoardShape: (shape: BoardShapeKind) => void;
+  toggleMountingHoles: () => void;
   select: (id: string | null) => void;
   toggleMulti: (id: string) => void;
   clearAll: () => void;
@@ -123,6 +124,13 @@ export const useDesignStore = create<DesignState>()(
       set((s) => {
         s.doc.board.shape = shape;
         s.doc = touchDocument(s.doc);
+      }),
+
+    toggleMountingHoles: () =>
+      set((s) => {
+        s.doc.board.mountingHolesEnabled = !s.doc.board.mountingHolesEnabled;
+        s.doc = touchDocument(s.doc);
+        s.overlaps = findOverlaps(s.doc.components);
       }),
 
     select: (id) => set((s) => { s.selectedId = id; }),

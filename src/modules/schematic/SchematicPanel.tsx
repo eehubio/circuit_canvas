@@ -125,8 +125,28 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
             );
           })}
           {items.map((c) => <SymBox key={c.instanceId} c={c} p={P(c.instanceId)} linking={!!linking} onDown={(e) => onSymDown(e, c.instanceId)} />)}
-          <line x1={20} y1={H - 30} x2={W - 20} y2={H - 30} stroke="#334155" strokeWidth={2} />
-          <text x={26} y={H - 36} fontSize={9} fontWeight={700} fill="#334155" fontFamily="monospace">GND</text>
+          {/* GND 总线 + 各器件接地引线 */}
+          {(() => {
+            const railY = H - 30;
+            return (
+              <g>
+                <line x1={20} y1={railY} x2={W - 20} y2={railY} stroke="#334155" strokeWidth={2.5} />
+                <text x={26} y={railY - 6} fontSize={9} fontWeight={700} fill="#334155" fontFamily="monospace">GND</text>
+                {/* 接地符号（三横线） */}
+                {items.filter((c) => c.category !== 'passive').map((c) => {
+                  const sym = symbolFor(c);
+                  const p = P(c.instanceId);
+                  const gx = p.x + sym.w / 2;
+                  return (
+                    <g key={'gnd-' + c.instanceId}>
+                      <line x1={gx} y1={p.y + sym.h} x2={gx} y2={railY} stroke="#64748b" strokeWidth={1.2} strokeDasharray="3 2" />
+                      <circle cx={gx} cy={railY} r={2.5} fill="#334155" />
+                    </g>
+                  );
+                })}
+              </g>
+            );
+          })()}
         </svg>
       </div>
     </div>

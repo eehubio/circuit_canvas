@@ -6,7 +6,7 @@
 import type { PlacedComponent, BoardDefinition } from '../document/types';
 import type { PlacementRule } from '../rules/types';
 import { DEFAULT_PLACEMENT_RULES } from '../rules/types';
-import { componentRect, boardRect, BOARD_MARGIN_MM, DEFAULT_GAP_MM } from '../collision';
+import { componentRect, boardRect, BOARD_MARGIN_MM, DEFAULT_GAP_MM, mountingHoleRects } from '../collision';
 import { rectsOverlap, clampRectInside, type Rect, type Point } from '../geometry';
 
 export { DEFAULT_PLACEMENT_RULES };
@@ -23,7 +23,7 @@ export function solvePlacement(comp: PlacedComponent, ctx: PlaceContext): Point 
   const rect = componentRect(comp);
   const w = rect.width, h = rect.height;
   const board = ctx.board;
-  const occupied = ctx.existing.map(componentRect);
+  const occupied = [...ctx.existing.map(componentRect), ...mountingHoleRects(ctx.board)];
 
   let anchor: Point;
 

@@ -7,6 +7,7 @@ import { useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useDesignStore } from '../../state/designStore';
 import { buildComponent3D, MAT } from './footprint3d';
+import { mountingHoleCenters, HOLE_DIAMETER_MM } from '../../design-core/collision';
 import type { CircuitCanvasDocument } from '../../design-core/document/types';
 
 export function BoardView3D() {
@@ -28,7 +29,17 @@ export function BoardView3D() {
     scene.background = new THREE.Color(0x0c1520);
 
     const camera = new THREE.PerspectiveCamera(45, w / h, 1, 2000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+    } catch {
+      // WebGL 不可用：显示降级提示，避免白屏
+      const msg = document.createElement('div');
+      msg.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#86efac;font-size:13px;background:#0c1520';
+      msg.textContent = '当前环境不支持 WebGL，无法显示 3D 视图';
+      mount.appendChild(msg);
+      return;
+    }
     renderer.setSize(w, h);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     mount.appendChild(renderer.domElement);
@@ -102,7 +113,7 @@ export function BoardView3D() {
     const st = stateRef.current;
     if (!st.boardGroup) return;
     rebuildBoard(st.boardGroup, doc);
-  }, [doc.board.widthMm, doc.board.heightMm, doc.board.shape, doc.components]);
+  }, [doc.board.widthMm, doc.board.heightMm, doc.board.shape, doc.board.mountingHolesEnabled, doc.components]);
 
   return (
     <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
@@ -153,13 +164,11 @@ function rebuildBoard(group: THREE.Group, doc: CircuitCanvasDocument) {
   }
   group.add(boardMesh);
 
-  // 安装孔（四角）
-  if (doc.board.shape !== 'circle') {
-    for (const [hx, hz] of [[-W / 2 + 4, -H / 2 + 4], [W / 2 - 4, -H / 2 + 4], [-W / 2 + 4, H / 2 - 4], [W / 2 - 4, H / 2 - 4]]) {
-      const hole = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, boardThk + 0.1, 16), MAT.metalCan);
-      hole.position.set(hx, -boardThk / 2, hz);
-      group.add(hole);
-    }
+  // 安装孔（由文档开关控制）
+  for (const c of mountingHoleCenters(doc.board)) {
+    const hole = new THREE.Mesh(new THREE.CylinderGeometry(HOLE_DIAMETER_MM / 2, HOLE_DIAMETER_MM / 2, boardThk + 0.2, 20), MAT.metalCan);
+    hole.position.set(c.x - W / 2, 0, c.y - H / 2);
+    group.add(hole);
   }
 
   // 器件：2D 坐标 (xMm,yMm) 是相对板左上角；转成以板中心为原点
@@ -168,7 +177,7 @@ function rebuildBoard(group: THREE.Group, doc: CircuitCanvasDocument) {
     const localX = comp.placement.xMm - W / 2;
     const localZ = comp.placement.yMm - H / 2;
     model.position.set(localX, 0, localZ);
-    model.rotation.y = -(comp.placement.rotation * Math.PI) / 180;
+    model.rotation.y = (comp.placement.rotation * Math.PI) / 180;
     group.add(model);
   }
 }

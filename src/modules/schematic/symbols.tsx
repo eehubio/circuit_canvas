@@ -161,6 +161,17 @@ export function symbolFor(c: PlacedComponent): SymbolDef {
     return connector(Math.min(6, Math.max(2, Math.ceil((c.display?.pins ?? 4) / 2))));
   }
   // mcu / ic
-  const perSide = c.category === 'mcu' ? 4 : 3;
-  return ic(perSide);
+  if (c.category === 'mcu') {
+    return ic(4, { left: ['VDD', 'GND', 'PA0', 'PA1'], right: ['SWD', 'TX', 'RX', 'RST'] });
+  }
+  if (fam.includes('USB-UART') || fam.includes('UART')) {
+    return ic(3, { left: ['VCC', 'D+', 'D-'], right: ['TXD', 'RXD', 'GND'] });
+  }
+  if (fam.includes('Flash')) {
+    return ic(3, { left: ['CS', 'CLK', 'DI'], right: ['DO', 'VCC', 'GND'] });
+  }
+  if (fam.includes('CAN')) {
+    return ic(3, { left: ['TXD', 'RXD', 'VCC'], right: ['CANH', 'CANL', 'GND'] });
+  }
+  return ic(3, { left: ['1', '2', '3'], right: ['4', '5', '6'] });
 }

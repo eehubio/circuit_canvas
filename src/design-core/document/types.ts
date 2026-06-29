@@ -48,6 +48,8 @@ export interface BoardDefinition {
   keepoutZones: KeepoutZone[];
   placementZones: PlacementZone[];
   layerCount?: number;
+  /** 是否启用四角定位孔 */
+  mountingHolesEnabled?: boolean;
 }
 
 /* ---------- 已放置器件 ---------- */

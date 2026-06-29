@@ -74,6 +74,7 @@ const boardSchema = z.object({
     })
   ),
   layerCount: z.number().int().optional(),
+  mountingHolesEnabled: z.boolean().optional(),
 });
 
 const connectionSchema = z.object({

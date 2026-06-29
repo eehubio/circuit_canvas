@@ -7,6 +7,7 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 import { useDesignStore } from '../../state/designStore';
 import { PX_PER_MM, footprintBodyRect } from '../../design-core/geometry';
 import { padFootprintFor } from '../../design-core/geometry/footprint-pads';
+import { mountingHoleCenters, HOLE_DIAMETER_MM } from '../../design-core/collision';
 import { CATEGORY_DISPLAY } from '../../shared/theme';
 import type { PlacedComponent } from '../../design-core/document/types';
 
@@ -90,6 +91,13 @@ export function BoardCanvas2D() {
         <rect width="100%" height="100%" fill="url(#grid)" />
         <g transform={`translate(${pan.x},${pan.y}) scale(${zoom})`}>
           <BoardOutline shape={doc.board.shape} x={ORIGIN.x} y={ORIGIN.y} w={bw} h={bh} />
+          {/* 定位孔 */}
+          {mountingHoleCenters(doc.board).map((c, i) => (
+            <g key={i}>
+              <circle cx={ORIGIN.x + c.x * PX_PER_MM} cy={ORIGIN.y + c.y * PX_PER_MM} r={HOLE_DIAMETER_MM / 2 * PX_PER_MM} fill="#cbd5e1" stroke="#64748b" strokeWidth={1} />
+              <circle cx={ORIGIN.x + c.x * PX_PER_MM} cy={ORIGIN.y + c.y * PX_PER_MM} r={HOLE_DIAMETER_MM / 2 * PX_PER_MM - 2} fill="#F8F9FA" />
+            </g>
+          ))}
           <text x={ORIGIN.x + bw / 2} y={ORIGIN.y - 8} textAnchor="middle" fontSize={10} fontFamily="monospace" fill="#6b7280">
             {doc.board.widthMm}mm × {doc.board.heightMm}mm
           </text>
@@ -139,15 +147,17 @@ function ComponentGlyph({ comp, selected, multi, overlap, onMouseDown }: {
   const cy = ORIGIN.y + comp.placement.yMm * PX_PER_MM;
   const rot = comp.placement.rotation;
   const courtyard = footprintBodyRect(comp.footprint.geometry, { x: comp.placement.xMm, y: comp.placement.yMm }, comp.placement.rotation);
-  const selW = courtyard.width * PX_PER_MM, selH = courtyard.height * PX_PER_MM;
 
   if (pads) {
-    // 真实焊盘渲染
+    // 真实焊盘渲染（局部坐标系，<g> 已应用旋转，故此处不做旋转换算）
     const bodyStroke = overlap ? '#ef4444' : selected ? '#2563eb' : disp.color;
-    const copper = '#c08a2d'; // 焊盘铜色
+    const copper = '#c08a2d';
+    // 选中框 = 焊盘+本体的实际外接范围（局部，未旋转）
+    const halfW = (Math.max(...pads.pads.map((p) => Math.abs(p.x) + p.w / 2), pads.bodyW / 2)) * PX_PER_MM;
+    const halfH = (Math.max(...pads.pads.map((p) => Math.abs(p.y) + p.h / 2), pads.bodyH / 2)) * PX_PER_MM;
     return (
       <g transform={`translate(${cx},${cy}) rotate(${rot})`} onMouseDown={onMouseDown} onClick={(e) => e.stopPropagation()} style={{ cursor: 'grab' }}>
-        {(selected || multi) && <rect x={-selW / 2 - 4} y={-selH / 2 - 4} width={selW + 8} height={selH + 8} rx={3} fill="none" stroke={multi ? '#f59e0b' : '#2563eb'} strokeWidth={1.5} strokeDasharray="5 3" />}
+        {(selected || multi) && <rect x={-halfW - 4} y={-halfH - 4} width={halfW * 2 + 8} height={halfH * 2 + 8} rx={3} fill="none" stroke={multi ? '#f59e0b' : '#2563eb'} strokeWidth={1.5} strokeDasharray="5 3" />}
         {/* 丝印本体外框 */}
         <rect x={-pads.bodyW * PX_PER_MM / 2} y={-pads.bodyH * PX_PER_MM / 2} width={pads.bodyW * PX_PER_MM} height={pads.bodyH * PX_PER_MM} rx={2}
           fill={overlap ? 'rgba(239,68,68,.06)' : 'rgba(148,163,184,.08)'} stroke={bodyStroke} strokeWidth={selected ? 1.4 : 0.9} />
@@ -160,7 +170,7 @@ function ComponentGlyph({ comp, selected, multi, overlap, onMouseDown }: {
         {pads.pin1 && <circle cx={pads.pin1.x * PX_PER_MM} cy={pads.pin1.y * PX_PER_MM} r={1.6} fill="#dc2626" />}
         {/* 位号（不随旋转，反向旋转回正） */}
         <g transform={`rotate(${-rot})`}>
-          <text x={0} y={-selH / 2 - 6} textAnchor="middle" fontSize={8} fontFamily="monospace" fontWeight={700} fill={disp.color}>{comp.reference}</text>
+          <text x={0} y={-halfH - 6} textAnchor="middle" fontSize={8} fontFamily="monospace" fontWeight={700} fill={disp.color}>{comp.reference}</text>
         </g>
       </g>
     );
@@ -169,7 +179,7 @@ function ComponentGlyph({ comp, selected, multi, overlap, onMouseDown }: {
   // 兜底：无焊盘数据时画方块（保持旧行为）
   const px = ORIGIN.x + courtyard.x * PX_PER_MM;
   const py = ORIGIN.y + courtyard.y * PX_PER_MM;
-  const pw = Math.max(20, selW), ph = Math.max(14, selH);
+  const pw = Math.max(20, courtyard.width * PX_PER_MM), ph = Math.max(14, courtyard.height * PX_PER_MM);
   const stroke = overlap ? '#ef4444' : selected ? '#2563eb' : '#94a3b8';
   return (
     <g transform={`translate(${px},${py})`} onMouseDown={onMouseDown} onClick={(e) => e.stopPropagation()} style={{ cursor: 'grab' }}>

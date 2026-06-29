@@ -38,6 +38,7 @@ export default function App() {
   const remove = useDesignStore((s) => s.removeComponent);
   const setBoardSize = useDesignStore((s) => s.setBoardSize);
   const setBoardShape = useDesignStore((s) => s.setBoardShape);
+  const toggleMountingHoles = useDesignStore((s) => s.toggleMountingHoles);
   const placeScheme = useDesignStore((s) => s.placeScheme);
   const loadDocument = useDesignStore((s) => s.loadDocument);
 
@@ -165,6 +166,9 @@ export default function App() {
                 <button key={s.id} title={s.name} onClick={() => setBoardShape(s.id)}
                   style={{ width: 26, height: 22, borderRadius: 4, border: `1.5px solid ${doc.board.shape === s.id ? COLORS.green : '#E8F3EE'}`, background: doc.board.shape === s.id ? COLORS.greenBg : '#fff', color: doc.board.shape === s.id ? COLORS.green : '#94a3b8', fontSize: 12, cursor: 'pointer' }}>{s.icon}</button>
               ))}
+              <div style={{ width: 1, height: 16, background: '#E8F3EE', margin: '0 2px' }} />
+              <button title="四角定位孔（开启后器件自动避让）" onClick={toggleMountingHoles}
+                style={{ padding: '0 8px', height: 22, borderRadius: 4, border: `1.5px solid ${doc.board.mountingHolesEnabled ? COLORS.green : '#E8F3EE'}`, background: doc.board.mountingHolesEnabled ? COLORS.greenBg : '#fff', color: doc.board.mountingHolesEnabled ? COLORS.green : '#94a3b8', fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>⊙ 定位孔</button>
             </div>
             <div style={{ flex: 1 }} />
             {([['bom', '🧾 BOM清单'], ['block', '📊 系统框图'], ['schematic', '⚡ 原理图']] as const).map(([id, label]) => (
