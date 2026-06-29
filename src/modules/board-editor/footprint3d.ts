@@ -83,16 +83,41 @@ function makeSot223(): THREE.Group {
   return g;
 }
 
-/** USB-C 连接器：金属壳 */
+/** USB-C 母座连接器：金属外壳 + 椭圆开口 + 内部舌片 */
 function makeUsbC(): THREE.Group {
   const g = new THREE.Group();
-  const shell = new THREE.Mesh(new THREE.BoxGeometry(9, 3.2, 7), MAT.metalCan);
-  shell.position.y = 3.2 / 2 + 0.05;
+  const shellW = 9.0, shellH = 3.2, shellD = 7.0;
+  // 金属外壳（圆角）
+  const shellShape = new THREE.Shape();
+  const r = shellH / 2;
+  shellShape.moveTo(-shellW / 2 + r, -shellH / 2);
+  shellShape.lineTo(shellW / 2 - r, -shellH / 2);
+  shellShape.quadraticCurveTo(shellW / 2, -shellH / 2, shellW / 2, -shellH / 2 + r);
+  shellShape.lineTo(shellW / 2, shellH / 2 - r);
+  shellShape.quadraticCurveTo(shellW / 2, shellH / 2, shellW / 2 - r, shellH / 2);
+  shellShape.lineTo(-shellW / 2 + r, shellH / 2);
+  shellShape.quadraticCurveTo(-shellW / 2, shellH / 2, -shellW / 2, shellH / 2 - r);
+  shellShape.lineTo(-shellW / 2, -shellH / 2 + r);
+  shellShape.quadraticCurveTo(-shellW / 2, -shellH / 2, -shellW / 2 + r, -shellH / 2);
+  const shellGeo = new THREE.ExtrudeGeometry(shellShape, { depth: shellD, bevelEnabled: false });
+  shellGeo.rotateX(-Math.PI / 2);
+  const shell = new THREE.Mesh(shellGeo, MAT.metalCan);
+  shell.position.set(0, shellH / 2 + 0.05, shellD / 2); // 朝 +z（板边）方向延伸
   g.add(shell);
-  // 开口
-  const slot = new THREE.Mesh(new THREE.BoxGeometry(8.4, 2.6, 0.5), MAT.blackBody);
-  slot.position.set(0, 3.2 / 2 + 0.05, 3.5);
-  g.add(slot);
+  // 内部黑色舌片（Type-C 中间的舌头）
+  const tongue = new THREE.Mesh(new THREE.BoxGeometry(6.5, 0.7, 4), MAT.blackBody);
+  tongue.position.set(0, shellH / 2 + 0.05, shellD - 1.5);
+  g.add(tongue);
+  // 开口处的黑色内衬
+  const innerLip = new THREE.Mesh(new THREE.BoxGeometry(shellW - 1, shellH - 0.8, 0.6), MAT.darkBody);
+  innerLip.position.set(0, shellH / 2 + 0.05, shellD - 0.3);
+  g.add(innerLip);
+  // 焊接固定脚
+  for (const sx of [-1, 1]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.3, 1.8), MAT.lead);
+    leg.position.set(sx * 4.3, 0.15, 1);
+    g.add(leg);
+  }
   return g;
 }
 

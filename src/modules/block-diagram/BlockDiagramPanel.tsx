@@ -122,6 +122,20 @@ export function BlockDiagramPanel({ isFullscreen, onToggleFullscreen }: { isFull
   const changeShape = (shape: string) => { if (sel?.type === 'node') setBlocks(blocks.map((n) => n.id === sel.id ? { ...n, shape } : n)); };
 
   const nc = (id: string) => { const n = blocks.find((b) => b.id === id); return n ? { x: n.x + n.w / 2, y: n.y + n.h / 2 } : { x: 0, y: 0 }; };
+  // 框边缘交点：从框中心朝目标方向，求与矩形边框的交点
+  const edgePoint = (id: string, toward: { x: number; y: number }) => {
+    const n = blocks.find((b) => b.id === id);
+    if (!n) return { x: 0, y: 0 };
+    const cx = n.x + n.w / 2, cy = n.y + n.h / 2;
+    const dx = toward.x - cx, dy = toward.y - cy;
+    if (dx === 0 && dy === 0) return { x: cx, y: cy };
+    const hw = n.w / 2, hh = n.h / 2;
+    // 计算射线与矩形边的最近交点
+    const scaleX = dx !== 0 ? hw / Math.abs(dx) : Infinity;
+    const scaleY = dy !== 0 ? hh / Math.abs(dy) : Infinity;
+    const scale = Math.min(scaleX, scaleY);
+    return { x: cx + dx * scale, y: cy + dy * scale };
+  };
 
   const fitView = () => {
     if (blocks.length === 0) return;
@@ -165,7 +179,8 @@ export function BlockDiagramPanel({ isFullscreen, onToggleFullscreen }: { isFull
           </defs>
           <g transform={`translate(${pan.x},${pan.y}) scale(${zoom})`}>
             {conns.map((a) => {
-              const f = nc(a.fromId), t = nc(a.toId);
+              const fc = nc(a.fromId), tc = nc(a.toId);
+              const f = edgePoint(a.fromId, tc), t = edgePoint(a.toId, fc);
               const isSel = sel?.type === 'arrow' && sel.id === a.id;
               const mx = (f.x + t.x) / 2, my = (f.y + t.y) / 2;
               return (

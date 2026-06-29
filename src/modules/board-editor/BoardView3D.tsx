@@ -124,15 +124,34 @@ function rebuildBoard(group: THREE.Group, doc: CircuitCanvasDocument) {
   const W = doc.board.widthMm, H = doc.board.heightMm;
   // PCB 板（厚 1.6mm）
   const boardThk = 1.6;
-  let boardGeo: THREE.BufferGeometry;
+  let boardMesh: THREE.Mesh;
   if (doc.board.shape === 'circle') {
-    boardGeo = new THREE.CylinderGeometry(Math.min(W, H) / 2, Math.min(W, H) / 2, boardThk, 48);
+    const geo = new THREE.CylinderGeometry(Math.min(W, H) / 2, Math.min(W, H) / 2, boardThk, 64);
+    boardMesh = new THREE.Mesh(geo, MAT.pcbGreen);
+    boardMesh.position.y = -boardThk / 2;
   } else {
-    boardGeo = new THREE.BoxGeometry(W, boardThk, H);
+    // 用 Shape 构造圆角矩形 / L 形，再挤出厚度
+    const shape = new THREE.Shape();
+    if (doc.board.shape === 'lshape') {
+      const cutW = W * 0.45, cutH = H * 0.4;
+      shape.moveTo(-W / 2, -H / 2);
+      shape.lineTo(W / 2, -H / 2);
+      shape.lineTo(W / 2, H / 2 - cutH);
+      shape.lineTo(W / 2 - cutW, H / 2 - cutH);
+      shape.lineTo(W / 2 - cutW, H / 2);
+      shape.lineTo(-W / 2, H / 2);
+      shape.lineTo(-W / 2, -H / 2);
+    } else {
+      // 矩形 / 圆角矩形
+      const r = doc.board.shape === 'rounded' ? Math.min(W, H) * 0.08 : 1.5;
+      roundedRectShape(shape, W, H, r);
+    }
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: boardThk, bevelEnabled: false });
+    geo.rotateX(Math.PI / 2); // 让挤出方向朝 y
+    boardMesh = new THREE.Mesh(geo, MAT.pcbGreen);
+    boardMesh.position.y = 0;
   }
-  const board = new THREE.Mesh(boardGeo, MAT.pcbGreen);
-  board.position.y = -boardThk / 2;
-  group.add(board);
+  group.add(boardMesh);
 
   // 安装孔（四角）
   if (doc.board.shape !== 'circle') {
@@ -154,8 +173,21 @@ function rebuildBoard(group: THREE.Group, doc: CircuitCanvasDocument) {
   }
 }
 
+function roundedRectShape(s: THREE.Shape, w: number, h: number, r: number) {
+  const x = -w / 2, y = -h / 2;
+  s.moveTo(x + r, y);
+  s.lineTo(x + w - r, y);
+  s.quadraticCurveTo(x + w, y, x + w, y + r);
+  s.lineTo(x + w, y + h - r);
+  s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  s.lineTo(x + r, y + h);
+  s.quadraticCurveTo(x, y + h, x, y + h - r);
+  s.lineTo(x, y + r);
+  s.quadraticCurveTo(x, y, x + r, y);
+}
+
 function disposeObj(obj: THREE.Object3D) {
-  obj.traverse((o) => {
+  obj.traverse((o: THREE.Object3D) => {
     const m = o as THREE.Mesh;
     if (m.geometry) m.geometry.dispose();
   });

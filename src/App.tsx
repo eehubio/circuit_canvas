@@ -135,21 +135,23 @@ export default function App() {
             <span style={{ fontSize: 11, color: '#94a3b8' }}>{view === '3d' ? '拖拽旋转 · 滚轮缩放' : '选中后 R 旋转 · Delete 删除 · Ctrl+点击多选'}</span>
           </div>
 
-          {view === '2d' ? <BoardCanvas2D /> : <BoardView3D />}
+          <div style={{ flex: 1, position: 'relative', minHeight: 0, display: 'flex' }}>
+            {view === '2d' ? <BoardCanvas2D /> : <BoardView3D />}
 
-          {/* Selected bar */}
-          {selObj && (
-            <div style={{ position: 'absolute', left: 0, right: 0, bottom: bottom ? 282 : 12, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
-              <div style={{ background: '#fff', borderRadius: 10, padding: '8px 16px', boxShadow: '0 4px 20px rgba(0,0,0,.12)', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, pointerEvents: 'auto' }}>
-                <span style={{ fontWeight: 700, color: COLORS.green }}>{selObj.reference}</span>
-                <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{selObj.mpn}</span>
-                <span style={{ color: '#64748b' }}>{selObj.footprint.name}</span>
-                <span style={{ color: '#059669', fontWeight: 600 }}>{fmtMoney(selObj.unitPrice?.amount)}</span>
-                <button onClick={() => rotate(selObj.instanceId)} style={smbtn}>旋转</button>
-                <button onClick={() => remove(selObj.instanceId)} style={{ ...smbtn, borderColor: '#fecaca', background: '#fef2f2', color: '#dc2626' }}>移除</button>
+            {/* Selected bar — anchored to canvas area bottom */}
+            {selObj && !fullscreen && (
+              <div style={{ position: 'absolute', left: 0, right: 0, bottom: 12, display: 'flex', justifyContent: 'center', pointerEvents: 'none', zIndex: 5 }}>
+                <div style={{ background: '#fff', borderRadius: 10, padding: '8px 16px', boxShadow: '0 4px 20px rgba(0,0,0,.12)', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, pointerEvents: 'auto' }}>
+                  <span style={{ fontWeight: 700, color: COLORS.green }}>{selObj.reference}</span>
+                  <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{selObj.mpn}</span>
+                  <span style={{ color: '#64748b' }}>{selObj.footprint.name}</span>
+                  <span style={{ color: '#059669', fontWeight: 600 }}>{fmtMoney(selObj.unitPrice?.amount)}</span>
+                  <button onClick={() => rotate(selObj.instanceId)} style={smbtn}>旋转</button>
+                  <button onClick={() => remove(selObj.instanceId)} style={{ ...smbtn, borderColor: '#fecaca', background: '#fef2f2', color: '#dc2626' }}>移除</button>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Bottom bar */}
           <div style={{ display: 'flex', background: '#fff', borderTop: '1px solid #E8F3EE', alignItems: 'center' }}>

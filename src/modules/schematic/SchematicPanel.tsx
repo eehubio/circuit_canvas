@@ -4,6 +4,7 @@
  */
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useDesignStore } from '../../state/designStore';
+import { symbolFor } from './symbols';
 import type { PlacedComponent } from '../../design-core/document/types';
 
 interface Net { id: string; from: string; to: string; label: string; color: string; }
@@ -102,9 +103,10 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
             const fc = items.find((i) => i.instanceId === n.from), tc = items.find((i) => i.instanceId === n.to);
             if (!fc || !tc) return null;
             const f = P(n.from), t = P(n.to);
-            const fp = fc.category === 'passive';
-            const x1 = f.x + (fp ? 56 : 130), y1 = f.y + (fp ? 15 : 36);
-            const x2 = t.x - 10, y2 = t.y + (tc.category === 'passive' ? 15 : 36);
+            const fSym = symbolFor(fc), tSym = symbolFor(tc);
+            // 源：右端口；目标：左端口
+            const x1 = f.x + fSym.w + 10, y1 = f.y + fSym.h / 2;
+            const x2 = t.x - 10, y2 = t.y + tSym.h / 2;
             const midX = (x1 + x2) / 2;
             const isSel = sel === n.id;
             return (
@@ -141,24 +143,12 @@ function Header({ isFullscreen, onToggleFullscreen }: { isFullscreen?: boolean; 
 }
 
 function SymBox({ c, p, linking, onDown }: { c: PlacedComponent; p: { x: number; y: number }; linking: boolean; onDown: (e: React.MouseEvent) => void }) {
-  const isPassive = c.category === 'passive';
-  const w = isPassive ? 60 : 120, h = isPassive ? 30 : 72;
+  const sym = symbolFor(c);
   return (
     <g transform={`translate(${p.x},${p.y})`} onMouseDown={onDown} onClick={(e) => e.stopPropagation()} style={{ cursor: linking ? 'pointer' : 'grab' }}>
-      {isPassive ? (
-        c.display?.family === 'MLCC' ? (
-          <g><rect x={-2} y={-2} width={62} height={36} fill="transparent" /><line x1={0} y1={h / 2} x2={24} y2={h / 2} stroke="#334155" strokeWidth={1.5} /><line x1={24} y1={4} x2={24} y2={h - 4} stroke="#334155" strokeWidth={2.5} /><line x1={32} y1={4} x2={32} y2={h - 4} stroke="#334155" strokeWidth={2.5} /><line x1={32} y1={h / 2} x2={56} y2={h / 2} stroke="#334155" strokeWidth={1.5} /></g>
-        ) : (
-          <g><rect x={-2} y={-2} width={62} height={36} fill="transparent" /><line x1={0} y1={h / 2} x2={12} y2={h / 2} stroke="#334155" strokeWidth={1.5} /><rect x={12} y={h / 2 - 6} width={32} height={12} fill="none" stroke="#334155" strokeWidth={1.8} /><line x1={44} y1={h / 2} x2={56} y2={h / 2} stroke="#334155" strokeWidth={1.5} /></g>
-        )
-      ) : (
-        <g>
-          <rect width={w} height={h} rx={2} fill="#fffef7" stroke="#334155" strokeWidth={1.8} />
-          {[0, 1, 2].map((i) => <g key={i}><line x1={-10} y1={14 + i * 22} x2={0} y2={14 + i * 22} stroke="#334155" strokeWidth={1.4} /><line x1={w} y1={14 + i * 22} x2={w + 10} y2={14 + i * 22} stroke="#334155" strokeWidth={1.4} /></g>)}
-        </g>
-      )}
-      <text x={isPassive ? 28 : w / 2} y={-6} textAnchor="middle" fontSize={9} fontWeight={700} fill="#0e7490" fontFamily="monospace">{c.reference}</text>
-      <text x={isPassive ? 28 : w / 2} y={isPassive ? h + 12 : h / 2 + 3} textAnchor="middle" fontSize={isPassive ? 8 : 9} fontWeight={600} fill="#334155" fontFamily="monospace">{c.mpn.length > 14 ? c.mpn.slice(0, 12) + '..' : c.mpn}</text>
+      {/* 透明命中区 */}
+      <rect x={-12} y={-12} width={sym.w + 24} height={sym.h + 24} fill="transparent" />
+      {sym.render(c.reference, c.mpn)}
     </g>
   );
 }

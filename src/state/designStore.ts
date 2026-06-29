@@ -191,8 +191,10 @@ export const useDesignStore = create<DesignState>()(
     generateBlocksFromComponents: () =>
       set((s) => {
         // 按类别聚合生成功能块（一个类别一个块）
+        // 框图只保留功能性核心器件，过滤掉无源辅助器件（阻容感）
         const byCat = new Map<string, typeof s.doc.components>();
         for (const c of s.doc.components) {
+          if (c.category === 'passive') continue; // 跳过阻容感
           const arr = byCat.get(c.category) ?? [];
           arr.push(c);
           byCat.set(c.category, arr);
