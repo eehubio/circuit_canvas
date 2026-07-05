@@ -38,9 +38,24 @@ export interface MockComponent extends ComponentSearchResult {
 
 const cny = (amount: number) => ({ amount, currency: 'CNY' });
 
+/** 供应商报价：真实搜索跳转链接（带型号），价格/库存为演示数据；正式版由 ezPLM 供应链 API 返回 */
+export function supplierOffersFor(mpn: string, basePrice = 1): { vendor: string; price?: { amount: number; currency: string }; stock?: number; url: string }[] {
+  const q = encodeURIComponent(mpn);
+  return [
+    { vendor: 'DigiKey', price: { amount: +(basePrice * 1.35).toFixed(2), currency: 'CNY' }, stock: 12500, url: `https://www.digikey.cn/zh/products/result?keywords=${q}` },
+    { vendor: 'Mouser', price: { amount: +(basePrice * 1.42).toFixed(2), currency: 'CNY' }, stock: 8300, url: `https://www.mouser.cn/c/?q=${q}` },
+    { vendor: 'CECPORT', price: { amount: +(basePrice * 1.1).toFixed(2), currency: 'CNY' }, stock: 3200, url: `https://www.cecport.com/search?keyword=${q}` },
+  ];
+}
+
 export const MOCK_COMPONENTS: MockComponent[] = [
   // MCU
-  { componentId: 'stm32f103', mpn: 'STM32F103C8T6', manufacturer: 'ST', category: 'mcu', defaultFootprintName: 'LQFP-48', family: 'STM32F1', description: 'ARM Cortex-M3 72MHz 64KB Flash', unitPrice: cny(8.5), pins: 48, attributes: { core: 'Cortex-M3', freq: '72MHz', flash: '64KB', ram: '20KB' }, isOrg: true },
+  { componentId: 'stm32f103', mpn: 'STM32F103C8T6', manufacturer: 'ST', category: 'mcu', defaultFootprintName: 'LQFP-48', family: 'STM32F1', description: 'ARM Cortex-M3 72MHz 64KB Flash', unitPrice: cny(8.5), pins: 48,
+    attributes: { core: 'Cortex-M3', freq: '72MHz', flash: '64KB', ram: '20KB' },
+    productUrl: 'https://www.st.com/en/microcontrollers-microprocessors/stm32f103c8.html',
+    datasheetUrl: 'https://www.st.com/resource/en/datasheet/stm32f103c8.pdf',
+    coreParams: { 内核: 'ARM Cortex-M3', 主频: '72MHz', Flash: '64KB', RAM: '20KB', 工作电压: '2.0-3.6V', GPIO: '37', 定时器: '4×16bit', 通信: '2×SPI/2×I2C/3×USART', ADC: '2×12bit 10ch', 工作温度: '-40~+85°C' },
+    isOrg: true },
   { componentId: 'stm32f407', mpn: 'STM32F407VET6', manufacturer: 'ST', category: 'mcu', defaultFootprintName: 'LQFP-100', family: 'STM32F4', description: 'ARM Cortex-M4 168MHz 512KB Flash', unitPrice: cny(28.0), pins: 100, attributes: { core: 'Cortex-M4F', freq: '168MHz', flash: '512KB' }, isOrg: true },
   { componentId: 'esp32s3', mpn: 'ESP32-S3-WROOM-1', manufacturer: 'Espressif', category: 'mcu', defaultFootprintName: 'Module-44', family: 'ESP32', description: 'Wi-Fi+BLE5 双核Xtensa 240MHz', unitPrice: cny(15.8), pins: 44, attributes: { core: 'Xtensa LX7', freq: '240MHz', wireless: 'Wi-Fi+BLE5' }, isOrg: false },
   { componentId: 'gd32f303', mpn: 'GD32F303CCT6', manufacturer: 'GigaDevice', category: 'mcu', defaultFootprintName: 'LQFP-48', family: 'GD32F3', description: 'ARM Cortex-M4 120MHz 256KB Flash', unitPrice: cny(6.2), pins: 48, attributes: { core: 'Cortex-M4', freq: '120MHz' }, isOrg: false },
@@ -91,9 +106,9 @@ export const FOOTPRINT_CATEGORIES = [
 
 export const ALTERNATIVES: Record<string, ComponentAlternative[]> = {
   'STM32F103C8T6': [
-    { mpn: 'GD32F103C8T6', manufacturer: 'GigaDevice', note: '引脚兼容，主频更高(108MHz)，价格约低30%', channel: '立创商城/淘宝' },
-    { mpn: 'CH32F103C8T6', manufacturer: 'WCH', note: '引脚兼容，国产替代，价格约低50%', channel: '立创商城' },
-    { mpn: 'APM32F103C8T6', manufacturer: 'Geehy', note: '引脚兼容，工业级', channel: '立创商城/得捷' },
+    { mpn: 'GD32F103C8T6', manufacturer: 'GigaDevice', note: '引脚兼容，主频更高(108MHz)，价格约低30%', channel: '立创商城/淘宝', footprint: 'LQFP-48', description: 'Cortex-M3 108MHz 64KB Flash' },
+    { mpn: 'CH32F103C8T6', manufacturer: 'WCH', note: '引脚兼容，国产替代，价格约低50%', channel: '立创商城', footprint: 'LQFP-48', description: 'Cortex-M3 72MHz 64KB Flash' },
+    { mpn: 'APM32F103C8T6', manufacturer: 'Geehy', note: '引脚兼容，工业级', channel: '立创商城/得捷', footprint: 'LQFP-48', description: 'Cortex-M3 96MHz 工业级' },
   ],
   'LM1117-3.3': [
     { mpn: 'AMS1117-3.3', manufacturer: 'AMS', note: '直接替代，价格约低60%', channel: '立创商城' },

@@ -45,6 +45,13 @@ export function loadAutosave(): CircuitCanvasDocument | null {
  */
 import { buildBlockDiagramSvg, buildPcbLayoutSvg, buildSchematicSvgFromDom } from './reportSvg';
 
+/** SVG → Markdown 图片（base64 data-URI，Typora/VSCode/GitHub 均可渲染） */
+function svgToMdImage(svg: string, alt: string): string {
+  if (!svg.startsWith('<svg')) return svg; // 提示文字直接原样输出
+  const b64 = btoa(unescape(encodeURIComponent(svg)));
+  return `![${alt}](data:image/svg+xml;base64,${b64})`;
+}
+
 export function exportMarkdownReport(doc: CircuitCanvasDocument) {
   const total = doc.bom.reduce((s, l) => s + (l.unitPrice?.amount ?? 0) * l.quantity, 0);
   const cats = new Set(doc.components.map((c) => c.category));
@@ -84,7 +91,7 @@ export function exportMarkdownReport(doc: CircuitCanvasDocument) {
   // 三、系统框图
   L.push('## 三、系统框图');
   L.push('');
-  L.push(buildBlockDiagramSvg(doc));
+  L.push(svgToMdImage(buildBlockDiagramSvg(doc), '系统框图'));
   L.push('');
 
   // 四、器件选择
@@ -104,14 +111,14 @@ export function exportMarkdownReport(doc: CircuitCanvasDocument) {
   L.push('');
   L.push(`板框 ${doc.board.widthMm}×${doc.board.heightMm}mm · ${doc.board.shape} · ${doc.board.mountingHolesEnabled ? '含四角定位孔 Ø3.2mm' : '无定位孔'}`);
   L.push('');
-  L.push(buildPcbLayoutSvg(doc));
+  L.push(svgToMdImage(buildPcbLayoutSvg(doc), 'PCB布局图'));
   L.push('');
 
   // 六、原理图
   L.push('## 六、原理图');
   L.push('');
   const schSvg = buildSchematicSvgFromDom();
-  L.push(schSvg ?? '（原理图 SVG 需在应用中打开「原理图」面板后再生成报告，或用面板中「导出SVG」单独获取。）');
+  L.push(schSvg ? svgToMdImage(schSvg, '原理图') : '（原理图需在应用中打开「原理图」面板后再生成报告，或用面板中「导出SVG」单独获取。）');
   L.push('');
 
   // 七、供电方案

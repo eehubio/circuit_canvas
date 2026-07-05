@@ -31,6 +31,7 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
   const svgRef = useRef<SVGSVGElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef({ active: false, iid: '', sx: 0, sy: 0, startX: 0, startY: 0 });
+  const netDragRef = useRef({ active: false, id: '', sx: 0, dx: 0 });
   const panRef = useRef({ active: false, sx: 0, sy: 0, px: 0, py: 0, moved: false });
 
   const autoLayout = useMemo(() => {
@@ -86,16 +87,23 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
   // 拖拽 + 平移
   useEffect(() => {
     const onMM = (e: MouseEvent) => {
+      if (netDragRef.current.active) {
+        const d = netDragRef.current;
+        setNets((useSchematicStore.getState().nets || []).map((nn) => nn.id === d.id ? { ...nn, midDx: Math.round((d.dx + (e.clientX - d.sx) / zoom) / 5) * 5 } : nn));
+        return;
+      }
       if (dragRef.current.active) {
         const d = dragRef.current;
-        setPos(d.iid, { x: Math.max(0, d.startX + (e.clientX - d.sx) / zoom), y: Math.max(0, d.startY + (e.clientY - d.sy) / zoom) });
+        const nx = Math.round(Math.max(0, d.startX + (e.clientX - d.sx) / zoom) / 5) * 5;
+        const ny = Math.round(Math.max(0, d.startY + (e.clientY - d.sy) / zoom) / 5) * 5;
+        setPos(d.iid, { x: nx, y: ny });
       } else if (panRef.current.active) {
         const dx = e.clientX - panRef.current.sx, dy = e.clientY - panRef.current.sy;
         if (Math.abs(dx) > 3 || Math.abs(dy) > 3) panRef.current.moved = true;
         setPan({ x: panRef.current.px + dx, y: panRef.current.py + dy });
       }
     };
-    const onMU = () => { dragRef.current.active = false; panRef.current.active = false; };
+    const onMU = () => { dragRef.current.active = false; panRef.current.active = false; netDragRef.current.active = false; };
     window.addEventListener('mousemove', onMM);
     window.addEventListener('mouseup', onMU);
     return () => { window.removeEventListener('mousemove', onMM); window.removeEventListener('mouseup', onMU); };
@@ -195,13 +203,25 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
             if (!fc || !tc) return null;
             const f = P(n.from), t = P(n.to);
             const fSym = symbolFor(fc), tSym = symbolFor(tc);
-            const x1 = f.x + fSym.w + 10, y1 = f.y + fSym.h / 2;
-            const x2 = t.x - 10, y2 = t.y + tSym.h / 2;
-            const midX = (x1 + x2) / 2;
+            // 源取右侧端口、目标取左侧端口，各选与对端 y 最近的一个；连接点 = 引脚桩末端(±10)
+            const pick = (sym: ReturnType<typeof symbolFor>, side: 'right' | 'left', peerY: number, baseY: number) => {
+              const cands = sym.ports.filter((pp) => side === 'right' ? pp.x >= sym.w : pp.x <= 0);
+              const list = cands.length ? cands : sym.ports;
+              return list.reduce((best, pp) => Math.abs(baseY + pp.y - peerY) < Math.abs(baseY + best.y - peerY) ? pp : best, list[0]);
+            };
+            const tCenterY = t.y + tSym.h / 2, fCenterY = f.y + fSym.h / 2;
+            const fp = pick(fSym, 'right', tCenterY, f.y);
+            const tp = pick(tSym, 'left', fCenterY, t.y);
+            const x1 = f.x + fp.x + 10, y1 = f.y + fp.y;
+            const x2 = t.x + tp.x - 10, y2 = t.y + tp.y;
+            const midX = (x1 + x2) / 2 + (n.midDx ?? 0);
             const isSel = sel === n.id;
             return (
               <g key={n.id}>
-                <path d={`M${x1},${y1} H${midX} V${y2} H${x2}`} fill="none" stroke="transparent" strokeWidth={12} style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setSel(n.id); setSelSym(null); }} onDoubleClick={(e) => { e.stopPropagation(); setEdit({ type: 'netlabel', id: n.id, text: n.label }); }} />
+                <path d={`M${x1},${y1} H${midX} V${y2} H${x2}`} fill="none" stroke="transparent" strokeWidth={12} style={{ cursor: 'ew-resize' }}
+                  onMouseDown={(e) => { e.stopPropagation(); setSel(n.id); setSelSym(null); netDragRef.current = { active: true, id: n.id, sx: e.clientX, dx: n.midDx ?? 0 }; }}
+                  onClick={(e) => e.stopPropagation()}
+                  onDoubleClick={(e) => { e.stopPropagation(); setEdit({ type: 'netlabel', id: n.id, text: n.label }); }} />
                 <path d={`M${x1},${y1} H${midX} V${y2} H${x2}`} fill="none" stroke={isSel ? '#2563eb' : n.color} strokeWidth={isSel ? 2.2 : 1.4} style={{ pointerEvents: 'none' }} />
                 <circle cx={x1} cy={y1} r={2.5} fill={isSel ? '#2563eb' : n.color} /><circle cx={x2} cy={y2} r={2.5} fill={isSel ? '#2563eb' : n.color} />
                 {edit?.type === 'netlabel' && edit.id === n.id ? (

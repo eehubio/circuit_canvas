@@ -85,6 +85,9 @@ const connectionSchema = z.object({
   label: z.string(),
   style: z.enum(['single', 'double', 'none', 'bus']),
   color: z.string().optional(),
+  labelDx: z.number().optional(),
+  labelDy: z.number().optional(),
+  labelRot: z.number().optional(),
 });
 
 const functionalBlockSchema = z.object({

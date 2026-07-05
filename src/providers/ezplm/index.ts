@@ -49,6 +49,11 @@ export class EzplmComponentDataProvider implements ComponentDataProvider {
     return dtos.map(mapFootprint);
   }
 
+  async getSupplierOffers(componentId: string) {
+    const dtos = await this.http.get<{ vendor: string; price?: { amount: number; currency: string }; stock?: number; url: string }[]>(`/v1/components/${encodeURIComponent(componentId)}/suppliers`);
+    return dtos ?? [];
+  }
+
   async getAlternatives(componentId: string): Promise<ComponentAlternative[]> {
     const dtos = await this.http.get<EzplmAlternativeDto[]>(`/v1/components/${encodeURIComponent(componentId)}/alternatives`);
     return (dtos ?? []).map(mapAlternative);

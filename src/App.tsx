@@ -10,6 +10,8 @@ import { appConfig } from './config';
 import { ComponentSearchPanel } from './modules/component-search/ComponentSearchPanel';
 import { FootprintLibraryPanel } from './modules/component-search/FootprintLibraryPanel';
 import { LibraryPreview } from './modules/component-search/LibraryPreview';
+import { padFootprintFor as padFootprintForT } from './design-core/geometry/footprint-pads';
+import type { PlacedComponent as PlacedComponentT } from './design-core/document/types';
 import { BoardCanvas2D } from './modules/board-editor/BoardCanvas2D';
 import { BoardView3D } from './modules/board-editor/BoardView3D';
 import { BomPanel } from './modules/bom/BomPanel';
@@ -79,15 +81,25 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [selectedId, undo, redo, rotate, remove, flipLayer]);
 
-  const [aiProposal, setAiProposal] = useState<{ rationale: string; details: NonNullable<Awaited<ReturnType<typeof providers.components.getComponentDetail>>>[] } | null>(null);
+  const [aiProposal, setAiProposal] = useState<{ rationale: string; details: (NonNullable<Awaited<ReturnType<typeof providers.components.getComponentDetail>>> & { mapSource?: string })[] } | null>(null);
 
   const genScheme = async () => {
     if (!aiPrompt.trim()) return;
     setAiBusy(true);
     try {
       const result = await providers.ai.generateScheme({ prompt: aiPrompt }, ctx);
-      const details = (await Promise.all(result.componentIds.map((id) => providers.components.getComponentDetail(id, ctx)))).filter(Boolean) as NonNullable<Awaited<ReturnType<typeof providers.components.getComponentDetail>>>[];
-      setAiProposal({ rationale: result.rationale, details });
+      // ezPLM 映射链：组织物料(org 命中) → 云端库(detail 命中但无 org) → 封装占位(未命中)
+      const mapped = await Promise.all(result.componentIds.map(async (id) => {
+        const d = await providers.components.getComponentDetail(id, ctx);
+        if (d) return { ...d, mapSource: d.org ? ('本组织' as const) : ('ezPLM云端' as const) };
+        // 未命中：按 id 猜封装做占位（真实链路中由 LLM 返回封装建议）
+        return {
+          componentId: `fp_${id}_${Date.now()}`, mpn: id, manufacturer: '—',
+          category: 'passive' as const, defaultFootprintName: '0402', family: 'Footprint',
+          description: `未映射到 ezPLM 器件，以封装占位`, pins: 2, mapSource: '封装占位' as const,
+        };
+      }));
+      setAiProposal({ rationale: result.rationale, details: mapped });
     } catch (err) {
       alert('生成失败：' + (err as Error).message);
     }
@@ -180,7 +192,6 @@ export default function App() {
                   <span style={{ fontWeight: 700, color: COLORS.green }}>{selObj.reference}</span>
                   <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{selObj.mpn}</span>
                   <span style={{ color: '#64748b' }}>{selObj.footprint.name}</span>
-                  <span style={{ color: '#059669', fontWeight: 600 }}>{fmtMoney(selObj.unitPrice?.amount)}</span>
                   <button onClick={() => rotate(selObj.instanceId)} style={smbtn}>旋转</button>
                   <button onClick={() => flipLayer(selObj.instanceId)} style={{ ...smbtn, color: selObj.placement.side === 'TOP' ? '#c08a2d' : '#3b82c4' }}>{selObj.placement.side === 'TOP' ? '→Bottom' : '→Top'}</button>
                   <button onClick={() => toggleRefDesHidden(selObj.instanceId)} style={smbtn}>{selObj.refDesDisplay?.hidden ? '显位号' : '隐位号'}</button>
@@ -241,12 +252,16 @@ export default function App() {
             <div style={{ fontSize: 12, color: '#475569', padding: '8px 10px', background: '#f7fcf9', borderRadius: 8, marginBottom: 10 }}>{aiProposal.rationale}</div>
             <div style={{ maxHeight: 260, overflow: 'auto', marginBottom: 12 }}>
               {aiProposal.details.map((d) => (
-                <div key={d.componentId} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: '1px solid #f1f5f9', fontSize: 12 }}>
-                  <span style={{ fontFamily: 'monospace', fontWeight: 700, flex: 1 }}>{d.mpn}</span>
-                  <span style={{ color: '#64748b' }}>{d.defaultFootprintName}</span>
-                  <span style={{ color: '#059669', fontWeight: 600 }}>{fmtMoney(d.unitPrice?.amount)}</span>
-                  <button onClick={() => setAiProposal({ ...aiProposal, details: aiProposal.details.filter((x) => x.componentId !== d.componentId) })}
-                    style={{ border: 'none', background: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 14 }}>×</button>
+                <div key={d.componentId} style={{ padding: '7px 10px', borderBottom: '1px solid #f1f5f9', fontSize: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontFamily: 'monospace', fontWeight: 700, flex: 1 }}>{d.mpn}</span>
+                    {d.mapSource && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 4, fontWeight: 700, background: d.mapSource === '本组织' ? '#dcfce7' : d.mapSource === 'ezPLM云端' ? '#e0f2fe' : '#fef3c7', color: d.mapSource === '本组织' ? '#166534' : d.mapSource === 'ezPLM云端' ? '#0369a1' : '#92400e' }}>{d.mapSource}</span>}
+                    <span style={{ color: '#64748b' }}>{d.defaultFootprintName}</span>
+                    <span style={{ color: '#059669', fontWeight: 600 }}>{fmtMoney(d.unitPrice?.amount)}</span>
+                    <button onClick={() => setAiProposal({ ...aiProposal, details: aiProposal.details.filter((x) => x.componentId !== d.componentId) })}
+                      style={{ border: 'none', background: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 14 }}>×</button>
+                  </div>
+                  <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2 }}>{d.description}</div>
                 </div>
               ))}
             </div>
@@ -275,37 +290,110 @@ export default function App() {
 
 function CompDetail({ iid }: { iid: string }) {
   const c = useDesignStore((s) => s.doc.components.find((x) => x.instanceId === iid));
-  const [alts, setAlts] = useState<{ mpn: string; manufacturer: string; note: string; channel: string }[]>([]);
-  useEffect(() => { if (c) providers.components.getAlternatives(c.componentId, ctx).then(setAlts); }, [c?.componentId]);
+  const [alts, setAlts] = useState<{ mpn: string; manufacturer: string; note: string; channel: string; footprint?: string; description?: string }[]>([]);
+  const [offers, setOffers] = useState<{ vendor: string; price?: { amount: number; currency: string }; stock?: number; url: string }[]>([]);
+  const [detail, setDetail] = useState<Awaited<ReturnType<typeof providers.components.getComponentDetail>>>(null);
+  useEffect(() => {
+    if (!c) return;
+    providers.components.getAlternatives(c.componentId, ctx).then(setAlts);
+    providers.components.getSupplierOffers(c.componentId, ctx).then(setOffers);
+    providers.components.getComponentDetail(c.componentId, ctx).then(setDetail);
+  }, [c?.componentId]);
   if (!c) return null;
   const disp = CATEGORY_DISPLAY[c.category];
+  const coreParams = detail?.coreParams ?? c.display?.attributes ?? {};
+  const paramEntries = Object.entries(coreParams).slice(0, 10);
   return (
     <div style={{ background: '#fff', borderRadius: 10, padding: 14, border: '1px solid #e2e8f0' }}>
-      <div style={{ fontSize: 16, fontWeight: 700 }}>{c.reference}</div>
-      <div style={{ fontSize: 14, fontFamily: 'monospace', color: COLORS.green, fontWeight: 600 }}>{c.mpn}</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 12, marginTop: 12 }}>
-        {[['封装', c.footprint.name], ['厂商', c.manufacturer], ['类别', disp.name], ['旋转', `${c.placement.rotation}°`], ['单价', fmtMoney(c.unitPrice?.amount)], ['来源', c.source]].map(([k, v]) => (
-          <div key={k} style={{ padding: '6px 8px', borderRadius: 6, background: '#f8fafc', border: '1px solid #f1f5f9' }}>
-            <div style={{ fontSize: 10, color: '#94a3b8' }}>{k}</div>
-            <div style={{ fontWeight: 600, color: k === '单价' ? '#059669' : '#334155' }}>{v}</div>
-          </div>
-        ))}
+      {/* 头部：位号+型号 与 图片同行 */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>{c.reference}</div>
+          <div style={{ fontSize: 14, fontFamily: 'monospace', color: COLORS.green, fontWeight: 600, wordBreak: 'break-all' }}>{c.mpn}</div>
+          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{disp.name} · {c.manufacturer} · {c.footprint.name}</div>
+        </div>
+        <ComponentImage c={c} imageUrl={detail?.imageUrl} />
       </div>
-      {c.display?.description && <div style={{ fontSize: 12, color: '#475569', marginTop: 12 }}>{c.display.description}</div>}
+
+      {/* 官网 + PDF */}
+      <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+        {detail?.productUrl
+          ? <a href={detail.productUrl} target="_blank" rel="noreferrer" style={linkBtn}>🌐 官网</a>
+          : <a href={`https://www.google.com/search?q=${encodeURIComponent(c.manufacturer + ' ' + c.mpn)}`} target="_blank" rel="noreferrer" style={linkBtn}>🌐 官网检索</a>}
+        {detail?.datasheetUrl
+          ? <a href={detail.datasheetUrl} target="_blank" rel="noreferrer" style={{ ...linkBtn, borderColor: '#fecaca', background: '#fef2f2', color: '#dc2626' }}>📄 PDF下载</a>
+          : <a href={`https://www.google.com/search?q=${encodeURIComponent(c.mpn + ' datasheet pdf')}`} target="_blank" rel="noreferrer" style={{ ...linkBtn, borderColor: '#fecaca', background: '#fef2f2', color: '#dc2626' }}>📄 PDF检索</a>}
+        <div style={{ flex: 1 }} />
+        <span style={{ fontSize: 12, color: '#059669', fontWeight: 700, alignSelf: 'center' }}>{fmtMoney(c.unitPrice?.amount)}</span>
+      </div>
+
+      {/* 核心参数 */}
+      {paramEntries.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.green, marginBottom: 6 }}>⚙️ 核心参数</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+            {paramEntries.map(([k, v]) => (
+              <div key={k} style={{ padding: '4px 8px', borderRadius: 6, background: '#f8fafc', border: '1px solid #f1f5f9', fontSize: 10.5 }}>
+                <span style={{ color: '#94a3b8' }}>{k}</span> <span style={{ fontWeight: 600, color: '#334155' }}>{v}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {c.display?.description && <div style={{ fontSize: 12, color: '#475569', marginTop: 10 }}>{c.display.description}</div>}
+
       <LibraryPreview c={c} />
+
+      {/* 采购渠道 */}
+      {offers.length > 0 && (
+        <div style={{ marginTop: 12, padding: 10, borderRadius: 8, background: '#f0f9ff', border: '1px solid #bae6fd' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#0369a1', marginBottom: 6 }}>🛒 采购渠道（价格/库存来自 ezPLM 供应链）</div>
+          {offers.map((o, i) => (
+            <a key={i} href={o.url} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', marginBottom: 4, borderRadius: 6, background: '#fff', border: '1px solid #e0f2fe', textDecoration: 'none' }}>
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: '#0369a1', width: 66 }}>{o.vendor}</span>
+              <span style={{ fontSize: 11, color: '#059669', fontWeight: 600 }}>{fmtMoney(o.price?.amount)}</span>
+              <span style={{ fontSize: 10, color: '#64748b' }}>库存 {o.stock?.toLocaleString() ?? '—'}</span>
+              <span style={{ flex: 1 }} />
+              <span style={{ fontSize: 10, color: '#94a3b8' }}>跳转 ↗</span>
+            </a>
+          ))}
+        </div>
+      )}
+
+      {/* 替代料（本组织映射） */}
       {alts.length > 0 && (
-        <div style={{ marginTop: 12, padding: 10, borderRadius: 8, background: '#fffbeb', border: '1px solid #fde68a' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#b45309', marginBottom: 6 }}>💡 替代料与采购渠道</div>
+        <div style={{ marginTop: 10, padding: 10, borderRadius: 8, background: '#fffbeb', border: '1px solid #fde68a' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#b45309', marginBottom: 6 }}>💡 替代料（本组织映射）</div>
           {alts.map((a, i) => (
             <div key={i} style={{ padding: '6px 8px', marginBottom: 4, borderRadius: 6, background: '#fff', border: '1px solid #fef3c7' }}>
-              <div style={{ fontFamily: 'monospace', fontSize: 11.5, fontWeight: 700 }}>{a.mpn} <span style={{ fontSize: 9.5, color: '#94a3b8' }}>{a.manufacturer}</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontFamily: 'monospace', fontSize: 11.5, fontWeight: 700 }}>{a.mpn}</span>
+                <span style={{ fontSize: 9.5, color: '#94a3b8' }}>{a.manufacturer}</span>
+                {a.footprint && <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 4, background: '#f1f5f9', color: '#475569', fontWeight: 600 }}>{a.footprint}</span>}
+              </div>
+              {a.description && <div style={{ fontSize: 10, color: '#475569', marginTop: 2 }}>{a.description}</div>}
               <div style={{ fontSize: 10, color: '#64748b' }}>{a.note}</div>
-              <div style={{ fontSize: 9.5, color: '#0369a1' }}>📦 {a.channel}</div>
             </div>
           ))}
         </div>
       )}
     </div>
+  );
+}
+
+/** 器件图片：ezPLM 提供 imageUrl 时显示实拍图，否则用封装缩略图兜底 */
+function ComponentImage({ c, imageUrl }: { c: PlacedComponentT; imageUrl?: string }) {
+  if (imageUrl) return <img src={imageUrl} alt={c.mpn} style={{ width: 64, height: 64, objectFit: 'contain', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff' }} />;
+  const pads = padFootprintForT(c.footprint.name);
+  if (!pads) return <div style={{ width: 64, height: 64, borderRadius: 8, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, background: '#f8fafc' }}>{CATEGORY_DISPLAY[c.category].icon}</div>;
+  const hw = Math.max(...pads.pads.map((p) => Math.abs(p.x) + p.w / 2), pads.bodyW / 2) + 1;
+  const hh = Math.max(...pads.pads.map((p) => Math.abs(p.y) + p.h / 2), pads.bodyH / 2) + 1;
+  return (
+    <svg width={64} height={64} viewBox={`${-hw} ${-hh} ${hw * 2} ${hh * 2}`} style={{ borderRadius: 8, border: '1px solid #e2e8f0', background: '#f0f9f4' }}>
+      <rect x={-pads.bodyW / 2} y={-pads.bodyH / 2} width={pads.bodyW} height={pads.bodyH} rx={0.5} fill="none" stroke="#1a6b3c" strokeWidth={hw / 40} />
+      {pads.pads.map((p, i) => <rect key={i} x={p.x - p.w / 2} y={p.y - p.h / 2} width={p.w} height={p.h} rx={p.round ? p.w / 2 : 0.15} fill="#c08a2d" />)}
+    </svg>
   );
 }
 
@@ -319,6 +407,7 @@ function NumInput({ value, onChange }: { value: number; onChange: (v: number) =>
   );
 }
 
+const linkBtn: React.CSSProperties = { padding: '5px 12px', borderRadius: 6, border: '1px solid #c6e2d0', background: '#f0f9f4', color: '#1f5c3b', fontSize: 11, fontWeight: 700, textDecoration: 'none' };
 const hbtn: React.CSSProperties = { padding: '5px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', color: '#475569', fontSize: 12, fontWeight: 600, cursor: 'pointer' };
 const tbtn: React.CSSProperties = { padding: '7px 14px', borderRadius: 6, border: '1px solid #E8F3EE', background: '#fff', fontSize: 13, fontWeight: 500, color: '#2C3E50', cursor: 'pointer' };
 const smbtn: React.CSSProperties = { padding: '3px 10px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', color: '#475569' };

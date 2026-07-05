@@ -51,6 +51,22 @@ export interface ComponentSearchResult {
   pins: number;
   attributes?: Record<string, string>;
   org?: OrganizationMaterialInfo; // 命中组织物料时附带
+  /** 器件图片 URL（ezPLM 元器件库提供；缺省时前端用封装缩略图兜底） */
+  imageUrl?: string;
+  /** 官网产品页链接 */
+  productUrl?: string;
+  /** Datasheet PDF 链接 */
+  datasheetUrl?: string;
+  /** 核心参数（约10项，键值对） */
+  coreParams?: Record<string, string>;
+}
+
+/** 供应商报价（Digikey/Mouser/CECPORT 等，来自 ezPLM 供应链 API） */
+export interface SupplierOffer {
+  vendor: string;
+  price?: Money;
+  stock?: number;
+  url: string;
 }
 
 export interface FootprintOption {
@@ -67,6 +83,8 @@ export interface ComponentAlternative {
   manufacturer: string;
   note: string;
   channel: string;
+  footprint?: string;
+  description?: string;
 }
 
 export interface PeripheralCircuitRecommendation {
@@ -82,6 +100,7 @@ export interface ComponentDataProvider {
   getComponentDetail(componentId: string, ctx: AccessContext): Promise<ComponentSearchResult | null>;
   getFootprintOptions(componentId: string, ctx: AccessContext): Promise<FootprintOption[]>;
   getAlternatives(componentId: string, ctx: AccessContext): Promise<ComponentAlternative[]>;
+  getSupplierOffers(componentId: string, ctx: AccessContext): Promise<SupplierOffer[]>;
   getOrganizationContext(componentId: string, organizationId: string): Promise<OrganizationMaterialInfo | null>;
   /** 浏览全部封装（含分类） */
   listFootprints(category?: string): Promise<FootprintOption[]>;

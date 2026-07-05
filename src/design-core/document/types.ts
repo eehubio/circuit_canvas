@@ -116,6 +116,10 @@ export interface LogicalConnection {
   label: string;
   style: ConnectionStyle;
   color?: string;
+  /** 标签显示偏移与旋转（可拖动/旋转） */
+  labelDx?: number;
+  labelDy?: number;
+  labelRot?: number;
 }
 
 /* ---------- BOM ---------- */

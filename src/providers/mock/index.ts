@@ -10,7 +10,7 @@ import type {
   CurrentUser, AiSchemeRequest, AiSchemeResult,
 } from '../types';
 import type { ComponentCategory } from '../../design-core/document/types';
-import { MOCK_COMPONENTS, FOOTPRINT_LIBRARY, ALTERNATIVES, SUBCIRCUITS, geometryFor } from './data';
+import { MOCK_COMPONENTS, FOOTPRINT_LIBRARY, ALTERNATIVES, SUBCIRCUITS, geometryFor, supplierOffersFor } from './data';
 
 const delay = (ms = 120) => new Promise((r) => setTimeout(r, ms));
 
@@ -50,6 +50,12 @@ export class MockComponentDataProvider implements ComponentDataProvider {
     await delay(60);
     const c = MOCK_COMPONENTS.find((x) => x.componentId === componentId);
     return c ? ALTERNATIVES[c.mpn] ?? [] : [];
+  }
+
+  async getSupplierOffers(componentId: string) {
+    await delay(80);
+    const c = MOCK_COMPONENTS.find((x) => x.componentId === componentId);
+    return c ? supplierOffersFor(c.mpn, c.unitPrice?.amount ?? 1) : [];
   }
 
   async getOrganizationContext(componentId: string, organizationId: string): Promise<OrganizationMaterialInfo | null> {

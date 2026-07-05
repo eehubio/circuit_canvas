@@ -10,6 +10,7 @@ import { padFootprintFor } from '../../design-core/geometry/footprint-pads';
 import { PX_PER_MM } from '../../design-core/geometry';
 import { COLORS } from '../../shared/theme';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { buildKicadMod, buildKicadSym, downloadText } from './kicadExport';
 
 function downloadSvg(svgMarkup: string, filename: string) {
   const blob = new Blob(['<?xml version="1.0" encoding="UTF-8"?>\n' + svgMarkup], { type: 'image/svg+xml' });
@@ -65,16 +66,26 @@ export function LibraryPreview({ c }: { c: PlacedComponent }) {
         <div style={cell}>
           <div style={cellTitle}>原理图符号</div>
           <div style={preview}>{symSvg}</div>
-          <button onClick={() => dl(makeSymSvg(false), `${c.mpn}-symbol.svg`)} style={dlBtn}>⬇ 下载SVG</button>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button onClick={() => downloadText(buildKicadSym(c), `${c.mpn}.kicad_sym`)} style={{ ...dlBtn, flex: 1 }}>⬇ .kicad_sym</button>
+            <button onClick={() => dl(makeSymSvg(false), `${c.mpn}-symbol.svg`)} style={{ ...dlBtn, flex: 1 }}>⬇ SVG</button>
+          </div>
         </div>
         <div style={cell}>
           <div style={cellTitle}>PCB 封装</div>
           <div style={preview}>{fpSvg ?? <span style={{ fontSize: 10, color: '#94a3b8' }}>无焊盘数据</span>}</div>
-          <button onClick={() => dl(makeFpSvg(false), `${c.footprint.name}-footprint.svg`)} disabled={!fpSvg} style={{ ...dlBtn, opacity: fpSvg ? 1 : 0.5 }}>⬇ 下载SVG</button>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button onClick={() => { const m = buildKicadMod(c); if (m) downloadText(m, `${c.footprint.name}.kicad_mod`); }} disabled={!fpSvg} style={{ ...dlBtn, flex: 1, opacity: fpSvg ? 1 : 0.5 }}>⬇ .kicad_mod</button>
+            <button onClick={() => dl(makeFpSvg(false), `${c.footprint.name}-footprint.svg`)} disabled={!fpSvg} style={{ ...dlBtn, flex: 1, opacity: fpSvg ? 1 : 0.5 }}>⬇ SVG</button>
+          </div>
         </div>
       </div>
-      <div style={{ marginTop: 8, padding: '6px 8px', borderRadius: 6, background: '#fff', border: '1px solid #f1f5f9', fontSize: 10, color: '#64748b' }}>
-        <b>3D 模型</b>：参数化 Three.js 模型（在 3D 视图中查看）。接入 ezPLM 后可关联真实 STEP 文件下载。
+      <div style={{ marginTop: 8, padding: '8px', borderRadius: 8, background: '#fff', border: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: '#475569' }}>3D 模型 (STEP)</div>
+          <div style={{ fontSize: 9.5, color: '#94a3b8' }}>当前为参数化模型（3D视图预览）；STEP 需 ezPLM 关联真实模型文件</div>
+        </div>
+        <button disabled title="接入 ezPLM 元器件库后可下载真实 STEP" style={{ ...dlBtn, opacity: 0.45, cursor: 'not-allowed', padding: '4px 10px' }}>⬇ .step</button>
       </div>
     </div>
   );

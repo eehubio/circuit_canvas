@@ -4,7 +4,7 @@
  */
 import { create } from 'zustand';
 
-export interface SchNet { id: string; from: string; to: string; label: string; color: string; }
+export interface SchNet { id: string; from: string; to: string; label: string; color: string; midDx?: number; }
 export interface SymState { x: number; y: number; rotation: number; refDes?: string; value?: string; }
 
 interface SchematicState {

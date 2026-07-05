@@ -12,18 +12,19 @@ export const HOLE_DIAMETER_MM = 3.2;
 
 /** 四角定位孔的中心点 + 禁布矩形（含间隙）。 */
 export function mountingHoleRects(board: BoardDefinition): Rect[] {
-  if (!board.mountingHolesEnabled || board.shape === 'circle') return [];
-  const m = HOLE_MARGIN_MM, r = HOLE_DIAMETER_MM / 2 + DEFAULT_GAP_MM;
-  const W = board.widthMm, H = board.heightMm;
-  return [
-    { x: m, y: m }, { x: W - m, y: m }, { x: m, y: H - m }, { x: W - m, y: H - m },
-  ].map((c) => ({ x: c.x - r, y: c.y - r, width: r * 2, height: r * 2 }));
+  const r = HOLE_DIAMETER_MM / 2 + DEFAULT_GAP_MM;
+  return mountingHoleCenters(board).map((c) => ({ x: c.x - r, y: c.y - r, width: r * 2, height: r * 2 }));
 }
 
-/** 定位孔中心点（用于渲染）。 */
+/** 定位孔中心点（用于渲染）。L 形板右下缺口区域的孔移到缺口上方板内。 */
 export function mountingHoleCenters(board: BoardDefinition): { x: number; y: number }[] {
   if (!board.mountingHolesEnabled || board.shape === 'circle') return [];
   const m = HOLE_MARGIN_MM, W = board.widthMm, H = board.heightMm;
+  if (board.shape === 'lshape') {
+    // 缺口: x > W-0.45W 且 y > H-0.4H 被切除 → 右下孔放到缺口上沿以内
+    const cutH = H * 0.4;
+    return [{ x: m, y: m }, { x: W - m, y: m }, { x: m, y: H - m }, { x: W - m, y: H - cutH - m }];
+  }
   return [{ x: m, y: m }, { x: W - m, y: m }, { x: m, y: H - m }, { x: W - m, y: H - m }];
 }
 
