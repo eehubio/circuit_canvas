@@ -11,6 +11,7 @@ import { ComponentSearchPanel } from './modules/component-search/ComponentSearch
 import { FootprintLibraryPanel } from './modules/component-search/FootprintLibraryPanel';
 import { LibraryPreview } from './modules/component-search/LibraryPreview';
 import { padFootprintFor as padFootprintForT } from './design-core/geometry/footprint-pads';
+import { downloadKicadPcb } from './modules/board-editor/pcbExport';
 import type { PlacedComponent as PlacedComponentT } from './design-core/document/types';
 import { BoardCanvas2D } from './modules/board-editor/BoardCanvas2D';
 import { BoardView3D } from './modules/board-editor/BoardView3D';
@@ -58,6 +59,7 @@ export default function App() {
   const [fullscreen, setFullscreen] = useState<'bom' | 'block' | 'schematic' | null>(null);
   const [aiPrompt, setAiPrompt] = useState('');
   const [leftTab, setLeftTab] = useState<'model' | 'footprint'>('model');
+  const [pcbExportOpen, setPcbExportOpen] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -129,6 +131,7 @@ export default function App() {
           <span style={{ fontSize: 10, color: '#94a3b8', background: '#f1f5f9', padding: '2px 8px', borderRadius: 10 }}>v3 · {appConfig.mode}</span>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => setPcbExportOpen(true)} style={hbtn}>🏭 导出PCB</button>
           <button onClick={() => exportMarkdownReport(doc)} style={hbtn}>📄 方案报告</button>
           <button onClick={() => exportDocument(doc)} style={hbtn}>⬇ 导出设计</button>
           <button onClick={() => fileRef.current?.click()} style={hbtn}>⬆ 导入设计</button>
@@ -243,6 +246,45 @@ export default function App() {
           </div>
         </aside>
       </div>
+
+      {/* PCB 导出对话框 */}
+      {pcbExportOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(0,0,0,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={() => setPcbExportOpen(false)}>
+          <div style={{ width: '100%', maxWidth: 560, background: '#fff', borderRadius: 14, padding: 20, boxShadow: '0 24px 80px rgba(0,0,0,.25)' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: COLORS.green, marginBottom: 4 }}>🏭 导出 PCB 布局文件</div>
+            <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 12 }}>含板框（Edge.Cuts）、定位孔（非金属化孔）、全部器件真实焊盘与 Top/Bottom 层信息</div>
+
+            <div style={{ padding: 12, borderRadius: 10, border: '1.5px solid #c6e2d0', background: '#f7fcf9', marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>KiCad（.kicad_pcb）</div>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>KiCad 7+ 直接打开，可继续布线、出 Gerber</div>
+                </div>
+                <button onClick={() => { downloadKicadPcb(doc); setPcbExportOpen(false); }} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: COLORS.green, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>⬇ 下载</button>
+              </div>
+            </div>
+
+            <div style={{ padding: 12, borderRadius: 10, border: '1px solid #bae6fd', background: '#f0f9ff', marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>嘉立创EDA / JLCPCB</div>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>嘉立创EDA<b>专业版</b>官方支持导入 KiCad：下载后在 嘉立创EDA 中「文件 → 导入 → KiCad」选择该文件即可；下单可在 KiCad 中出 Gerber 后上传 JLCPCB</div>
+                </div>
+                <button onClick={() => { downloadKicadPcb(doc); setPcbExportOpen(false); }} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#0369a1', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>⬇ 下载</button>
+              </div>
+            </div>
+
+            <div style={{ padding: 12, borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', marginBottom: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>Altium Designer</div>
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>.PcbDoc 为专有二进制格式，浏览器端无法直接生成。可行路径：较新版本 AD 的 <b>File → Import Wizard</b> 支持导入 KiCad 工程（若版本不支持，可先用 KiCad 打开再经转换工具迁移）。因此同样下载上方 KiCad 文件即可。</div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button onClick={() => setPcbExportOpen(false)} style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, cursor: 'pointer' }}>关闭</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* AI 方案确认对话框 */}
       {aiProposal && (
