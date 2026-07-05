@@ -24,20 +24,22 @@ export function LibraryPreview({ c }: { c: PlacedComponent }) {
   const sym = useMemo(() => symbolFor(c), [c.componentId]);
   const pads = padFootprintFor(c.footprint.name);
 
-  // 符号 SVG（含边距）
-  const symSvg = (
-    <svg xmlns="http://www.w3.org/2000/svg" width={sym.w + 60} height={sym.h + 50} viewBox={`-30 -25 ${sym.w + 60} ${sym.h + 50}`}>
+  // 符号 SVG（含边距）；fit=true 用于面板内自适应预览，false 用于下载原尺寸
+  const makeSymSvg = (fit: boolean) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width={sym.w + 60} height={sym.h + 50} viewBox={`-30 -25 ${sym.w + 60} ${sym.h + 50}`}
+      style={fit ? { maxWidth: '100%', maxHeight: 120, height: 'auto' } : undefined}>
       <rect x={-30} y={-25} width={sym.w + 60} height={sym.h + 50} fill="#fffef9" />
       {sym.render(c.reference, c.mpn)}
     </svg>
   );
 
   // 封装 SVG
-  const fpSvg = pads ? (() => {
+  const makeFpSvg = (fit: boolean) => pads ? (() => {
     const halfW = Math.max(...pads.pads.map((p) => Math.abs(p.x) + p.w / 2), pads.bodyW / 2) * PX_PER_MM + 10;
     const halfH = Math.max(...pads.pads.map((p) => Math.abs(p.y) + p.h / 2), pads.bodyH / 2) * PX_PER_MM + 10;
     return (
-      <svg xmlns="http://www.w3.org/2000/svg" width={halfW * 2} height={halfH * 2} viewBox={`${-halfW} ${-halfH} ${halfW * 2} ${halfH * 2}`}>
+      <svg xmlns="http://www.w3.org/2000/svg" width={halfW * 2} height={halfH * 2} viewBox={`${-halfW} ${-halfH} ${halfW * 2} ${halfH * 2}`}
+        style={fit ? { maxWidth: '100%', maxHeight: 120, height: 'auto' } : undefined}>
         <rect x={-halfW} y={-halfH} width={halfW * 2} height={halfH * 2} fill="#f0f9f4" />
         <rect x={-pads.bodyW * PX_PER_MM / 2} y={-pads.bodyH * PX_PER_MM / 2} width={pads.bodyW * PX_PER_MM} height={pads.bodyH * PX_PER_MM} rx={2} fill="none" stroke="#1a6b3c" strokeWidth={1} />
         {pads.pads.map((p, i) => (
@@ -48,6 +50,9 @@ export function LibraryPreview({ c }: { c: PlacedComponent }) {
     );
   })() : null;
 
+  const symSvg = makeSymSvg(true);
+  const fpSvg = makeFpSvg(true);
+
   const dl = (node: React.ReactElement | null, name: string) => {
     if (!node) return;
     downloadSvg(renderToStaticMarkup(node), name);
@@ -56,16 +61,16 @@ export function LibraryPreview({ c }: { c: PlacedComponent }) {
   return (
     <div style={{ marginTop: 12, padding: 10, borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.green, marginBottom: 8 }}>📚 PCB 设计库文件</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={cell}>
           <div style={cellTitle}>原理图符号</div>
           <div style={preview}>{symSvg}</div>
-          <button onClick={() => dl(symSvg, `${c.mpn}-symbol.svg`)} style={dlBtn}>⬇ 下载SVG</button>
+          <button onClick={() => dl(makeSymSvg(false), `${c.mpn}-symbol.svg`)} style={dlBtn}>⬇ 下载SVG</button>
         </div>
         <div style={cell}>
           <div style={cellTitle}>PCB 封装</div>
           <div style={preview}>{fpSvg ?? <span style={{ fontSize: 10, color: '#94a3b8' }}>无焊盘数据</span>}</div>
-          <button onClick={() => dl(fpSvg, `${c.footprint.name}-footprint.svg`)} disabled={!fpSvg} style={{ ...dlBtn, opacity: fpSvg ? 1 : 0.5 }}>⬇ 下载SVG</button>
+          <button onClick={() => dl(makeFpSvg(false), `${c.footprint.name}-footprint.svg`)} disabled={!fpSvg} style={{ ...dlBtn, opacity: fpSvg ? 1 : 0.5 }}>⬇ 下载SVG</button>
         </div>
       </div>
       <div style={{ marginTop: 8, padding: '6px 8px', borderRadius: 6, background: '#fff', border: '1px solid #f1f5f9', fontSize: 10, color: '#64748b' }}>
@@ -77,5 +82,5 @@ export function LibraryPreview({ c }: { c: PlacedComponent }) {
 
 const cell: React.CSSProperties = { background: '#fff', borderRadius: 8, border: '1px solid #f1f5f9', padding: 8, display: 'flex', flexDirection: 'column', gap: 6 };
 const cellTitle: React.CSSProperties = { fontSize: 10, fontWeight: 700, color: '#475569' };
-const preview: React.CSSProperties = { height: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: '#fafafa', borderRadius: 6 };
+const preview: React.CSSProperties = { minHeight: 70, maxHeight: 130, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: '#fafafa', borderRadius: 6, padding: 4 };
 const dlBtn: React.CSSProperties = { fontSize: 10, padding: '4px 0', borderRadius: 5, border: '1px solid #c6e2d0', background: '#f0f9f4', color: '#1f5c3b', fontWeight: 700, cursor: 'pointer' };

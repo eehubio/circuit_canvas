@@ -102,23 +102,26 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
   }, [zoom, setPos, setPan]);
 
   // 键盘：R 旋转选中符号，D/Delete 删除选中连线
+  // 捕获阶段监听 + stopImmediatePropagation：原理图有选中时优先于 App 全局快捷键（避免 R 被画布器件抢走）
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       if ((e.key === 'r' || e.key === 'R') && selSym) {
         e.preventDefault();
+        e.stopImmediatePropagation();
         const cur = P(selSym).rotation;
         setPos(selSym, { rotation: (cur + 90) % 360 });
       }
       if ((e.key === 'd' || e.key === 'D' || e.key === 'Delete') && sel) {
         e.preventDefault();
+        e.stopImmediatePropagation();
         setNets((nets || []).filter((n) => n.id !== sel));
         setSel(null);
       }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
   }, [selSym, sel, nets, setNets, setPos, P]);
 
   const onSymDown = (e: React.MouseEvent, iid: string) => {
@@ -167,6 +170,14 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
         <button onClick={() => { if (sel) { setNets((nets || []).filter((n) => n.id !== sel)); setSel(null); } }} disabled={!sel} style={{ ...tb, opacity: sel ? 1 : 0.5 }}>🗑 删除连线(D)</button>
         <button onClick={() => { setNets(genNets()); resetSch(); setSel(null); }} style={tb}>🔄 重新生成</button>
         <button onClick={exportSvg} style={tb}>⬇ 导出SVG</button>
+        {selSym && (
+          <>
+            <div style={{ width: 1, height: 14, background: '#E8F3EE' }} />
+            <button onClick={() => { const cur = P(selSym).rotation; setPos(selSym, { rotation: (cur + 90) % 360 }); }} style={{ ...tb, borderColor: '#93c5fd', color: '#2563eb' }}>⟳ 旋转(R)</button>
+            <button onClick={() => { const c = items.find((i) => i.instanceId === selSym); if (c) setEdit({ type: 'refdes', id: selSym, text: refOf(c) }); }} style={{ ...tb, borderColor: '#93c5fd', color: '#2563eb' }}>✎ 位号</button>
+            <button onClick={() => { const c = items.find((i) => i.instanceId === selSym); if (c) setEdit({ type: 'value', id: selSym, text: valOf(c) }); }} style={{ ...tb, borderColor: '#93c5fd', color: '#2563eb' }}>✎ 值</button>
+          </>
+        )}
         <span style={{ fontSize: 10, color: '#94a3b8' }}>拖动符号 · R旋转 · 双击位号/型号编辑 · 滚轮缩放</span>
         <div style={{ flex: 1 }} />
         {onToggleFullscreen && <button onClick={onToggleFullscreen} style={tb}>{isFullscreen ? '↙ 退出全屏' : '⛶ 全屏'}</button>}

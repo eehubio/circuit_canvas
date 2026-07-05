@@ -96,7 +96,7 @@ export default function App() {
 
   const confirmScheme = () => {
     if (!aiProposal) return;
-    placeScheme(aiProposal.details);
+    placeScheme(aiProposal.details, { requirement: aiPrompt, rationale: aiProposal.rationale });
     setAiProposal(null);
   };
 

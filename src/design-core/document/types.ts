@@ -154,6 +154,9 @@ export interface CircuitCanvasDocument {
     source: RunMode;
   };
 
+  /** 方案设计意图（AI 生成时记录：需求原文 + 选型理由） */
+  designIntent?: { requirement: string; rationale: string; generatedAt: string };
+
   board: BoardDefinition;
   components: PlacedComponent[];
   functionalBlocks: FunctionalBlock[];

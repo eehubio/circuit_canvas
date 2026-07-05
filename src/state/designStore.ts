@@ -44,7 +44,7 @@ interface DesignState {
   select: (id: string | null) => void;
   toggleMulti: (id: string) => void;
   clearAll: () => void;
-  placeScheme: (results: ComponentSearchResult[]) => void;
+  placeScheme: (results: ComponentSearchResult[], intent?: { requirement: string; rationale: string }) => void;
   loadDocument: (doc: CircuitCanvasDocument) => void;
   undo: () => void;
   redo: () => void;
@@ -195,9 +195,10 @@ export const useDesignStore = create<DesignState>()(
         s.overlaps = new Set();
       }),
 
-    placeScheme: (results) =>
+    placeScheme: (results, intent) =>
       set((s) => {
         snapshot(s);
+        if (intent) s.doc.designIntent = { ...intent, generatedAt: new Date().toISOString() };
         let placed: PlacedComponent[] = [];
         for (const r of results) {
           const p = searchResultToPlaced(r, nextReference(r.category, placed));

@@ -129,6 +129,7 @@ export const documentSchema = z.object({
     projectId: z.string().optional(),
     source: z.enum(['demo', 'standalone', 'integrated']),
   }),
+  designIntent: z.object({ requirement: z.string(), rationale: z.string(), generatedAt: z.string() }).optional(),
   board: boardSchema,
   components: z.array(placedComponentSchema),
   functionalBlocks: z.array(functionalBlockSchema),
