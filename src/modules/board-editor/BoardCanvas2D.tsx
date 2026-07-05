@@ -13,20 +13,28 @@ import type { PlacedComponent } from '../../design-core/document/types';
 
 const ORIGIN = { x: 60, y: 40 }; // 板框左上角在 svg 中的像素偏移
 
+/** 视图状态持久化（切换 2D/3D 再回来不丢位置） */
+const viewMemory = { zoom: 1, pan: { x: 0, y: 0 } };
+
 export function BoardCanvas2D() {
   const doc = useDesignStore((s) => s.doc);
   const selectedId = useDesignStore((s) => s.selectedId);
   const multiSel = useDesignStore((s) => s.multiSel);
   const overlaps = useDesignStore((s) => s.overlaps);
+  const activeLayer = useDesignStore((s) => s.activeLayer);
+  const hideAllRefDes = useDesignStore((s) => s.hideAllRefDes);
   const select = useDesignStore((s) => s.select);
   const toggleMulti = useDesignStore((s) => s.toggleMulti);
   const move = useDesignStore((s) => s.moveComponent);
+  const moveRefDes = useDesignStore((s) => s.moveRefDes);
 
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [zoom, setZoomRaw] = useState(viewMemory.zoom);
+  const [pan, setPanRaw] = useState(viewMemory.pan);
+  const setZoom = (v: number | ((p: number) => number)) => setZoomRaw((p) => { const n = typeof v === 'function' ? v(p) : v; viewMemory.zoom = n; return n; });
+  const setPan = (v: { x: number; y: number } | ((p: { x: number; y: number }) => { x: number; y: number })) => setPanRaw((p) => { const n = typeof v === 'function' ? v(p) : v; viewMemory.pan = n; return n; });
   const containerRef = useRef<HTMLDivElement>(null);
   const panRef = useRef({ active: false, sx: 0, sy: 0, px: 0, py: 0, moved: false });
-  const dragRef = useRef({ active: false, id: '', sx: 0, sy: 0, startX: 0, startY: 0 });
+  const dragRef = useRef({ active: false, id: '', sx: 0, sy: 0, startX: 0, startY: 0, mode: 'comp' as 'comp' | 'refdes' });
 
   const bw = doc.board.widthMm * PX_PER_MM;
   const bh = doc.board.heightMm * PX_PER_MM;
@@ -57,7 +65,8 @@ export function BoardCanvas2D() {
         const d = dragRef.current;
         const dxMm = (e.clientX - d.sx) / zoom / PX_PER_MM;
         const dyMm = (e.clientY - d.sy) / zoom / PX_PER_MM;
-        move(d.id, d.startX + dxMm, d.startY + dyMm);
+        if (d.mode === 'refdes') moveRefDes(d.id, d.startX + dxMm, d.startY + dyMm);
+        else move(d.id, d.startX + dxMm, d.startY + dyMm);
       } else if (panRef.current.active) {
         const dx = e.clientX - panRef.current.sx, dy = e.clientY - panRef.current.sy;
         if (Math.abs(dx) > 3 || Math.abs(dy) > 3) panRef.current.moved = true;
@@ -68,14 +77,20 @@ export function BoardCanvas2D() {
     window.addEventListener('mousemove', onMM);
     window.addEventListener('mouseup', onMU);
     return () => { window.removeEventListener('mousemove', onMM); window.removeEventListener('mouseup', onMU); };
-  }, [zoom, move]);
+  }, [zoom, move, moveRefDes]);
 
   const onCompDown = useCallback((e: React.MouseEvent, c: PlacedComponent) => {
     e.stopPropagation();
     if (e.ctrlKey || e.metaKey) { toggleMulti(c.instanceId); return; }
     select(c.instanceId);
-    dragRef.current = { active: true, id: c.instanceId, sx: e.clientX, sy: e.clientY, startX: c.placement.xMm, startY: c.placement.yMm };
+    dragRef.current = { active: true, id: c.instanceId, sx: e.clientX, sy: e.clientY, startX: c.placement.xMm, startY: c.placement.yMm, mode: 'comp' };
   }, [select, toggleMulti]);
+
+  const onRefDesDown = useCallback((e: React.MouseEvent, c: PlacedComponent) => {
+    e.stopPropagation();
+    const cur = c.refDesDisplay ?? { dx: 0, dy: 0, rotation: 0, hidden: false };
+    dragRef.current = { active: true, id: c.instanceId, sx: e.clientX, sy: e.clientY, startX: cur.dx, startY: cur.dy, mode: 'refdes' };
+  }, []);
 
   const onBgDown = (e: React.MouseEvent) => {
     if (e.button === 0) panRef.current = { active: true, sx: e.clientX, sy: e.clientY, px: pan.x, py: pan.y, moved: false };
@@ -106,7 +121,10 @@ export function BoardCanvas2D() {
               selected={selectedId === c.instanceId}
               multi={multiSel.includes(c.instanceId)}
               overlap={overlaps.has(c.instanceId)}
-              onMouseDown={(e) => onCompDown(e, c)} />
+              inactive={c.placement.side !== activeLayer}
+              hideRefDes={hideAllRefDes || !!c.refDesDisplay?.hidden}
+              onMouseDown={(e) => onCompDown(e, c)}
+              onRefDesDown={(e) => onRefDesDown(e, c)} />
           ))}
           {doc.components.length === 0 && (
             <text x={ORIGIN.x + bw / 2} y={ORIGIN.y + bh / 2} textAnchor="middle" fontSize={12} fill="#94a3b8">从左侧添加器件，自动按电气规则摆放</text>
@@ -137,41 +155,46 @@ function BoardOutline({ shape, x, y, w, h }: { shape: string; x: number; y: numb
   return <rect x={x} y={y} width={w} height={h} rx={shape === 'rounded' ? 18 : 6} fill={fill} stroke={stroke} strokeWidth={2} />;
 }
 
-function ComponentGlyph({ comp, selected, multi, overlap, onMouseDown }: {
-  comp: PlacedComponent; selected: boolean; multi: boolean; overlap: boolean; onMouseDown: (e: React.MouseEvent) => void;
+function ComponentGlyph({ comp, selected, multi, overlap, inactive, hideRefDes, onMouseDown, onRefDesDown }: {
+  comp: PlacedComponent; selected: boolean; multi: boolean; overlap: boolean; inactive: boolean; hideRefDes: boolean;
+  onMouseDown: (e: React.MouseEvent) => void; onRefDesDown: (e: React.MouseEvent) => void;
 }) {
   const disp = CATEGORY_DISPLAY[comp.category];
   const pads = padFootprintFor(comp.footprint.name);
+  const isBottom = comp.placement.side === 'BOTTOM';
   // 中心点（px）
   const cx = ORIGIN.x + comp.placement.xMm * PX_PER_MM;
   const cy = ORIGIN.y + comp.placement.yMm * PX_PER_MM;
   const rot = comp.placement.rotation;
   const courtyard = footprintBodyRect(comp.footprint.geometry, { x: comp.placement.xMm, y: comp.placement.yMm }, comp.placement.rotation);
+  const rd = comp.refDesDisplay ?? { dx: 0, dy: 0, rotation: 0, hidden: false };
 
   if (pads) {
-    // 真实焊盘渲染（局部坐标系，<g> 已应用旋转，故此处不做旋转换算）
-    const bodyStroke = overlap ? '#ef4444' : selected ? '#2563eb' : disp.color;
-    const copper = '#c08a2d';
-    // 选中框 = 焊盘+本体的实际外接范围（局部，未旋转）
+    // Bottom 层：铜色→蓝色系、水平镜像
+    const copper = isBottom ? '#3b82c4' : '#c08a2d';
+    const copperStroke = isBottom ? '#1d4e8a' : '#8a6420';
+    const bodyStroke = overlap ? '#ef4444' : selected ? '#2563eb' : isBottom ? '#3b82c4' : disp.color;
     const halfW = (Math.max(...pads.pads.map((p) => Math.abs(p.x) + p.w / 2), pads.bodyW / 2)) * PX_PER_MM;
     const halfH = (Math.max(...pads.pads.map((p) => Math.abs(p.y) + p.h / 2), pads.bodyH / 2)) * PX_PER_MM;
     return (
-      <g transform={`translate(${cx},${cy}) rotate(${rot})`} onMouseDown={onMouseDown} onClick={(e) => e.stopPropagation()} style={{ cursor: 'grab' }}>
+      <g transform={`translate(${cx},${cy}) rotate(${rot})${isBottom ? ' scale(-1,1)' : ''}`} opacity={inactive ? 0.35 : 1}
+        onMouseDown={onMouseDown} onClick={(e) => e.stopPropagation()} style={{ cursor: 'grab' }}>
         {(selected || multi) && <rect x={-halfW - 4} y={-halfH - 4} width={halfW * 2 + 8} height={halfH * 2 + 8} rx={3} fill="none" stroke={multi ? '#f59e0b' : '#2563eb'} strokeWidth={1.5} strokeDasharray="5 3" />}
-        {/* 丝印本体外框 */}
         <rect x={-pads.bodyW * PX_PER_MM / 2} y={-pads.bodyH * PX_PER_MM / 2} width={pads.bodyW * PX_PER_MM} height={pads.bodyH * PX_PER_MM} rx={2}
           fill={overlap ? 'rgba(239,68,68,.06)' : 'rgba(148,163,184,.08)'} stroke={bodyStroke} strokeWidth={selected ? 1.4 : 0.9} />
-        {/* 焊盘 */}
         {pads.pads.map((p, i) => (
           <rect key={i} x={(p.x - p.w / 2) * PX_PER_MM} y={(p.y - p.h / 2) * PX_PER_MM} width={p.w * PX_PER_MM} height={p.h * PX_PER_MM}
-            rx={p.round ? p.w * PX_PER_MM / 2 : 0.8} fill={copper} stroke="#8a6420" strokeWidth={0.3} />
+            rx={p.round ? p.w * PX_PER_MM / 2 : 0.8} fill={copper} stroke={copperStroke} strokeWidth={0.3} />
         ))}
-        {/* 引脚1标记 */}
         {pads.pin1 && <circle cx={pads.pin1.x * PX_PER_MM} cy={pads.pin1.y * PX_PER_MM} r={1.6} fill="#dc2626" />}
-        {/* 位号（不随旋转，反向旋转回正） */}
-        <g transform={`rotate(${-rot})`}>
-          <text x={0} y={-halfH - 6} textAnchor="middle" fontSize={8} fontFamily="monospace" fontWeight={700} fill={disp.color}>{comp.reference}</text>
-        </g>
+        {/* 位号：可拖动、可隐藏 */}
+        {!hideRefDes && (
+          <g transform={`${isBottom ? 'scale(-1,1) ' : ''}rotate(${-rot})`}>
+            <text x={rd.dx * PX_PER_MM} y={-halfH - 6 + rd.dy * PX_PER_MM} textAnchor="middle" fontSize={8} fontFamily="monospace" fontWeight={700}
+              fill={isBottom ? '#3b82c4' : disp.color} style={{ cursor: 'move' }}
+              onMouseDown={onRefDesDown}>{comp.reference}</text>
+          </g>
+        )}
       </g>
     );
   }

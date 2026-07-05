@@ -78,7 +78,7 @@ export function BoardView3D() {
     const onMove = (e: MouseEvent) => {
       if (!dragging) return;
       st.rotY += (e.clientX - sx) * 0.008;
-      st.rotX = Math.max(-1.4, Math.min(-0.1, st.rotX - (e.clientY - sy) * 0.008));
+      st.rotX = Math.max(-1.45, Math.min(1.45, st.rotX - (e.clientY - sy) * 0.008));
       sx = e.clientX; sy = e.clientY;
       updateCamera();
     };
@@ -121,13 +121,21 @@ export function BoardView3D() {
       <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', padding: '5px 14px', borderRadius: 16, background: 'rgba(255,255,255,.08)', border: '1px solid rgba(134,239,172,.25)', color: '#86efac', fontSize: 11, fontWeight: 600, pointerEvents: 'none' }}>
         🖱 拖拽旋转 · 滚轮缩放 · 真实 3D 封装
       </div>
-      <button onClick={() => { const st = stateRef.current; st.rotX = -0.9; st.rotY = 0.3; st.dist = 220; st.updateCamera?.(); }}
-        style={{ position: 'absolute', bottom: 12, right: 12, padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(134,239,172,.3)', background: 'rgba(255,255,255,.08)', color: '#86efac', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>⟳ 复位视角</button>
+      <div style={{ position: 'absolute', bottom: 12, right: 12, display: 'flex', gap: 6 }}>
+        <button onClick={() => { const st = stateRef.current; st.rotX = -1.35; st.rotY = 0; st.dist = 200; st.updateCamera?.(); }}
+          style={vbtn}>⬆ 顶视Top</button>
+        <button onClick={() => { const st = stateRef.current; st.rotX = 1.35; st.rotY = 0; st.dist = 200; st.updateCamera?.(); }}
+          style={vbtn}>⬇ 看Bottom</button>
+        <button onClick={() => { const st = stateRef.current; st.rotX = -0.9; st.rotY = 0.3; st.dist = 220; st.updateCamera?.(); }}
+          style={vbtn}>⟳ 复位视角</button>
+      </div>
     </div>
   );
 }
 
 /** 重建板 + 器件。坐标：板中心为原点，x 右、z 下（对应 2D 的 y）、y 上。 */
+const vbtn: React.CSSProperties = { padding: '6px 12px', borderRadius: 8, border: '1px solid rgba(134,239,172,.3)', background: 'rgba(255,255,255,.08)', color: '#86efac', fontSize: 11, fontWeight: 700, cursor: 'pointer' };
+
 function rebuildBoard(group: THREE.Group, doc: CircuitCanvasDocument) {
   // clear
   while (group.children.length) { const c = group.children[0]; group.remove(c); disposeObj(c); }
@@ -176,8 +184,15 @@ function rebuildBoard(group: THREE.Group, doc: CircuitCanvasDocument) {
     const model = buildComponent3D(comp);
     const localX = comp.placement.xMm - W / 2;
     const localZ = comp.placement.yMm - H / 2;
-    model.position.set(localX, 0, localZ);
-    model.rotation.y = (comp.placement.rotation * Math.PI) / 180;
+    if (comp.placement.side === 'BOTTOM') {
+      // 底层：翻到板下方（绕 X 轴翻转 180°），旋转取镜像
+      model.position.set(localX, -boardThk, localZ);
+      model.rotation.x = Math.PI;
+      model.rotation.y = -(comp.placement.rotation * Math.PI) / 180;
+    } else {
+      model.position.set(localX, 0, localZ);
+      model.rotation.y = (comp.placement.rotation * Math.PI) / 180;
+    }
     group.add(model);
   }
 }

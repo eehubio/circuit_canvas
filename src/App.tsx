@@ -8,13 +8,15 @@ import { useDesignStore } from './state/designStore';
 import { getProviders } from './providers/factory';
 import { appConfig } from './config';
 import { ComponentSearchPanel } from './modules/component-search/ComponentSearchPanel';
+import { FootprintLibraryPanel } from './modules/component-search/FootprintLibraryPanel';
+import { LibraryPreview } from './modules/component-search/LibraryPreview';
 import { BoardCanvas2D } from './modules/board-editor/BoardCanvas2D';
 import { BoardView3D } from './modules/board-editor/BoardView3D';
 import { BomPanel } from './modules/bom/BomPanel';
 import { AdvisorPanel } from './modules/design-review/AdvisorPanel';
 import { BlockDiagramPanel } from './modules/block-diagram/BlockDiagramPanel';
 import { SchematicPanel } from './modules/schematic/SchematicPanel';
-import { exportDocument, importDocumentFromFile, autosave } from './modules/report/persistence';
+import { exportDocument, importDocumentFromFile, autosave, exportMarkdownReport } from './modules/report/persistence';
 import { COLORS, CATEGORY_DISPLAY, fmtMoney } from './shared/theme';
 import type { BoardShapeKind } from './design-core/document/types';
 
@@ -39,14 +41,21 @@ export default function App() {
   const setBoardSize = useDesignStore((s) => s.setBoardSize);
   const setBoardShape = useDesignStore((s) => s.setBoardShape);
   const toggleMountingHoles = useDesignStore((s) => s.toggleMountingHoles);
+  const activeLayer = useDesignStore((s) => s.activeLayer);
+  const setActiveLayer = useDesignStore((s) => s.setActiveLayer);
+  const flipLayer = useDesignStore((s) => s.flipComponentLayer);
+  const toggleAllRefDes = useDesignStore((s) => s.toggleAllRefDes);
+  const hideAllRefDes = useDesignStore((s) => s.hideAllRefDes);
+  const toggleRefDesHidden = useDesignStore((s) => s.toggleRefDesHidden);
   const placeScheme = useDesignStore((s) => s.placeScheme);
   const loadDocument = useDesignStore((s) => s.loadDocument);
 
   const [rightTab, setRightTab] = useState<'comp' | 'advisor'>('comp');
   const [bottom, setBottom] = useState<'bom' | 'block' | 'schematic' | null>(null);
   const [view, setView] = useState<'2d' | '3d'>('2d');
-  const [fullscreen, setFullscreen] = useState<'block' | 'schematic' | null>(null);
+  const [fullscreen, setFullscreen] = useState<'bom' | 'block' | 'schematic' | null>(null);
   const [aiPrompt, setAiPrompt] = useState('');
+  const [leftTab, setLeftTab] = useState<'model' | 'footprint'>('model');
   const [aiBusy, setAiBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -63,19 +72,32 @@ export default function App() {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
       if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
       if ((e.key === 'r' || e.key === 'R') && selectedId) { e.preventDefault(); rotate(selectedId); }
+      if ((e.key === 'l' || e.key === 'L') && selectedId) { e.preventDefault(); flipLayer(selectedId); }
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) { e.preventDefault(); remove(selectedId); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectedId, undo, redo, rotate, remove]);
+  }, [selectedId, undo, redo, rotate, remove, flipLayer]);
+
+  const [aiProposal, setAiProposal] = useState<{ rationale: string; details: NonNullable<Awaited<ReturnType<typeof providers.components.getComponentDetail>>>[] } | null>(null);
 
   const genScheme = async () => {
     if (!aiPrompt.trim()) return;
     setAiBusy(true);
-    const result = await providers.ai.generateScheme({ prompt: aiPrompt }, ctx);
-    const details = (await Promise.all(result.componentIds.map((id) => providers.components.getComponentDetail(id, ctx)))).filter(Boolean);
-    placeScheme(details as NonNullable<typeof details[number]>[]);
+    try {
+      const result = await providers.ai.generateScheme({ prompt: aiPrompt }, ctx);
+      const details = (await Promise.all(result.componentIds.map((id) => providers.components.getComponentDetail(id, ctx)))).filter(Boolean) as NonNullable<Awaited<ReturnType<typeof providers.components.getComponentDetail>>>[];
+      setAiProposal({ rationale: result.rationale, details });
+    } catch (err) {
+      alert('生成失败：' + (err as Error).message);
+    }
     setAiBusy(false);
+  };
+
+  const confirmScheme = () => {
+    if (!aiProposal) return;
+    placeScheme(aiProposal.details);
+    setAiProposal(null);
   };
 
   const onImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -95,6 +117,7 @@ export default function App() {
           <span style={{ fontSize: 10, color: '#94a3b8', background: '#f1f5f9', padding: '2px 8px', borderRadius: 10 }}>v3 · {appConfig.mode}</span>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => exportMarkdownReport(doc)} style={hbtn}>📄 方案报告</button>
           <button onClick={() => exportDocument(doc)} style={hbtn}>⬇ 导出设计</button>
           <button onClick={() => fileRef.current?.click()} style={hbtn}>⬆ 导入设计</button>
           <input ref={fileRef} type="file" accept=".json" style={{ display: 'none' }} onChange={onImport} />
@@ -115,7 +138,12 @@ export default function App() {
                 {aiBusy ? '⟳ 生成中...' : '生成方案上画布'}
               </button>
             </div>
-            <ComponentSearchPanel />
+            <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
+              {([['model', '🔍 型号搜索'], ['footprint', '📦 封装库']] as const).map(([id, label]) => (
+                <button key={id} onClick={() => setLeftTab(id)} style={{ flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 700, cursor: 'pointer', border: `1px solid ${leftTab === id ? COLORS.green : '#dbe6dd'}`, borderRadius: 8, background: leftTab === id ? COLORS.greenBg : '#fff', color: leftTab === id ? COLORS.green : '#64748b' }}>{label}</button>
+              ))}
+            </div>
+            {leftTab === 'model' ? <ComponentSearchPanel /> : <FootprintLibraryPanel />}
           </div>
         </aside>
 
@@ -132,8 +160,14 @@ export default function App() {
                 <button key={v} onClick={() => setView(v)} style={{ padding: '7px 14px', border: 'none', background: view === v ? COLORS.green : '#fff', color: view === v ? '#fff' : '#475569', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{v === '2d' ? '2D 布局' : '3D 视图'}</button>
               ))}
             </div>
+            <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #E8F3EE' }} title="当前放置层（选中器件按 L 换层）">
+              {(['TOP', 'BOTTOM'] as const).map((l) => (
+                <button key={l} onClick={() => setActiveLayer(l)} style={{ padding: '7px 12px', border: 'none', background: activeLayer === l ? (l === 'TOP' ? '#c08a2d' : '#3b82c4') : '#fff', color: activeLayer === l ? '#fff' : '#475569', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{l === 'TOP' ? 'Top层' : 'Bottom层'}</button>
+              ))}
+            </div>
+            <button onClick={toggleAllRefDes} title="显示/隐藏全部位号" style={{ ...tbtn, background: hideAllRefDes ? '#f1f5f9' : '#fff', color: hideAllRefDes ? '#94a3b8' : '#475569' }}>{hideAllRefDes ? '位号已隐藏' : '位号'}</button>
             <div style={{ flex: 1 }} />
-            <span style={{ fontSize: 11, color: '#94a3b8' }}>{view === '3d' ? '拖拽旋转 · 滚轮缩放' : '选中后 R 旋转 · Delete 删除 · Ctrl+点击多选'}</span>
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>{view === '3d' ? '拖拽旋转 · 滚轮缩放' : 'R 旋转 · L 换层 · Delete 删除 · 拖位号可移动'}</span>
           </div>
 
           <div style={{ flex: 1, position: 'relative', minHeight: 0, display: 'flex' }}>
@@ -148,6 +182,8 @@ export default function App() {
                   <span style={{ color: '#64748b' }}>{selObj.footprint.name}</span>
                   <span style={{ color: '#059669', fontWeight: 600 }}>{fmtMoney(selObj.unitPrice?.amount)}</span>
                   <button onClick={() => rotate(selObj.instanceId)} style={smbtn}>旋转</button>
+                  <button onClick={() => flipLayer(selObj.instanceId)} style={{ ...smbtn, color: selObj.placement.side === 'TOP' ? '#c08a2d' : '#3b82c4' }}>{selObj.placement.side === 'TOP' ? '→Bottom' : '→Top'}</button>
+                  <button onClick={() => toggleRefDesHidden(selObj.instanceId)} style={smbtn}>{selObj.refDesDisplay?.hidden ? '显位号' : '隐位号'}</button>
                   <button onClick={() => remove(selObj.instanceId)} style={{ ...smbtn, borderColor: '#fecaca', background: '#fef2f2', color: '#dc2626' }}>移除</button>
                 </div>
               </div>
@@ -175,9 +211,9 @@ export default function App() {
               <button key={id} onClick={() => setBottom(bottom === id ? null : id)} style={{ padding: '8px 16px', border: 'none', background: bottom === id ? COLORS.greenBg : '#fff', color: bottom === id ? COLORS.green : '#2C3E50', fontSize: 13, fontWeight: 500, cursor: 'pointer', borderTop: bottom === id ? `2px solid ${COLORS.green}` : '2px solid transparent' }}>{label}</button>
             ))}
           </div>
-          {bottom && !(bottom === 'block' && fullscreen === 'block') && !(bottom === 'schematic' && fullscreen === 'schematic') && (
-            <div style={{ height: bottom === 'bom' ? 270 : 340, borderTop: '1px solid #E8F3EE', background: '#fff', overflow: 'hidden', flexShrink: 0 }}>
-              {bottom === 'bom' && <BomPanel />}
+          {bottom && bottom !== fullscreen && (
+            <div style={{ height: 340, borderTop: '1px solid #E8F3EE', background: '#fff', overflow: 'hidden', flexShrink: 0 }}>
+              {bottom === 'bom' && <BomPanel onToggleFullscreen={() => setFullscreen('bom')} />}
               {bottom === 'block' && <BlockDiagramPanel isFullscreen={false} onToggleFullscreen={() => setFullscreen('block')} />}
               {bottom === 'schematic' && <SchematicPanel isFullscreen={false} onToggleFullscreen={() => setFullscreen('schematic')} />}
             </div>
@@ -197,11 +233,37 @@ export default function App() {
         </aside>
       </div>
 
+      {/* AI 方案确认对话框 */}
+      {aiProposal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(0,0,0,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={() => setAiProposal(null)}>
+          <div style={{ width: '100%', maxWidth: 520, background: '#fff', borderRadius: 14, padding: 20, boxShadow: '0 24px 80px rgba(0,0,0,.25)' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: COLORS.green, marginBottom: 8 }}>🤖 AI 方案建议 · 请确认</div>
+            <div style={{ fontSize: 12, color: '#475569', padding: '8px 10px', background: '#f7fcf9', borderRadius: 8, marginBottom: 10 }}>{aiProposal.rationale}</div>
+            <div style={{ maxHeight: 260, overflow: 'auto', marginBottom: 12 }}>
+              {aiProposal.details.map((d) => (
+                <div key={d.componentId} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: '1px solid #f1f5f9', fontSize: 12 }}>
+                  <span style={{ fontFamily: 'monospace', fontWeight: 700, flex: 1 }}>{d.mpn}</span>
+                  <span style={{ color: '#64748b' }}>{d.defaultFootprintName}</span>
+                  <span style={{ color: '#059669', fontWeight: 600 }}>{fmtMoney(d.unitPrice?.amount)}</span>
+                  <button onClick={() => setAiProposal({ ...aiProposal, details: aiProposal.details.filter((x) => x.componentId !== d.componentId) })}
+                    style={{ border: 'none', background: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 14 }}>×</button>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setAiProposal(null)} style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, cursor: 'pointer' }}>取消</button>
+              <button onClick={confirmScheme} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: COLORS.green, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>确认上画布 ({aiProposal.details.length}个器件)</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Fullscreen overlays */}
       {fullscreen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,.4)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
           onClick={() => setFullscreen(null)}>
           <div style={{ width: '100%', maxWidth: 1200, height: '90vh', background: '#fff', borderRadius: 16, boxShadow: '0 24px 80px rgba(0,0,0,.25)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
+            {fullscreen === 'bom' && <BomPanel isFullscreen onToggleFullscreen={() => setFullscreen(null)} />}
             {fullscreen === 'block' && <BlockDiagramPanel isFullscreen onToggleFullscreen={() => setFullscreen(null)} />}
             {fullscreen === 'schematic' && <SchematicPanel isFullscreen onToggleFullscreen={() => setFullscreen(null)} />}
           </div>
@@ -230,6 +292,7 @@ function CompDetail({ iid }: { iid: string }) {
         ))}
       </div>
       {c.display?.description && <div style={{ fontSize: 12, color: '#475569', marginTop: 12 }}>{c.display.description}</div>}
+      <LibraryPreview c={c} />
       {alts.length > 0 && (
         <div style={{ marginTop: 12, padding: 10, borderRadius: 8, background: '#fffbeb', border: '1px solid #fde68a' }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#b45309', marginBottom: 6 }}>💡 替代料与采购渠道</div>

@@ -15,10 +15,17 @@ import {
   LocalStorageProjectProvider, MockAiModelProvider,
 } from './mock';
 import { HttpClient } from './http/client';
+import { GeminiAiProvider } from './gemini';
 import {
   EzplmComponentDataProvider, EzplmReferenceDesignProvider,
   EzplmIdentityProvider, EzplmProjectProvider,
 } from './ezplm';
+
+const GEMINI_KEY = ((import.meta as unknown as { env: Record<string, string | undefined> }).env ?? {}).VITE_GEMINI_API_KEY;
+
+function makeAi() {
+  return GEMINI_KEY ? new GeminiAiProvider(GEMINI_KEY) : new MockAiModelProvider();
+}
 
 let registry: ProviderRegistry | null = null;
 
@@ -53,7 +60,7 @@ export function getProviders(): ProviderRegistry {
       components: new EzplmComponentDataProvider(http),
       referenceDesigns: new EzplmReferenceDesignProvider(http),
       project: new EzplmProjectProvider(http),
-      ai: new MockAiModelProvider(), // AI 走 gateway，后续接入；暂用 Mock
+      ai: makeAi(),
     };
   } else if (appConfig.mode === 'standalone') {
     const http = makeHttp(); // 指向本地后端骨架 (server/)
@@ -62,7 +69,7 @@ export function getProviders(): ProviderRegistry {
       components: new EzplmComponentDataProvider(http),
       referenceDesigns: new EzplmReferenceDesignProvider(http),
       project: new LocalStorageProjectProvider(),
-      ai: new MockAiModelProvider(),
+      ai: makeAi(),
     };
   } else {
     registry = {
@@ -70,7 +77,7 @@ export function getProviders(): ProviderRegistry {
       components: new MockComponentDataProvider(),
       referenceDesigns: new MockReferenceDesignProvider(),
       project: new LocalStorageProjectProvider(),
-      ai: new MockAiModelProvider(),
+      ai: makeAi(),
     };
   }
   return registry;

@@ -1,40 +1,58 @@
 /**
  * modules/schematic/SchematicPanel.tsx
- * 原理图 —— 自动从器件生成 + 可编辑（拖符号、加删改网络）+ 全屏。
+ * 原理图 —— 自动生成 + 可编辑。状态存于 schematicStore（全屏/非全屏共享，不丢失）。
+ * 交互：拖符号移动 · R 旋转 · D/Delete 删除选中连线 · 双击位号/值编辑 · 滚轮缩放 · 导出SVG。
  */
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useDesignStore } from '../../state/designStore';
+import { useSchematicStore, type SchNet } from './schematicStore';
 import { symbolFor } from './symbols';
 import type { PlacedComponent } from '../../design-core/document/types';
-
-interface Net { id: string; from: string; to: string; label: string; color: string; }
 
 let netCounter = 0;
 const nid = () => `net_${++netCounter}_${Date.now()}`;
 
 export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscreen?: boolean; onToggleFullscreen?: () => void }) {
   const items = useDesignStore((s) => s.doc.components);
-  const [pos, setPos] = useState<Record<string, { x: number; y: number }>>({});
-  const [nets, setNets] = useState<Net[] | null>(null);
-  const [sel, setSel] = useState<string | null>(null);
+  const pos = useSchematicStore((s) => s.pos);
+  const nets = useSchematicStore((s) => s.nets);
+  const zoom = useSchematicStore((s) => s.zoom);
+  const pan = useSchematicStore((s) => s.pan);
+  const setPos = useSchematicStore((s) => s.setPos);
+  const setNets = useSchematicStore((s) => s.setNets);
+  const setZoom = useSchematicStore((s) => s.setZoom);
+  const setPan = useSchematicStore((s) => s.setPan);
+  const resetSch = useSchematicStore((s) => s.reset);
+
+  const [sel, setSel] = useState<string | null>(null); // net id
+  const [selSym, setSelSym] = useState<string | null>(null); // component instanceId
   const [linking, setLinking] = useState<string | null>(null);
-  const [editId, setEditId] = useState<string | null>(null);
-  const [editText, setEditText] = useState('');
+  const [edit, setEdit] = useState<{ type: 'netlabel' | 'refdes' | 'value'; id: string; text: string } | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef({ active: false, iid: '', sx: 0, sy: 0, startX: 0, startY: 0 });
+  const panRef = useRef({ active: false, sx: 0, sy: 0, px: 0, py: 0, moved: false });
 
   const autoLayout = useMemo(() => {
     const out: Record<string, { x: number; y: number }> = {};
     const cats: Record<string, PlacedComponent[]> = {};
     items.forEach((i) => { (cats[i.category] = cats[i.category] || []).push(i); });
-    const colX: Record<string, number> = { connector: 40, power: 200, mcu: 380, ic: 600, passive: 380 };
-    Object.entries(cats).forEach(([cat, list]) => list.forEach((c, i) => { out[c.instanceId] = { x: colX[cat] ?? 380, y: cat === 'passive' ? 230 + i * 50 : 40 + i * 95 }; }));
+    const colX: Record<string, number> = { connector: 40, power: 230, mcu: 430, ic: 680, passive: 430 };
+    Object.entries(cats).forEach(([cat, list]) => list.forEach((c, i) => { out[c.instanceId] = { x: colX[cat] ?? 430, y: cat === 'passive' ? 260 + i * 60 : 40 + i * 110 }; }));
     return out;
   }, [items]);
 
-  const P = useCallback((iid: string) => pos[iid] || autoLayout[iid] || { x: 100, y: 100 }, [pos, autoLayout]);
+  const P = useCallback((iid: string) => {
+    const st = pos[iid];
+    const base = autoLayout[iid] || { x: 100, y: 100 };
+    return { x: st?.x ?? base.x, y: st?.y ?? base.y, rotation: st?.rotation ?? 0 };
+  }, [pos, autoLayout]);
 
-  const genNets = useCallback((): Net[] => {
-    const out: Net[] = [];
+  const refOf = (c: PlacedComponent) => pos[c.instanceId]?.refDes ?? c.reference;
+  const valOf = (c: PlacedComponent) => pos[c.instanceId]?.value ?? c.mpn;
+
+  const genNets = useCallback((): SchNet[] => {
+    const out: SchNet[] = [];
     const by = (cat: string) => items.filter((i) => i.category === cat);
     const mcus = by('mcu'), powers = by('power'), conns = by('connector'), ics = by('ic'), passives = by('passive');
     powers.forEach((p) => [...mcus, ...ics].forEach((t) => out.push({ id: nid(), from: p.instanceId, to: t.instanceId, label: '3V3', color: '#dc2626' })));
@@ -44,95 +62,177 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
     return out;
   }, [items]);
 
-  useEffect(() => { if (nets === null && items.length > 0) setNets(genNets()); }, [items, nets, genNets]);
-  useEffect(() => { if (items.length === 0) { setNets(null); setPos({}); } }, [items]);
+  useEffect(() => { if (nets === null && items.length > 0) setNets(genNets()); }, [items, nets, genNets, setNets]);
+  useEffect(() => { if (items.length === 0) resetSch(); }, [items.length, resetSch]);
 
+  // 非被动滚轮缩放（全屏/非全屏都生效）
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      const cur = useSchematicStore.getState().zoom;
+      const next = Math.min(3, Math.max(0.3, cur * (e.deltaY > 0 ? 0.9 : 1.1)));
+      const p = useSchematicStore.getState().pan;
+      setPan({ x: mx - (mx - p.x) * (next / cur), y: my - (my - p.y) * (next / cur) });
+      setZoom(next);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [setZoom, setPan]);
+
+  // 拖拽 + 平移
   useEffect(() => {
     const onMM = (e: MouseEvent) => {
-      if (!dragRef.current.active) return;
-      const d = dragRef.current;
-      setPos((prev) => ({ ...prev, [d.iid]: { x: Math.max(0, d.startX + e.clientX - d.sx), y: Math.max(0, d.startY + e.clientY - d.sy) } }));
+      if (dragRef.current.active) {
+        const d = dragRef.current;
+        setPos(d.iid, { x: Math.max(0, d.startX + (e.clientX - d.sx) / zoom), y: Math.max(0, d.startY + (e.clientY - d.sy) / zoom) });
+      } else if (panRef.current.active) {
+        const dx = e.clientX - panRef.current.sx, dy = e.clientY - panRef.current.sy;
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) panRef.current.moved = true;
+        setPan({ x: panRef.current.px + dx, y: panRef.current.py + dy });
+      }
     };
-    const onMU = () => { dragRef.current.active = false; };
+    const onMU = () => { dragRef.current.active = false; panRef.current.active = false; };
     window.addEventListener('mousemove', onMM);
     window.addEventListener('mouseup', onMU);
     return () => { window.removeEventListener('mousemove', onMM); window.removeEventListener('mouseup', onMU); };
-  }, []);
+  }, [zoom, setPos, setPan]);
+
+  // 键盘：R 旋转选中符号，D/Delete 删除选中连线
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if ((e.key === 'r' || e.key === 'R') && selSym) {
+        e.preventDefault();
+        const cur = P(selSym).rotation;
+        setPos(selSym, { rotation: (cur + 90) % 360 });
+      }
+      if ((e.key === 'd' || e.key === 'D' || e.key === 'Delete') && sel) {
+        e.preventDefault();
+        setNets((nets || []).filter((n) => n.id !== sel));
+        setSel(null);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selSym, sel, nets, setNets, setPos, P]);
 
   const onSymDown = (e: React.MouseEvent, iid: string) => {
     e.stopPropagation();
     if (linking === '__pick__') { setLinking(iid); return; }
     if (linking) {
-      if (linking !== iid && !(nets || []).some((n) => n.from === linking && n.to === iid)) setNets((prev) => [...(prev || []), { id: nid(), from: linking, to: iid, label: 'NET', color: '#7c3aed' }]);
+      if (linking !== iid && !(nets || []).some((n) => n.from === linking && n.to === iid)) setNets([...(nets || []), { id: nid(), from: linking, to: iid, label: 'NET', color: '#7c3aed' }]);
       setLinking(null);
       return;
     }
+    setSelSym(iid); setSel(null);
     const p = P(iid);
     dragRef.current = { active: true, iid, sx: e.clientX, sy: e.clientY, startX: p.x, startY: p.y };
   };
 
-  const delNet = () => { if (sel) { setNets((prev) => (prev || []).filter((n) => n.id !== sel)); setSel(null); } };
-  const finishEdit = () => { if (editId) setNets((prev) => (prev || []).map((n) => n.id === editId ? { ...n, label: editText } : n)); setEditId(null); };
+  const finishEdit = () => {
+    if (!edit) return;
+    if (edit.type === 'netlabel') setNets((nets || []).map((n) => n.id === edit.id ? { ...n, label: edit.text } : n));
+    if (edit.type === 'refdes') setPos(edit.id, { refDes: edit.text });
+    if (edit.type === 'value') setPos(edit.id, { value: edit.text });
+    setEdit(null);
+  };
 
-  if (items.length === 0) return (
-    <div style={{ padding: 12, height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Header isFullscreen={isFullscreen} onToggleFullscreen={onToggleFullscreen} />
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: 13 }}>添加器件后自动生成原理图</div>
-    </div>
-  );
+  const exportSvg = () => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const clone = svg.cloneNode(true) as SVGSVGElement;
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    const blob = new Blob(['<?xml version="1.0" encoding="UTF-8"?>\n' + clone.outerHTML], { type: 'image/svg+xml' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'schematic.svg';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
 
   const maxY = Math.max(...items.map((c) => P(c.instanceId).y), 300);
   const maxX = Math.max(...items.map((c) => P(c.instanceId).x), 700);
-  const W = Math.max(780, maxX + 200), H = Math.max(320, maxY + 120);
+  const W = Math.max(900, maxX + 240), H = Math.max(420, maxY + 160);
 
   return (
     <div style={{ padding: 12, height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 14, fontWeight: 700 }}>⚡ 原理图</span>
         <button onClick={() => setLinking(linking ? null : '__pick__')} style={{ ...tb, ...(linking ? { background: '#f0fdf4', color: '#16a34a', borderColor: '#22c55e' } : {}) }}>{linking ? '✕ 取消' : '+ 连线'}</button>
-        <button onClick={delNet} disabled={!sel} style={{ ...tb, opacity: sel ? 1 : 0.5 }}>🗑 删除连线</button>
-        <button onClick={() => { setNets(genNets()); setPos({}); setSel(null); }} style={tb}>🔄 重新生成</button>
+        <button onClick={() => { if (sel) { setNets((nets || []).filter((n) => n.id !== sel)); setSel(null); } }} disabled={!sel} style={{ ...tb, opacity: sel ? 1 : 0.5 }}>🗑 删除连线(D)</button>
+        <button onClick={() => { setNets(genNets()); resetSch(); setSel(null); }} style={tb}>🔄 重新生成</button>
+        <button onClick={exportSvg} style={tb}>⬇ 导出SVG</button>
+        <span style={{ fontSize: 10, color: '#94a3b8' }}>拖动符号 · R旋转 · 双击位号/型号编辑 · 滚轮缩放</span>
         <div style={{ flex: 1 }} />
         {onToggleFullscreen && <button onClick={onToggleFullscreen} style={tb}>{isFullscreen ? '↙ 退出全屏' : '⛶ 全屏'}</button>}
       </div>
-      <div style={{ flex: 1, overflow: 'auto', background: '#fffef9', borderRadius: 8, border: '1px solid #e7e0c9' }} onClick={() => { setSel(null); if (linking) setLinking(null); }}>
-        <svg width={W} height={H} style={{ minWidth: W }}>
+      <div ref={wrapRef} style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#fffef9', borderRadius: 8, border: '1px solid #e7e0c9' }}
+        onMouseDown={(e) => { if (e.button === 0 && !linking) panRef.current = { active: true, sx: e.clientX, sy: e.clientY, px: pan.x, py: pan.y, moved: false }; }}
+        onClick={() => { if (!panRef.current.moved) { setSel(null); setSelSym(null); if (linking) setLinking(null); } }}>
+        <svg ref={svgRef} width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMinYMin meet" style={{ minWidth: '100%' }}>
           <defs><pattern id="schg" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.7" fill="#d9d2b8" /></pattern></defs>
-          <rect width="100%" height="100%" fill="url(#schg)" />
+          <g transform={`translate(${pan.x},${pan.y}) scale(${zoom})`}>
+          <rect x={-2000} y={-2000} width={W + 4000} height={H + 4000} fill="url(#schg)" />
+          {items.length === 0 && <text x={W / 2} y={H / 2} textAnchor="middle" fontSize={13} fill="#94a3b8">添加器件后自动生成原理图</text>}
           {(nets || []).map((n) => {
             const fc = items.find((i) => i.instanceId === n.from), tc = items.find((i) => i.instanceId === n.to);
             if (!fc || !tc) return null;
             const f = P(n.from), t = P(n.to);
             const fSym = symbolFor(fc), tSym = symbolFor(tc);
-            // 源：右端口；目标：左端口
             const x1 = f.x + fSym.w + 10, y1 = f.y + fSym.h / 2;
             const x2 = t.x - 10, y2 = t.y + tSym.h / 2;
             const midX = (x1 + x2) / 2;
             const isSel = sel === n.id;
             return (
               <g key={n.id}>
-                <path d={`M${x1},${y1} H${midX} V${y2} H${x2}`} fill="none" stroke="transparent" strokeWidth={12} style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setSel(n.id); }} onDoubleClick={(e) => { e.stopPropagation(); setEditId(n.id); setEditText(n.label); }} />
+                <path d={`M${x1},${y1} H${midX} V${y2} H${x2}`} fill="none" stroke="transparent" strokeWidth={12} style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setSel(n.id); setSelSym(null); }} onDoubleClick={(e) => { e.stopPropagation(); setEdit({ type: 'netlabel', id: n.id, text: n.label }); }} />
                 <path d={`M${x1},${y1} H${midX} V${y2} H${x2}`} fill="none" stroke={isSel ? '#2563eb' : n.color} strokeWidth={isSel ? 2.2 : 1.4} style={{ pointerEvents: 'none' }} />
                 <circle cx={x1} cy={y1} r={2.5} fill={isSel ? '#2563eb' : n.color} /><circle cx={x2} cy={y2} r={2.5} fill={isSel ? '#2563eb' : n.color} />
-                {editId === n.id ? (
+                {edit?.type === 'netlabel' && edit.id === n.id ? (
                   <foreignObject x={midX - 45} y={Math.min(y1, y2) - 18} width={90} height={22}>
-                    <input autoFocus value={editText} onChange={(e) => setEditText(e.target.value)} onBlur={finishEdit} onKeyDown={(e) => { if (e.key === 'Enter') finishEdit(); e.stopPropagation(); }} style={{ width: '100%', fontSize: 9, textAlign: 'center', border: '1px solid #93c5fd', borderRadius: 3, outline: 'none' }} />
+                    <input autoFocus value={edit.text} onChange={(e) => setEdit({ ...edit, text: e.target.value })} onBlur={finishEdit} onKeyDown={(e) => { if (e.key === 'Enter') finishEdit(); e.stopPropagation(); }} style={{ width: '100%', fontSize: 9, textAlign: 'center', border: '1px solid #93c5fd', borderRadius: 3, outline: 'none' }} />
                   </foreignObject>
                 ) : n.label ? (
-                  <text x={midX} y={Math.min(y1, y2) - 4} textAnchor="middle" fontSize={8} fontWeight={700} fill={isSel ? '#2563eb' : n.color} fontFamily="monospace" style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setSel(n.id); }} onDoubleClick={(e) => { e.stopPropagation(); setEditId(n.id); setEditText(n.label); }}>{n.label}</text>
+                  <text x={midX} y={Math.min(y1, y2) - 4} textAnchor="middle" fontSize={8} fontWeight={700} fill={isSel ? '#2563eb' : n.color} fontFamily="monospace" style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setSel(n.id); }} onDoubleClick={(e) => { e.stopPropagation(); setEdit({ type: 'netlabel', id: n.id, text: n.label }); }}>{n.label}</text>
                 ) : null}
               </g>
             );
           })}
-          {items.map((c) => <SymBox key={c.instanceId} c={c} p={P(c.instanceId)} linking={!!linking} onDown={(e) => onSymDown(e, c.instanceId)} />)}
-          {/* GND 总线 + 各器件接地引线 */}
-          {(() => {
-            const railY = H - 30;
+          {items.map((c) => {
+            const p = P(c.instanceId);
+            const sym = symbolFor(c);
+            const isSelS = selSym === c.instanceId;
+            return (
+              <g key={c.instanceId} transform={`translate(${p.x},${p.y}) rotate(${p.rotation} ${sym.w / 2} ${sym.h / 2})`}
+                onMouseDown={(e) => onSymDown(e, c.instanceId)} onClick={(e) => e.stopPropagation()}
+                style={{ cursor: linking ? 'pointer' : 'grab' }}>
+                <rect x={-12} y={-12} width={sym.w + 24} height={sym.h + 24} fill="transparent" stroke={isSelS ? '#2563eb' : 'none'} strokeWidth={1.2} strokeDasharray="4 3" rx={4} />
+                {sym.render(refOf(c), valOf(c))}
+                {/* 双击热点：位号 / 值 */}
+                <rect x={sym.w / 2 - 30} y={-16} width={60} height={14} fill="transparent" style={{ cursor: 'text' }}
+                  onDoubleClick={(e) => { e.stopPropagation(); setEdit({ type: 'refdes', id: c.instanceId, text: refOf(c) }); }} />
+                <rect x={sym.w / 2 - 45} y={sym.h / 2 - 6} width={90} height={14} fill="transparent" style={{ cursor: 'text' }}
+                  onDoubleClick={(e) => { e.stopPropagation(); setEdit({ type: 'value', id: c.instanceId, text: valOf(c) }); }} />
+                {edit && (edit.type === 'refdes' || edit.type === 'value') && edit.id === c.instanceId && (
+                  <foreignObject x={sym.w / 2 - 50} y={edit.type === 'refdes' ? -20 : sym.h / 2 - 9} width={100} height={22}>
+                    <input autoFocus value={edit.text} onChange={(e) => setEdit({ ...edit, text: e.target.value })} onBlur={finishEdit} onKeyDown={(e) => { if (e.key === 'Enter') finishEdit(); e.stopPropagation(); }} style={{ width: '100%', fontSize: 9, textAlign: 'center', border: '1px solid #93c5fd', borderRadius: 3, outline: 'none' }} />
+                  </foreignObject>
+                )}
+              </g>
+            );
+          })}
+          {/* GND 总线 + 接地引线 */}
+          {items.length > 0 && (() => {
+            const railY = H - 40;
             return (
               <g>
                 <line x1={20} y1={railY} x2={W - 20} y2={railY} stroke="#334155" strokeWidth={2.5} />
                 <text x={26} y={railY - 6} fontSize={9} fontWeight={700} fill="#334155" fontFamily="monospace">GND</text>
-                {/* 接地符号（三横线） */}
                 {items.filter((c) => c.category !== 'passive').map((c) => {
                   const sym = symbolFor(c);
                   const p = P(c.instanceId);
@@ -147,30 +247,17 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
               </g>
             );
           })()}
+          </g>
         </svg>
+        <div style={{ position: 'absolute', bottom: 8, right: 8, display: 'flex', gap: 4, alignItems: 'center', background: 'rgba(255,255,255,.92)', borderRadius: 6, padding: '3px 5px', border: '1px solid #e2e8f0', fontSize: 10 }}>
+          <button onClick={() => setZoom(Math.max(0.3, zoom * 0.8))} style={zb}>−</button>
+          <span onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} style={{ minWidth: 34, textAlign: 'center', fontWeight: 600, cursor: 'pointer' }}>{Math.round(zoom * 100)}%</span>
+          <button onClick={() => setZoom(Math.min(3, zoom * 1.25))} style={zb}>+</button>
+        </div>
       </div>
     </div>
   );
 }
 
-function Header({ isFullscreen, onToggleFullscreen }: { isFullscreen?: boolean; onToggleFullscreen?: () => void }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-      <span style={{ fontSize: 14, fontWeight: 700 }}>⚡ 原理图</span>
-      {onToggleFullscreen && <button onClick={onToggleFullscreen} style={tb}>{isFullscreen ? '↙ 退出全屏' : '⛶ 全屏'}</button>}
-    </div>
-  );
-}
-
-function SymBox({ c, p, linking, onDown }: { c: PlacedComponent; p: { x: number; y: number }; linking: boolean; onDown: (e: React.MouseEvent) => void }) {
-  const sym = symbolFor(c);
-  return (
-    <g transform={`translate(${p.x},${p.y})`} onMouseDown={onDown} onClick={(e) => e.stopPropagation()} style={{ cursor: linking ? 'pointer' : 'grab' }}>
-      {/* 透明命中区 */}
-      <rect x={-12} y={-12} width={sym.w + 24} height={sym.h + 24} fill="transparent" />
-      {sym.render(c.reference, c.mpn)}
-    </g>
-  );
-}
-
 const tb: React.CSSProperties = { padding: '4px 10px', borderRadius: 5, border: '1px solid #E8F3EE', background: '#fff', color: '#475569', fontSize: 11, fontWeight: 600, cursor: 'pointer' };
+const zb: React.CSSProperties = { width: 20, height: 20, border: '1px solid #e2e8f0', borderRadius: 3, background: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#475569' };

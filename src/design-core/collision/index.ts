@@ -40,14 +40,15 @@ export function boardRect(board: BoardDefinition): Rect {
 /** 某器件是否与其它器件重叠。 */
 export function hasOverlap(target: PlacedComponent, others: PlacedComponent[], gap = DEFAULT_GAP_MM): boolean {
   const r = componentRect(target);
-  return others.some((o) => o.instanceId !== target.instanceId && rectsOverlap(r, componentRect(o), gap));
+  return others.some((o) => o.instanceId !== target.instanceId && o.placement.side === target.placement.side && rectsOverlap(r, componentRect(o), gap));
 }
 
-/** 返回所有存在重叠的器件 instanceId 集合。 */
+/** 返回所有存在重叠的器件 instanceId 集合（仅同层比较）。 */
 export function findOverlaps(components: PlacedComponent[], gap = DEFAULT_GAP_MM): Set<string> {
   const set = new Set<string>();
   for (let i = 0; i < components.length; i++) {
     for (let j = i + 1; j < components.length; j++) {
+      if (components[i].placement.side !== components[j].placement.side) continue;
       if (rectsOverlap(componentRect(components[i]), componentRect(components[j]), gap)) {
         set.add(components[i].instanceId);
         set.add(components[j].instanceId);
@@ -55,6 +56,25 @@ export function findOverlaps(components: PlacedComponent[], gap = DEFAULT_GAP_MM
     }
   }
   return set;
+}
+
+export const DRAG_GAP_MM = 0.5;
+
+/** 拖拽时校验：目标中心点是否与其它同层器件/定位孔保持间距。 */
+export function isPositionFree(
+  target: PlacedComponent, xMm: number, yMm: number,
+  others: PlacedComponent[], board: BoardDefinition, gap = DRAG_GAP_MM
+): boolean {
+  const moved = { ...target, placement: { ...target.placement, xMm, yMm } };
+  const r = componentRect(moved);
+  for (const o of others) {
+    if (o.instanceId === target.instanceId || o.placement.side !== target.placement.side) continue;
+    if (rectsOverlap(r, componentRect(o), gap)) return false;
+  }
+  for (const hr of mountingHoleRects(board)) {
+    if (rectsOverlap(r, hr, 0)) return false;
+  }
+  return true;
 }
 
 /** 把器件中心点夹紧，使 courtyard 完整落在板框内。返回新的中心点。 */

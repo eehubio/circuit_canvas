@@ -81,6 +81,9 @@ export interface PlacedComponent {
   unitPrice?: Money;
   source: ComponentSource;
 
+  /** 位号显示状态（可移动/旋转/隐藏） */
+  refDesDisplay?: { dx: number; dy: number; rotation: number; hidden: boolean };
+
   /** 透传的展示属性（描述、关键参数等），不参与几何计算 */
   display?: {
     description?: string;

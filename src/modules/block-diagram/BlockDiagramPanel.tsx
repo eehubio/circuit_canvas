@@ -159,6 +159,13 @@ export function BlockDiagramPanel({ isFullscreen, onToggleFullscreen }: { isFull
         <button onClick={del} disabled={!sel} style={{ ...tb, opacity: sel ? 1 : 0.5 }}>🗑 删除</button>
         <button onClick={regen} style={tb}>🔄 重新生成</button>
         <button onClick={fitView} style={tb}>⊡ 适应</button>
+        <button onClick={() => {
+          const svg = svgRef.current; if (!svg) return;
+          const clone = svg.cloneNode(true) as SVGSVGElement;
+          clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+          const blob = new Blob(['<?xml version="1.0" encoding="UTF-8"?>\n' + clone.outerHTML], { type: 'image/svg+xml' });
+          const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'block-diagram.svg'; a.click(); URL.revokeObjectURL(a.href);
+        }} style={tb}>⬇ 导出SVG</button>
         {sel?.type === 'node' && (
           <>
             <span style={{ fontSize: 11, color: '#94a3b8' }}>形状:</span>

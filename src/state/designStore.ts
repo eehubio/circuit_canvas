@@ -11,7 +11,7 @@ import { createDocument, touchDocument } from '../design-core/document/factory';
 import type { ComponentSearchResult } from '../providers/types';
 import { searchResultToPlaced, nextReference, buildBom, runDesignReview } from '../design-core/document/services';
 import { solvePlacement, DEFAULT_PLACEMENT_RULES, autoPlaceAll } from '../design-core/placement';
-import { clampComponentToBoard, hasOverlap, findOverlaps } from '../design-core/collision';
+import { clampComponentToBoard, hasOverlap, findOverlaps, isPositionFree } from '../design-core/collision';
 import { appConfig } from '../config';
 
 const HISTORY_LIMIT = 60;
@@ -22,6 +22,8 @@ interface DesignState {
   selectedId: string | null;
   multiSel: string[];
   overlaps: Set<string>;
+  activeLayer: 'TOP' | 'BOTTOM';
+  hideAllRefDes: boolean;
   // history
   past: CircuitCanvasDocument[];
   future: CircuitCanvasDocument[];
@@ -34,6 +36,11 @@ interface DesignState {
   setBoardSize: (w: number, h: number) => void;
   setBoardShape: (shape: BoardShapeKind) => void;
   toggleMountingHoles: () => void;
+  setActiveLayer: (layer: 'TOP' | 'BOTTOM') => void;
+  flipComponentLayer: (instanceId: string) => void;
+  moveRefDes: (instanceId: string, dx: number, dy: number) => void;
+  toggleRefDesHidden: (instanceId: string) => void;
+  toggleAllRefDes: () => void;
   select: (id: string | null) => void;
   toggleMulti: (id: string) => void;
   clearAll: () => void;
@@ -64,6 +71,8 @@ export const useDesignStore = create<DesignState>()(
     selectedId: null,
     multiSel: [],
     overlaps: new Set<string>(),
+    activeLayer: 'TOP' as const,
+    hideAllRefDes: false,
     past: [],
     future: [],
 
@@ -71,7 +80,10 @@ export const useDesignStore = create<DesignState>()(
       set((s) => {
         snapshot(s);
         const placed = searchResultToPlaced(r, nextReference(r.category, s.doc.components));
-        const pos = solvePlacement(placed, { board: s.doc.board, existing: s.doc.components, rules: DEFAULT_PLACEMENT_RULES });
+        placed.placement.side = s.activeLayer;
+        // 只与同层器件避让
+        const sameLayer = s.doc.components.filter((c) => c.placement.side === s.activeLayer);
+        const pos = solvePlacement(placed, { board: s.doc.board, existing: sameLayer, rules: DEFAULT_PLACEMENT_RULES });
         placed.placement.xMm = pos.x;
         placed.placement.yMm = pos.y;
         s.doc.components.push(placed);
@@ -92,9 +104,11 @@ export const useDesignStore = create<DesignState>()(
       set((s) => {
         const c = s.doc.components.find((x) => x.instanceId === id);
         if (!c) return;
-        c.placement.xMm = xMm;
-        c.placement.yMm = yMm;
-        const clamped = clampComponentToBoard(c, s.doc.board);
+        // 先夹紧到板内
+        const trial = { ...c, placement: { ...c.placement, xMm, yMm } };
+        const clamped = clampComponentToBoard(trial, s.doc.board);
+        // 与其它同层器件保持 0.5mm 间距、避开定位孔；不满足则拒绝本次移动（停在障碍前）
+        if (!isPositionFree(c, clamped.x, clamped.y, s.doc.components, s.doc.board)) return;
         c.placement.xMm = clamped.x;
         c.placement.yMm = clamped.y;
         s.overlaps = findOverlaps(s.doc.components);
@@ -132,6 +146,38 @@ export const useDesignStore = create<DesignState>()(
         s.doc = touchDocument(s.doc);
         s.overlaps = findOverlaps(s.doc.components);
       }),
+
+    setActiveLayer: (layer) => set((s) => { s.activeLayer = layer; }),
+
+    flipComponentLayer: (id) =>
+      set((s) => {
+        snapshot(s);
+        const c = s.doc.components.find((x) => x.instanceId === id);
+        if (!c) return;
+        c.placement.side = c.placement.side === 'TOP' ? 'BOTTOM' : 'TOP';
+        // 换层 = 沿 Y 轴翻面：旋转取镜像（保持管脚排列正确）
+        c.placement.rotation = (360 - c.placement.rotation) % 360;
+        s.doc = touchDocument(s.doc);
+        s.overlaps = findOverlaps(s.doc.components);
+      }),
+
+    moveRefDes: (id, dx, dy) =>
+      set((s) => {
+        const c = s.doc.components.find((x) => x.instanceId === id);
+        if (!c) return;
+        const cur = c.refDesDisplay ?? { dx: 0, dy: 0, rotation: 0, hidden: false };
+        c.refDesDisplay = { ...cur, dx, dy };
+      }),
+
+    toggleRefDesHidden: (id) =>
+      set((s) => {
+        const c = s.doc.components.find((x) => x.instanceId === id);
+        if (!c) return;
+        const cur = c.refDesDisplay ?? { dx: 0, dy: 0, rotation: 0, hidden: false };
+        c.refDesDisplay = { ...cur, hidden: !cur.hidden };
+      }),
+
+    toggleAllRefDes: () => set((s) => { s.hideAllRefDes = !s.hideAllRefDes; }),
 
     select: (id) => set((s) => { s.selectedId = id; }),
     toggleMulti: (id) =>
