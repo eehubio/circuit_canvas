@@ -221,22 +221,57 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
           <g transform={`translate(${pan.x},${pan.y}) scale(${zoom})`}>
           <rect x={-2000} y={-2000} width={W + 4000} height={H + 4000} fill="url(#schg)" />
           {items.length === 0 && <text x={W / 2} y={H / 2} textAnchor="middle" fontSize={13} fill="#94a3b8">添加器件后自动生成原理图</text>}
-          {(nets || []).map((n) => {
-            const fc = items.find((i) => i.instanceId === n.from), tc = items.find((i) => i.instanceId === n.to);
-            if (!fc || !tc) return null;
-            const f = P(n.from), t = P(n.to);
-            const fSym = symbolFor(fc), tSym = symbolFor(tc);
-            // 世界坐标端口（含旋转），各取距对端中心最近的引脚桩末端为连接点
-            const fPorts = worldPorts(n.from), tPorts = worldPorts(n.to);
-            if (!fPorts.length || !tPorts.length) return null;
-            const fCenter = { x: f.x + fSym.w / 2, y: f.y + fSym.h / 2 };
-            const tCenter = { x: t.x + tSym.w / 2, y: t.y + tSym.h / 2 };
-            const near = (ports: typeof fPorts, peer: { x: number; y: number }) =>
-              ports.reduce((b, pp) => (pp.tip.x - peer.x) ** 2 + (pp.tip.y - peer.y) ** 2 < (b.tip.x - peer.x) ** 2 + (b.tip.y - peer.y) ** 2 ? pp : b, ports[0]);
-            const fpk = near(fPorts, tCenter), tpk = near(tPorts, fCenter);
-            const x1 = fpk.tip.x, y1 = fpk.tip.y;
-            const x2 = tpk.tip.x, y2 = tpk.tip.y;
-            const midX = Math.round(((x1 + x2) / 2 + (n.midDx ?? 0)) / 10) * 10;
+          {(() => {
+            // 先计算所有连线几何，再统一渲染 + 求 T 型交汇点
+            const geoms = (nets || []).map((n) => {
+              const fc = items.find((i) => i.instanceId === n.from), tc = items.find((i) => i.instanceId === n.to);
+              if (!fc || !tc) return null;
+              const f = P(n.from), t = P(n.to);
+              const fSym = symbolFor(fc), tSym = symbolFor(tc);
+              const fPorts = worldPorts(n.from), tPorts = worldPorts(n.to);
+              if (!fPorts.length || !tPorts.length) return null;
+              const fCenter = { x: f.x + fSym.w / 2, y: f.y + fSym.h / 2 };
+              const tCenter = { x: t.x + tSym.w / 2, y: t.y + tSym.h / 2 };
+              const near = (ports: typeof fPorts, peer: { x: number; y: number }) =>
+                ports.reduce((b, pp) => (pp.tip.x - peer.x) ** 2 + (pp.tip.y - peer.y) ** 2 < (b.tip.x - peer.x) ** 2 + (b.tip.y - peer.y) ** 2 ? pp : b, ports[0]);
+              const fpk = near(fPorts, tCenter), tpk = near(tPorts, fCenter);
+              const x1 = fpk.tip.x, y1 = fpk.tip.y;
+              const x2 = tpk.tip.x, y2 = tpk.tip.y;
+              const midX = Math.round(((x1 + x2) / 2 + (n.midDx ?? 0)) / 10) * 10;
+              return { n, x1, y1, x2, y2, midX };
+            }).filter((g): g is NonNullable<typeof g> => !!g);
+
+            // T 型交汇点：某线的端点/拐点落在另一根线的线段上（含端点相接≥判定），画实心连接点
+            const EPS = 0.6;
+            const junctions: { x: number; y: number }[] = [];
+            const seen = new Set<string>();
+            const onSeg = (px: number, py: number, ax: number, ay: number, bx: number, by: number) => {
+              if (Math.abs(ay - by) < EPS) return Math.abs(py - ay) < EPS && px >= Math.min(ax, bx) - EPS && px <= Math.max(ax, bx) + EPS;
+              if (Math.abs(ax - bx) < EPS) return Math.abs(px - ax) < EPS && py >= Math.min(ay, by) - EPS && py <= Math.max(ay, by) + EPS;
+              return false;
+            };
+            for (const a of geoms) {
+              const keyPts = [
+                { x: a.x1, y: a.y1 }, { x: a.midX, y: a.y1 },
+                { x: a.midX, y: a.y2 }, { x: a.x2, y: a.y2 },
+              ];
+              for (const pt of keyPts) {
+                for (const b of geoms) {
+                  if (b.n.id === a.n.id) continue;
+                  const segs: [number, number, number, number][] = [
+                    [b.x1, b.y1, b.midX, b.y1], [b.midX, b.y1, b.midX, b.y2], [b.midX, b.y2, b.x2, b.y2],
+                  ];
+                  if (segs.some(([ax, ay, bx, by]) => onSeg(pt.x, pt.y, ax, ay, bx, by))) {
+                    const k = `${Math.round(pt.x)}_${Math.round(pt.y)}`;
+                    if (!seen.has(k)) { seen.add(k); junctions.push(pt); }
+                    break;
+                  }
+                }
+              }
+            }
+
+            return (<>
+            {geoms.map(({ n, x1, y1, x2, y2, midX }) => {
             const isSel = sel === n.id;
             return (
               <g key={n.id}>
@@ -255,7 +290,11 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
                 ) : null}
               </g>
             );
-          })}
+            })}
+            {/* 电气交汇点（T 型相连处） */}
+            {junctions.map((j, i) => <circle key={'jct' + i} cx={j.x} cy={j.y} r={3} fill="#334155" style={{ pointerEvents: 'none' }} />)}
+            </>);
+          })()}
           {items.map((c) => {
             const p = P(c.instanceId);
             const sym = symbolFor(c);
