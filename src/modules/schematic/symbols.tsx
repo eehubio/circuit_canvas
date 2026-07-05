@@ -16,6 +16,9 @@ export interface SymbolDef {
   h: number;
   /** 连接端口（相对符号左上角），供连线吸附 */
   ports: { x: number; y: number; name?: string }[];
+  /** 引脚桩长度：连线端点 = 端口沿外法线延伸 stubLen。
+   *  画了引脚桩的符号（IC/稳压器等）为 10；无源符号图形即引脚，为 0。 */
+  stubLen?: number;
   render: (refDes: string, label: string) => React.ReactNode;
 }
 
@@ -24,7 +27,7 @@ function resistor(): SymbolDef {
   const w = 60, h = 20;
   const zig = 'M0,10 L8,10 L12,3 L20,17 L28,3 L36,17 L44,3 L48,10 L60,10';
   return {
-    w, h, ports: [{ x: 0, y: 10 }, { x: 60, y: 10 }],
+    w, h, ports: [{ x: 0, y: 10 }, { x: 60, y: 10 }], stubLen: 0,
     render: (ref, label) => (
       <g>
         <path d={zig} fill="none" stroke={STROKE} strokeWidth={1.5} />
@@ -39,7 +42,7 @@ function resistor(): SymbolDef {
 function capacitor(): SymbolDef {
   const w = 60, h = 20;
   return {
-    w, h, ports: [{ x: 0, y: 10 }, { x: 60, y: 10 }],
+    w, h, ports: [{ x: 0, y: 10 }, { x: 60, y: 10 }], stubLen: 0,
     render: (ref, label) => (
       <g>
         <line x1={0} y1={10} x2={27} y2={10} stroke={STROKE} strokeWidth={1.5} />
@@ -58,7 +61,7 @@ function inductor(): SymbolDef {
   const w = 60, h = 20;
   const arc = 'M6,10 a6,6 0 0 1 12,0 a6,6 0 0 1 12,0 a6,6 0 0 1 12,0 a6,6 0 0 1 12,0';
   return {
-    w, h, ports: [{ x: 0, y: 10 }, { x: 60, y: 10 }],
+    w, h, ports: [{ x: 0, y: 10 }, { x: 60, y: 10 }], stubLen: 0,
     render: (ref, label) => (
       <g>
         <line x1={0} y1={10} x2={6} y2={10} stroke={STROKE} strokeWidth={1.5} />

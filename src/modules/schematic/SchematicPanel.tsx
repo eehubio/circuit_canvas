@@ -63,13 +63,14 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
     const th = ((p.rotation % 360) + 360) % 360;
     const cos = th === 0 ? 1 : th === 180 ? -1 : 0;
     const sin = th === 90 ? 1 : th === 270 ? -1 : 0;
+    const stub = sym.stubLen ?? 10;
     return sym.ports.map((pt) => {
-      // 引脚桩向外方向（局部）
+      // 引脚桩向外方向（局部）；无源符号 stub=0，端点即图形末端
       const nx = pt.x <= 0 ? -1 : pt.x >= sym.w ? 1 : 0;
       const ny = nx !== 0 ? 0 : pt.y >= sym.h ? 1 : -1;
       const rot = (lx: number, ly: number) => ({ x: cx + (lx - cx) * cos - (ly - cy) * sin, y: cy + (lx - cx) * sin + (ly - cy) * cos });
       const port = rot(pt.x, pt.y);
-      const tip = rot(pt.x + nx * 10, pt.y + ny * 10);
+      const tip = rot(pt.x + nx * stub, pt.y + ny * stub);
       return { tip: { x: p.x + tip.x, y: p.y + tip.y }, port: { x: p.x + port.x, y: p.y + port.y } };
     });
   }, [items, P]);
