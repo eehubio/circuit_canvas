@@ -83,6 +83,8 @@ export interface PlacedComponent {
 
   /** 位号显示状态（可移动/旋转/隐藏） */
   refDesDisplay?: { dx: number; dy: number; rotation: number; hidden: boolean };
+  /** 用户上传的自定义原理图符号（SVG 文本，封装占位器件用） */
+  customSymbolSvg?: string;
 
   /** 透传的展示属性（描述、关键参数等），不参与几何计算 */
   display?: {

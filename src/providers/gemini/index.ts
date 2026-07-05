@@ -9,6 +9,36 @@ import { MOCK_COMPONENTS } from '../mock/data';
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
+const LS_KEY = 'cc_gemini_key';
+
+/** 运行时 Gemini Key：localStorage 优先（AI顾问里可配置），其次 Vercel 环境变量 */
+export function getGeminiKey(): string | null {
+  try {
+    const ls = localStorage.getItem(LS_KEY);
+    if (ls?.trim()) return ls.trim();
+  } catch { /* SSR/隐私模式 */ }
+  const env = ((import.meta as unknown as { env: Record<string, string | undefined> }).env ?? {}).VITE_GEMINI_API_KEY;
+  return env?.trim() || null;
+}
+
+export function setGeminiKey(key: string) {
+  try { localStorage.setItem(LS_KEY, key.trim()); } catch { /* ignore */ }
+}
+
+/** 通用一次性文本补全 */
+export async function geminiComplete(prompt: string): Promise<string> {
+  const key = getGeminiKey();
+  if (!key) throw new Error('未配置 Gemini API Key');
+  const res = await fetch(`${GEMINI_URL}?key=${key}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.4 } }),
+  });
+  if (!res.ok) throw new Error(`Gemini API ${res.status}`);
+  const data = await res.json();
+  return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+}
+
 export class GeminiAiProvider implements AiModelProvider {
   constructor(private apiKey: string) {}
 

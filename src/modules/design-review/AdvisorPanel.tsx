@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react';
 import { useDesignStore } from '../../state/designStore';
 import { getProviders } from '../../providers/factory';
+import { geminiComplete, getGeminiKey, setGeminiKey } from '../../providers/gemini';
 import { recommendLayers } from '../../design-core/document/services';
 import { CATEGORY_DISPLAY, COLORS } from '../../shared/theme';
 import type { PeripheralCircuitRecommendation } from '../../providers/types';
@@ -20,10 +21,99 @@ const LEVEL: Record<ReviewLevel, { bg: string; color: string; label: string }> =
   info: { bg: '#f1f5f9', color: '#64748b', label: 'ℹ' },
 };
 
+
+/** 基于画布器件的规则引擎建议（无 Gemini 时的动态兜底，逐条对应画布实际构成） */
+function ruleSuggestions(comps: { mpn: string; category: string; family?: string }[]): { name: string; reason: string; addId?: string }[] {
+  const out: { name: string; reason: string; addId?: string }[] = [];
+  const has = (pred: (c: typeof comps[0]) => boolean) => comps.some(pred);
+  const fam = (f: string) => has((c) => (c.family ?? '').includes(f));
+  const icCount = comps.filter((c) => c.category === 'mcu' || c.category === 'ic').length;
+  const capCount = comps.filter((c) => c.mpn.toUpperCase().includes('CL10') || (c.family ?? '').includes('MLCC')).length;
+
+  if (icCount > 0 && !has((c) => c.category === 'power')) out.push({ name: '3.3V 稳压电路（LDO/DCDC）', reason: '画布上有 IC 但没有电源管理器件，系统无法供电', addId: 'lm1117' });
+  if (fam('STM32') || fam('GD32')) {
+    out.push({ name: '8MHz 晶振 + 2×20pF 负载电容', reason: 'STM32/GD32 外部主时钟（也可用内部 HSI，但精度受限）' });
+    out.push({ name: '复位电路（10KΩ 上拉 + 100nF）', reason: 'NRST 引脚复位可靠性', addId: 'res10k' });
+    out.push({ name: 'SWD 调试接口（2×5 排针）', reason: '烧录与在线调试必需', addId: 'header2x5' });
+    out.push({ name: 'BOOT0 下拉 10KΩ', reason: '确保从主 Flash 启动', addId: 'res10k' });
+  }
+  if (fam('ESP32')) {
+    out.push({ name: '3.3V ≥500mA 供电', reason: 'ESP32 Wi-Fi 发射瞬时电流大，LDO 需选大电流型号' });
+    out.push({ name: '天线净空区', reason: '模组天线下方及周边禁止铺铜走线' });
+    out.push({ name: 'EN 引脚 RC 延时（10K+1μF）', reason: '保证上电时序' });
+  }
+  if (fam('USB')) {
+    out.push({ name: 'USB ESD 保护（TVS 阵列）', reason: 'USB 接口静电防护' });
+    out.push({ name: 'CC1/CC2 5.1KΩ 下拉', reason: 'Type-C 从机模式识别必需', addId: 'res10k' });
+  }
+  if (fam('USB-UART') || has((c) => c.mpn.startsWith('CH340'))) out.push({ name: '12MHz 晶振', reason: 'CH340G 需外部晶振（CH340C 内置可省）' });
+  if (fam('Flash')) out.push({ name: 'CS 上拉 10KΩ', reason: 'SPI Flash 片选默认无效电平', addId: 'res10k' });
+  if (fam('CAN')) out.push({ name: '120Ω 终端电阻', reason: 'CAN 总线末端匹配' });
+  if (icCount > capCount) out.push({ name: `去耦电容 100nF ×${icCount - capCount}`, reason: `每个 IC 电源脚就近去耦（当前 ${icCount} 个 IC / ${capCount} 个电容）`, addId: 'cap100nf' });
+  if (icCount > 0 && !has((c) => c.category === 'connector')) out.push({ name: '供电/调试接口', reason: '板卡缺少对外接口', addId: 'usbc' });
+  return out;
+}
+
+/** Gemini 配置区 */
+function GeminiSettings({ onChanged }: { onChanged: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [key, setKey] = useState('');
+  const connected = !!getGeminiKey();
+  return (
+    <div style={{ marginBottom: 10, padding: '8px 10px', borderRadius: 8, background: connected ? '#f0fdf4' : '#f8fafc', border: `1px solid ${connected ? '#bbf7d0' : '#e2e8f0'}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} onClick={() => setOpen(!open)}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: connected ? '#16a34a' : '#64748b' }}>{connected ? '✓ Gemini 已连接（真实大模型生成）' : '⚙ 配置 Gemini（当前用内置规则引擎）'}</span>
+        <span style={{ marginLeft: 'auto', fontSize: 10, color: '#94a3b8' }}>{open ? '▲' : '▼'}</span>
+      </div>
+      {open && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontSize: 10, color: '#64748b', marginBottom: 4 }}>在 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{ color: '#0369a1' }}>Google AI Studio</a> 免费申请 API Key，粘贴后立即生效（仅存本机浏览器 localStorage，不上传）</div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder="AIza..." style={{ flex: 1, padding: '6px 8px', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 11, outline: 'none' }} />
+            <button onClick={() => { setGeminiKey(key); setKey(''); setOpen(false); onChanged(); }} style={{ padding: '6px 12px', borderRadius: 6, border: 'none', background: COLORS.green, color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>保存</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AdvisorPanel() {
   const doc = useDesignStore((s) => s.doc);
   const addComponent = useDesignStore((s) => s.addComponent);
   const [subs, setSubs] = useState<Record<string, PeripheralCircuitRecommendation[]>>({});
+  const [sysSugs, setSysSugs] = useState<{ name: string; reason: string; addId?: string }[]>([]);
+  const [sysSource, setSysSource] = useState<'gemini' | 'rules' | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [, forceUpdate] = useState(0);
+
+  const coreList = doc.components.filter((c) => c.category !== 'passive').map((c) => ({ mpn: c.mpn, category: c.category, family: c.display?.family }));
+  const coreSig = coreList.map((c) => c.mpn).sort().join(',');
+
+  const analyze = async () => {
+    if (!doc.components.length) { setSysSugs([]); setSysSource(null); return; }
+    setAnalyzing(true);
+    const all = doc.components.map((c) => ({ mpn: c.mpn, category: c.category, family: c.display?.family }));
+    if (getGeminiKey()) {
+      try {
+        const prompt = `你是资深硬件工程师。当前 PCB 画布上已有器件：\n${all.map((c) => `- ${c.mpn}（${c.category}${c.family ? '/' + c.family : ''}）`).join('\n')}\n\n请分析构成完整可工作系统还缺哪些功能器件/子电路（晶振、复位、去耦、ESD、接口、供电等），按重要性给出至多8条。严格输出 JSON 数组，勿输出其它文字：\n[{"name":"器件/子电路名","reason":"必要性(30字内)"}]`;
+        const text = await geminiComplete(prompt);
+        const parsed = JSON.parse(text.replace(/\`\`\`json|\`\`\`/g, '').trim());
+        setSysSugs(parsed.slice(0, 8));
+        setSysSource('gemini');
+      } catch (e) {
+        console.warn('[Advisor] Gemini 失败，回退规则引擎', e);
+        setSysSugs(ruleSuggestions(all));
+        setSysSource('rules');
+      }
+    } else {
+      setSysSugs(ruleSuggestions(all));
+      setSysSource('rules');
+    }
+    setAnalyzing(false);
+  };
+
+  useEffect(() => { analyze(); }, [coreSig]);
 
   const cats = Array.from(new Set(doc.components.map((c) => c.category)));
 
@@ -45,6 +135,26 @@ export function AdvisorPanel() {
 
   return (
     <div>
+      <GeminiSettings onChanged={() => { forceUpdate((x) => x + 1); analyze(); }} />
+
+      {/* 系统补全建议（基于画布实际器件） */}
+      <Section title="🧠 系统补全建议" badge={sysSugs.length || undefined}>
+        {doc.components.length === 0 ? <Empty text="添加器件后，AI 分析系统还缺什么" /> : analyzing ? <Empty text="分析中..." /> : (
+          <>
+            <div style={{ fontSize: 9.5, color: '#94a3b8', marginBottom: 6 }}>{sysSource === 'gemini' ? '由 Gemini 基于画布器件实时生成' : '规则引擎基于画布器件动态生成（配置 Gemini 后由大模型生成）'}</div>
+            {sysSugs.length === 0 ? <Empty text="当前构成已较完整 ✓" /> : sysSugs.map((g, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '7px 9px', marginBottom: 5, borderRadius: 7, background: '#fff', border: '1px solid #f1f5f9' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 700, color: '#334155' }}>{g.name}</div>
+                  <div style={{ fontSize: 10, color: '#64748b' }}>{g.reason}</div>
+                </div>
+                {g.addId && <button onClick={() => quickAdd(g.addId!)} style={{ flexShrink: 0, padding: '3px 9px', borderRadius: 5, border: 'none', background: COLORS.green, color: '#fff', fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}>+ 添加</button>}
+              </div>
+            ))}
+          </>
+        )}
+      </Section>
+
       {/* 子电路推荐 */}
       <Section title="🧩 子电路推荐" badge={cats.length || undefined}>
         {doc.components.length === 0 ? <Empty text="添加器件后推荐配套子电路" /> :

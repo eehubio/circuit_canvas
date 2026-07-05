@@ -16,6 +16,8 @@ export function BlockDiagramPanel({ isFullscreen, onToggleFullscreen }: { isFull
   const setConns = useDesignStore((s) => s.setConnections);
   const regen = useDesignStore((s) => s.generateBlocksFromComponents);
   const hasComps = useDesignStore((s) => s.doc.components.length > 0);
+  // 核心器件（非无源）签名：增删器件时自动同步框图（保留用户布局与自定义块）
+  const coreSig = useDesignStore((s) => s.doc.components.filter((c) => c.category !== 'passive').map((c) => c.instanceId).sort().join(','));
 
   const [sel, setSel] = useState<{ type: 'node' | 'arrow'; id: string } | null>(null);
   const [connecting, setConnecting] = useState<string | null>(null);
@@ -31,7 +33,7 @@ export function BlockDiagramPanel({ isFullscreen, onToggleFullscreen }: { isFull
   const labelDragRef = useRef({ active: false, id: '', sx: 0, sy: 0, dx: 0, dy: 0 });
 
   // first generate
-  useEffect(() => { if (blocks.length === 0 && hasComps) regen(); }, [hasComps]);
+  useEffect(() => { if (hasComps || blocks.length > 0) regen(); }, [coreSig]);
 
   // wheel zoom
   useEffect(() => {

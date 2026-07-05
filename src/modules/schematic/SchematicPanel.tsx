@@ -52,6 +52,28 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
   const refOf = (c: PlacedComponent) => pos[c.instanceId]?.refDes ?? c.reference;
   const valOf = (c: PlacedComponent) => pos[c.instanceId]?.value ?? c.mpn;
 
+
+  /** 符号端口的世界坐标（含旋转）；返回 [引脚桩末端点, 端口点] */
+  const worldPorts = useCallback((iid: string) => {
+    const c = items.find((i) => i.instanceId === iid);
+    if (!c) return [];
+    const sym = symbolFor(c);
+    const p = P(iid);
+    const cx = sym.w / 2, cy = sym.h / 2;
+    const th = ((p.rotation % 360) + 360) % 360;
+    const cos = th === 0 ? 1 : th === 180 ? -1 : 0;
+    const sin = th === 90 ? 1 : th === 270 ? -1 : 0;
+    return sym.ports.map((pt) => {
+      // 引脚桩向外方向（局部）
+      const nx = pt.x <= 0 ? -1 : pt.x >= sym.w ? 1 : 0;
+      const ny = nx !== 0 ? 0 : pt.y >= sym.h ? 1 : -1;
+      const rot = (lx: number, ly: number) => ({ x: cx + (lx - cx) * cos - (ly - cy) * sin, y: cy + (lx - cx) * sin + (ly - cy) * cos });
+      const port = rot(pt.x, pt.y);
+      const tip = rot(pt.x + nx * 10, pt.y + ny * 10);
+      return { tip: { x: p.x + tip.x, y: p.y + tip.y }, port: { x: p.x + port.x, y: p.y + port.y } };
+    });
+  }, [items, P]);
+
   const genNets = useCallback((): SchNet[] => {
     const out: SchNet[] = [];
     const by = (cat: string) => items.filter((i) => i.category === cat);
@@ -203,18 +225,17 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
             if (!fc || !tc) return null;
             const f = P(n.from), t = P(n.to);
             const fSym = symbolFor(fc), tSym = symbolFor(tc);
-            // 源取右侧端口、目标取左侧端口，各选与对端 y 最近的一个；连接点 = 引脚桩末端(±10)
-            const pick = (sym: ReturnType<typeof symbolFor>, side: 'right' | 'left', peerY: number, baseY: number) => {
-              const cands = sym.ports.filter((pp) => side === 'right' ? pp.x >= sym.w : pp.x <= 0);
-              const list = cands.length ? cands : sym.ports;
-              return list.reduce((best, pp) => Math.abs(baseY + pp.y - peerY) < Math.abs(baseY + best.y - peerY) ? pp : best, list[0]);
-            };
-            const tCenterY = t.y + tSym.h / 2, fCenterY = f.y + fSym.h / 2;
-            const fp = pick(fSym, 'right', tCenterY, f.y);
-            const tp = pick(tSym, 'left', fCenterY, t.y);
-            const x1 = f.x + fp.x + 10, y1 = f.y + fp.y;
-            const x2 = t.x + tp.x - 10, y2 = t.y + tp.y;
-            const midX = (x1 + x2) / 2 + (n.midDx ?? 0);
+            // 世界坐标端口（含旋转），各取距对端中心最近的引脚桩末端为连接点
+            const fPorts = worldPorts(n.from), tPorts = worldPorts(n.to);
+            if (!fPorts.length || !tPorts.length) return null;
+            const fCenter = { x: f.x + fSym.w / 2, y: f.y + fSym.h / 2 };
+            const tCenter = { x: t.x + tSym.w / 2, y: t.y + tSym.h / 2 };
+            const near = (ports: typeof fPorts, peer: { x: number; y: number }) =>
+              ports.reduce((b, pp) => (pp.tip.x - peer.x) ** 2 + (pp.tip.y - peer.y) ** 2 < (b.tip.x - peer.x) ** 2 + (b.tip.y - peer.y) ** 2 ? pp : b, ports[0]);
+            const fpk = near(fPorts, tCenter), tpk = near(tPorts, fCenter);
+            const x1 = fpk.tip.x, y1 = fpk.tip.y;
+            const x2 = tpk.tip.x, y2 = tpk.tip.y;
+            const midX = Math.round(((x1 + x2) / 2 + (n.midDx ?? 0)) / 5) * 5;
             const isSel = sel === n.id;
             return (
               <g key={n.id}>
@@ -267,10 +288,12 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
                 {items.filter((c) => c.category !== 'passive').map((c) => {
                   const sym = symbolFor(c);
                   const p = P(c.instanceId);
+                  const rot90 = ((p.rotation % 180) + 180) % 180 === 90;
                   const gx = p.x + sym.w / 2;
+                  const bottomY = p.y + sym.h / 2 + (rot90 ? sym.w / 2 : sym.h / 2);
                   return (
                     <g key={'gnd-' + c.instanceId}>
-                      <line x1={gx} y1={p.y + sym.h} x2={gx} y2={railY} stroke="#64748b" strokeWidth={1.2} strokeDasharray="3 2" />
+                      <line x1={gx} y1={bottomY} x2={gx} y2={railY} stroke="#64748b" strokeWidth={1.2} strokeDasharray="3 2" />
                       <circle cx={gx} cy={railY} r={2.5} fill="#334155" />
                     </g>
                   );

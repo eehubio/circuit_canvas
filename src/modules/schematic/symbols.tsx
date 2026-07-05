@@ -37,15 +37,15 @@ function resistor(): SymbolDef {
 
 /** 电容：两平行板 */
 function capacitor(): SymbolDef {
-  const w = 45, h = 20;
+  const w = 50, h = 20;
   return {
-    w, h, ports: [{ x: 0, y: 10 }, { x: 45, y: 10 }],
+    w, h, ports: [{ x: 0, y: 10 }, { x: 50, y: 10 }],
     render: (ref, label) => (
       <g>
-        <line x1={0} y1={10} x2={19} y2={10} stroke={STROKE} strokeWidth={1.5} />
-        <line x1={19} y1={0} x2={19} y2={20} stroke={STROKE} strokeWidth={2.2} />
-        <line x1={25} y1={0} x2={25} y2={20} stroke={STROKE} strokeWidth={2.2} />
-        <line x1={25} y1={10} x2={45} y2={10} stroke={STROKE} strokeWidth={1.5} />
+        <line x1={0} y1={10} x2={22} y2={10} stroke={STROKE} strokeWidth={1.5} />
+        <line x1={22} y1={0} x2={22} y2={20} stroke={STROKE} strokeWidth={2.2} />
+        <line x1={28} y1={0} x2={28} y2={20} stroke={STROKE} strokeWidth={2.2} />
+        <line x1={28} y1={10} x2={50} y2={10} stroke={STROKE} strokeWidth={1.5} />
         <text x={w / 2} y={-4} textAnchor="middle" fontSize={9} fontWeight={700} fill="#0e7490" fontFamily="monospace">{ref}</text>
         <text x={w / 2} y={h + 10} textAnchor="middle" fontSize={8} fill="#334155" fontFamily="monospace">{label}</text>
       </g>
@@ -55,7 +55,7 @@ function capacitor(): SymbolDef {
 
 /** 电感：四个半圆弧 */
 function inductor(): SymbolDef {
-  const w = 60, h = 16;
+  const w = 60, h = 20;
   const arc = 'M6,10 a6,6 0 0 1 12,0 a6,6 0 0 1 12,0 a6,6 0 0 1 12,0 a6,6 0 0 1 12,0';
   return {
     w, h, ports: [{ x: 0, y: 10 }, { x: 60, y: 10 }],
@@ -73,9 +73,9 @@ function inductor(): SymbolDef {
 
 /** LDO 稳压器：三端方框 IN / OUT / GND */
 function regulator(): SymbolDef {
-  const w = 90, h = 55;
+  const w = 90, h = 50;
   return {
-    w, h, ports: [{ x: 0, y: 15, name: 'IN' }, { x: 90, y: 15, name: 'OUT' }, { x: 45, y: 55, name: 'GND' }],
+    w, h, ports: [{ x: 0, y: 15, name: 'IN' }, { x: 90, y: 15, name: 'OUT' }, { x: 45, y: 50, name: 'GND' }],
     render: (ref, label) => (
       <g>
         <rect width={w} height={h} rx={2} fill={FILL} stroke={STROKE} strokeWidth={1.8} />
@@ -122,8 +122,8 @@ function ic(pinsPerSide: number, pinNames?: { left: string[]; right: string[] })
 
 /** 连接器：方框 + 右侧引脚 */
 function connector(pins: number): SymbolDef {
-  const pitch = 15, pad = 10;
-  const h = Math.max(50, pad * 2 + (pins - 1) * pitch);
+  const pitch = 20, pad = 10;
+  const h = Math.max(60, pad * 2 + (pins - 1) * pitch);
   const w = 70;
   const ports = Array.from({ length: pins }).map((_, i) => ({ x: w, y: pad + i * pitch }));
   return {
@@ -144,8 +144,27 @@ function connector(pins: number): SymbolDef {
   };
 }
 
+/** 用户上传的自定义 SVG 符号：固定 90×50 框，左右各一端口（5 栅格） */
+function customSvgSymbol(svg: string): SymbolDef {
+  const w = 90, h = 50;
+  const uri = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
+  return {
+    w, h, ports: [{ x: 0, y: 25 }, { x: 90, y: 25 }],
+    render: (ref, label) => (
+      <g>
+        <line x1={-10} y1={25} x2={0} y2={25} stroke={PIN} strokeWidth={1.4} />
+        <line x1={w} y1={25} x2={w + 10} y2={25} stroke={PIN} strokeWidth={1.4} />
+        <image href={uri} x={0} y={0} width={w} height={h} preserveAspectRatio="xMidYMid meet" />
+        <text x={w / 2} y={-4} textAnchor="middle" fontSize={9} fontWeight={700} fill="#0e7490" fontFamily="monospace">{ref}</text>
+        <text x={w / 2} y={h + 12} textAnchor="middle" fontSize={8} fill="#334155" fontFamily="monospace">{label.length > 14 ? label.slice(0, 12) + '..' : label}</text>
+      </g>
+    ),
+  };
+}
+
 /** 根据器件选符号 */
 export function symbolFor(c: PlacedComponent): SymbolDef {
+  if (c.customSymbolSvg) return customSvgSymbol(c.customSymbolSvg);
   const fam = c.display?.family ?? '';
   if (c.category === 'passive') {
     if (fam === 'MLCC' || fam.includes('Cap')) return capacitor();

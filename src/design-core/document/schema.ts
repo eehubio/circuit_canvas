@@ -48,6 +48,7 @@ const placedComponentSchema = z.object({
   unitPrice: moneySchema.optional(),
   source: z.enum(['EZPLM', 'LOCAL', 'CUSTOM', 'MOCK']),
   refDesDisplay: z.object({ dx: z.number(), dy: z.number(), rotation: z.number(), hidden: z.boolean() }).optional(),
+  customSymbolSvg: z.string().optional(),
   display: z
     .object({
       description: z.string().optional(),

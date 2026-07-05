@@ -41,6 +41,8 @@ interface DesignState {
   moveRefDes: (instanceId: string, dx: number, dy: number) => void;
   toggleRefDesHidden: (instanceId: string) => void;
   toggleAllRefDes: () => void;
+  setComponentMpn: (instanceId: string, mpn: string) => void;
+  setCustomSymbol: (instanceId: string, svg: string) => void;
   select: (id: string | null) => void;
   toggleMulti: (id: string) => void;
   clearAll: () => void;
@@ -179,6 +181,23 @@ export const useDesignStore = create<DesignState>()(
 
     toggleAllRefDes: () => set((s) => { s.hideAllRefDes = !s.hideAllRefDes; }),
 
+    setComponentMpn: (id, mpn) =>
+      set((s) => {
+        const c = s.doc.components.find((x) => x.instanceId === id);
+        if (!c || !mpn.trim()) return;
+        snapshot(s);
+        c.mpn = mpn.trim();
+        s.doc = touchDocument(refreshDerived(s.doc));
+      }),
+
+    setCustomSymbol: (id, svg) =>
+      set((s) => {
+        const c = s.doc.components.find((x) => x.instanceId === id);
+        if (!c) return;
+        c.customSymbolSvg = svg;
+        s.doc = touchDocument(s.doc);
+      }),
+
     select: (id) => set((s) => { s.selectedId = id; }),
     toggleMulti: (id) =>
       set((s) => {
@@ -245,42 +264,48 @@ export const useDesignStore = create<DesignState>()(
 
     generateBlocksFromComponents: () =>
       set((s) => {
-        // 按类别聚合生成功能块（一个类别一个块）
-        // 框图只保留功能性核心器件，过滤掉无源辅助器件（阻容感）
+        // 按类别聚合生成功能块（一个类别一个块）；过滤无源辅助器件
         const byCat = new Map<string, typeof s.doc.components>();
         for (const c of s.doc.components) {
-          if (c.category === 'passive') continue; // 跳过阻容感
+          if (c.category === 'passive') continue;
           const arr = byCat.get(c.category) ?? [];
           arr.push(c);
           byCat.set(c.category, arr);
         }
         const labels: Record<string, string> = { mcu: '主控', power: '电源', passive: '无源', connector: '接口', ic: '外设IC' };
         const colors: Record<string, string> = { mcu: '#1a6b3c', power: '#b45309', passive: '#4b5563', connector: '#6d28d9', ic: '#0e7490' };
+        const prev = s.doc.functionalBlocks;
+        // 用户手动添加的块（非 blk_<类别> 命名）原样保留
+        const customBlocks = prev.filter((b) => !/^blk_(mcu|power|connector|ic|passive)$/.test(b.id));
         let i = 0;
-        const blocks = Array.from(byCat.entries()).map(([cat, comps]) => {
+        const autoBlocks = Array.from(byCat.entries()).map(([cat, comps]) => {
+          const old = prev.find((b) => b.id === `blk_${cat}`);
           const b = {
             id: `blk_${cat}`,
-            label: labels[cat] ?? cat,
+            label: old?.label ?? (labels[cat] ?? cat),
             sublabel: comps.map((c) => c.reference).join(' '),
-            shape: 'rounded',
-            x: 60 + (i % 3) * 200,
-            y: 40 + Math.floor(i / 3) * 130,
-            w: 150,
-            h: 70,
-            color: colors[cat] ?? '#4b5563',
+            shape: old?.shape ?? ('rounded' as const),
+            // 已有同类块：保留用户调整过的位置/尺寸/颜色
+            x: old?.x ?? 60 + (i % 3) * 200,
+            y: old?.y ?? 40 + Math.floor(i / 3) * 130,
+            w: old?.w ?? 150,
+            h: old?.h ?? 70,
+            color: old?.color ?? (colors[cat] ?? '#4b5563'),
             componentIds: comps.map((c) => c.instanceId),
           };
           i++;
           return b;
         });
-        // 自动连线：电源→主控/外设、接口→主控、主控→外设
-        const find = (cat: string) => blocks.find((b) => b.id === `blk_${cat}`);
-        const conns: typeof s.doc.connections = [];
-        const mk = (from: string, to: string, label: string) => conns.push({ id: `c_${from}_${to}`, fromId: from, toId: to, label, style: 'single' as const });
-        if (find('power') && find('mcu')) mk('blk_power', 'blk_mcu', 'VCC');
-        if (find('power') && find('ic')) mk('blk_power', 'blk_ic', 'VCC');
-        if (find('connector') && find('mcu')) mk('blk_connector', 'blk_mcu', 'IO');
-        if (find('mcu') && find('ic')) mk('blk_mcu', 'blk_ic', 'BUS');
+        const blocks = [...autoBlocks, ...customBlocks];
+        const ids = new Set(blocks.map((b) => b.id));
+        // 自动连线：仅补充缺失的骨干连线；保留用户已有连线；清理指向已删除块的连线
+        const conns = s.doc.connections.filter((c) => ids.has(c.fromId) && ids.has(c.toId));
+        const has = (from: string, to: string) => conns.some((c) => (c.fromId === from && c.toId === to) || (c.fromId === to && c.toId === from));
+        const mk = (from: string, to: string, label: string) => { if (ids.has(from) && ids.has(to) && !has(from, to)) conns.push({ id: `c_${from}_${to}`, fromId: from, toId: to, label, style: 'single' as const }); };
+        mk('blk_power', 'blk_mcu', 'VCC');
+        mk('blk_power', 'blk_ic', 'VCC');
+        mk('blk_connector', 'blk_mcu', 'IO');
+        mk('blk_mcu', 'blk_ic', 'BUS');
         s.doc.functionalBlocks = blocks;
         s.doc.connections = conns;
       }),

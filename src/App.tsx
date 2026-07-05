@@ -175,12 +175,19 @@ export default function App() {
                 <button key={v} onClick={() => setView(v)} style={{ padding: '7px 14px', border: 'none', background: view === v ? COLORS.green : '#fff', color: view === v ? '#fff' : '#475569', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{v === '2d' ? '2D 布局' : '3D 视图'}</button>
               ))}
             </div>
-            <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #E8F3EE' }} title="当前放置层（选中器件按 L 换层）">
-              {(['TOP', 'BOTTOM'] as const).map((l) => (
-                <button key={l} onClick={() => setActiveLayer(l)} style={{ padding: '7px 12px', border: 'none', background: activeLayer === l ? (l === 'TOP' ? '#c08a2d' : '#3b82c4') : '#fff', color: activeLayer === l ? '#fff' : '#475569', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{l === 'TOP' ? 'Top层' : 'Bottom层'}</button>
-              ))}
+            {view === '2d' && (
+              <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #E8F3EE' }} title="当前放置层（选中器件按 L 换层）">
+                {(['TOP', 'BOTTOM'] as const).map((l) => (
+                  <button key={l} onClick={() => setActiveLayer(l)} style={{ padding: '7px 12px', border: 'none', background: activeLayer === l ? (l === 'TOP' ? '#c08a2d' : '#3b82c4') : '#fff', color: activeLayer === l ? '#fff' : '#475569', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{l === 'TOP' ? 'Top层' : 'Bottom层'}</button>
+                ))}
+              </div>
+            )}
+            <div onClick={toggleAllRefDes} title="显示/隐藏全部位号" style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', userSelect: 'none' }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>位号</span>
+              <div style={{ width: 34, height: 18, borderRadius: 9, background: hideAllRefDes ? '#cbd5e1' : COLORS.green, position: 'relative', transition: 'background .15s' }}>
+                <div style={{ position: 'absolute', top: 2, left: hideAllRefDes ? 2 : 18, width: 14, height: 14, borderRadius: 7, background: '#fff', transition: 'left .15s', boxShadow: '0 1px 3px rgba(0,0,0,.25)' }} />
+              </div>
             </div>
-            <button onClick={toggleAllRefDes} title="显示/隐藏全部位号" style={{ ...tbtn, background: hideAllRefDes ? '#f1f5f9' : '#fff', color: hideAllRefDes ? '#94a3b8' : '#475569' }}>{hideAllRefDes ? '位号已隐藏' : '位号'}</button>
             <div style={{ flex: 1 }} />
             <span style={{ fontSize: 11, color: '#94a3b8' }}>{view === '3d' ? '拖拽旋转 · 滚轮缩放' : 'R 旋转 · L 换层 · Delete 删除 · 拖位号可移动'}</span>
           </div>
@@ -385,6 +392,9 @@ function CompDetail({ iid }: { iid: string }) {
 
       {c.display?.description && <div style={{ fontSize: 12, color: '#475569', marginTop: 10 }}>{c.display.description}</div>}
 
+      {/* 封装占位器件：补型号 + 上传自定义原理图符号 */}
+      {c.display?.family === 'Footprint' && <FootprintPartEditor c={c} />}
+
       <LibraryPreview c={c} />
 
       {/* 采购渠道 */}
@@ -420,6 +430,37 @@ function CompDetail({ iid }: { iid: string }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** 封装占位器件编辑：补充型号 / 上传 SVG 原理图符号 */
+function FootprintPartEditor({ c }: { c: PlacedComponentT }) {
+  const setMpn = useDesignStore((s) => s.setComponentMpn);
+  const setSvg = useDesignStore((s) => s.setCustomSymbol);
+  const [mpnText, setMpnText] = useState(c.mpn.startsWith('fp_') || c.display?.family === 'Footprint' ? '' : c.mpn);
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const text = await f.text();
+    if (!text.trim().startsWith('<svg') && !text.includes('<svg')) { alert('请上传 SVG 格式文件'); return; }
+    setSvg(c.instanceId, text);
+    e.target.value = '';
+  };
+  return (
+    <div style={{ marginTop: 10, padding: 10, borderRadius: 8, background: '#fdf4ff', border: '1px solid #f0abfc' }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: '#a21caf', marginBottom: 6 }}>📦 封装占位器件 · 补充信息</div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+        <input value={mpnText} onChange={(e) => setMpnText(e.target.value)} placeholder="输入器件型号，如 GD32F103C8T6"
+          style={{ flex: 1, padding: '6px 8px', borderRadius: 6, border: '1px solid #e9d5ff', fontSize: 11, outline: 'none' }}
+          onKeyDown={(e) => { if (e.key === 'Enter' && mpnText.trim()) setMpn(c.instanceId, mpnText); }} />
+        <button onClick={() => mpnText.trim() && setMpn(c.instanceId, mpnText)} style={{ padding: '6px 12px', borderRadius: 6, border: 'none', background: '#a21caf', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>设为型号</button>
+      </div>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, color: '#86198f', cursor: 'pointer' }}>
+        <span style={{ padding: '5px 10px', borderRadius: 6, border: '1px dashed #d8b4fe', background: '#fff', fontWeight: 700 }}>⬆ 上传原理图符号 (SVG)</span>
+        {c.customSymbolSvg && <span style={{ color: '#16a34a', fontWeight: 700 }}>✓ 已上传</span>}
+        <input type="file" accept=".svg,image/svg+xml" onChange={onFile} style={{ display: 'none' }} />
+      </label>
     </div>
   );
 }

@@ -21,10 +21,22 @@ import {
   EzplmIdentityProvider, EzplmProjectProvider,
 } from './ezplm';
 
-const GEMINI_KEY = ((import.meta as unknown as { env: Record<string, string | undefined> }).env ?? {}).VITE_GEMINI_API_KEY;
+import { getGeminiKey } from './gemini';
+import type { AiModelProvider, AiSchemeRequest, AccessContext } from './types';
 
-function makeAi() {
-  return GEMINI_KEY ? new GeminiAiProvider(GEMINI_KEY) : new MockAiModelProvider();
+/** 动态 AI Provider：每次调用时检查 Gemini Key（localStorage/env），有则走 Gemini，无则回退 Mock */
+function makeAi(): AiModelProvider {
+  const mock = new MockAiModelProvider();
+  return {
+    async generateScheme(req: AiSchemeRequest, ctx: AccessContext) {
+      const key = getGeminiKey();
+      if (key) {
+        try { return await new GeminiAiProvider(key).generateScheme(req, ctx); }
+        catch (e) { console.warn('[AI] Gemini 调用失败，回退 Mock:', e); }
+      }
+      return (mock.generateScheme as (r: AiSchemeRequest, c?: AccessContext) => ReturnType<AiModelProvider["generateScheme"]>)(req, ctx);
+    },
+  };
 }
 
 let registry: ProviderRegistry | null = null;
