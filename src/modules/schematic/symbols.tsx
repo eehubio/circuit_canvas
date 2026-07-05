@@ -37,15 +37,15 @@ function resistor(): SymbolDef {
 
 /** 电容：两平行板 */
 function capacitor(): SymbolDef {
-  const w = 50, h = 20;
+  const w = 60, h = 20;
   return {
-    w, h, ports: [{ x: 0, y: 10 }, { x: 50, y: 10 }],
+    w, h, ports: [{ x: 0, y: 10 }, { x: 60, y: 10 }],
     render: (ref, label) => (
       <g>
-        <line x1={0} y1={10} x2={22} y2={10} stroke={STROKE} strokeWidth={1.5} />
-        <line x1={22} y1={0} x2={22} y2={20} stroke={STROKE} strokeWidth={2.2} />
-        <line x1={28} y1={0} x2={28} y2={20} stroke={STROKE} strokeWidth={2.2} />
-        <line x1={28} y1={10} x2={50} y2={10} stroke={STROKE} strokeWidth={1.5} />
+        <line x1={0} y1={10} x2={27} y2={10} stroke={STROKE} strokeWidth={1.5} />
+        <line x1={27} y1={0} x2={27} y2={20} stroke={STROKE} strokeWidth={2.2} />
+        <line x1={33} y1={0} x2={33} y2={20} stroke={STROKE} strokeWidth={2.2} />
+        <line x1={33} y1={10} x2={60} y2={10} stroke={STROKE} strokeWidth={1.5} />
         <text x={w / 2} y={-4} textAnchor="middle" fontSize={9} fontWeight={700} fill="#0e7490" fontFamily="monospace">{ref}</text>
         <text x={w / 2} y={h + 10} textAnchor="middle" fontSize={8} fill="#334155" fontFamily="monospace">{label}</text>
       </g>
@@ -73,19 +73,19 @@ function inductor(): SymbolDef {
 
 /** LDO 稳压器：三端方框 IN / OUT / GND */
 function regulator(): SymbolDef {
-  const w = 90, h = 50;
+  const w = 100, h = 60;
   return {
-    w, h, ports: [{ x: 0, y: 15, name: 'IN' }, { x: 90, y: 15, name: 'OUT' }, { x: 45, y: 50, name: 'GND' }],
+    w, h, ports: [{ x: 0, y: 20, name: 'IN' }, { x: 100, y: 20, name: 'OUT' }, { x: 50, y: 60, name: 'GND' }],
     render: (ref, label) => (
       <g>
         <rect width={w} height={h} rx={2} fill={FILL} stroke={STROKE} strokeWidth={1.8} />
         {/* pins */}
-        <line x1={-10} y1={15} x2={0} y2={15} stroke={PIN} strokeWidth={1.4} />
-        <line x1={w} y1={15} x2={w + 10} y2={15} stroke={PIN} strokeWidth={1.4} />
-        <line x1={45} y1={h} x2={45} y2={h + 10} stroke={PIN} strokeWidth={1.4} />
-        <text x={6} y={19} fontSize={7} fill={PIN} fontFamily="monospace">IN</text>
-        <text x={w - 6} y={19} textAnchor="end" fontSize={7} fill={PIN} fontFamily="monospace">OUT</text>
-        <text x={48} y={h - 4} fontSize={7} fill={PIN} fontFamily="monospace">GND</text>
+        <line x1={-10} y1={20} x2={0} y2={20} stroke={PIN} strokeWidth={1.4} />
+        <line x1={w} y1={20} x2={w + 10} y2={20} stroke={PIN} strokeWidth={1.4} />
+        <line x1={50} y1={h} x2={50} y2={h + 10} stroke={PIN} strokeWidth={1.4} />
+        <text x={6} y={24} fontSize={7} fill={PIN} fontFamily="monospace">IN</text>
+        <text x={w - 6} y={24} textAnchor="end" fontSize={7} fill={PIN} fontFamily="monospace">OUT</text>
+        <text x={53} y={h - 4} fontSize={7} fill={PIN} fontFamily="monospace">GND</text>
         <text x={w / 2} y={-4} textAnchor="middle" fontSize={9} fontWeight={700} fill="#0e7490" fontFamily="monospace">{ref}</text>
         <text x={w / 2} y={h / 2 + 3} textAnchor="middle" fontSize={9} fontWeight={600} fill="#334155" fontFamily="monospace">{label.length > 12 ? label.slice(0, 11) + '..' : label}</text>
       </g>
@@ -95,8 +95,8 @@ function regulator(): SymbolDef {
 
 /** IC / MCU：方框 + 左右引脚桩 + 引脚名 */
 function ic(pinsPerSide: number, pinNames?: { left: string[]; right: string[] }): SymbolDef {
-  const pitch = 20, pad = 15;
-  const h = Math.max(70, pad * 2 + (pinsPerSide - 1) * pitch);
+  const pitch = 20, pad = 10;
+  const h = Math.max(60, pad * 2 + (pinsPerSide - 1) * pitch);
   const w = 120;
   const ports: { x: number; y: number }[] = [];
   for (let i = 0; i < pinsPerSide; i++) { ports.push({ x: 0, y: pad + i * pitch }); ports.push({ x: w, y: pad + i * pitch }); }
@@ -124,7 +124,7 @@ function ic(pinsPerSide: number, pinNames?: { left: string[]; right: string[] })
 function connector(pins: number): SymbolDef {
   const pitch = 20, pad = 10;
   const h = Math.max(60, pad * 2 + (pins - 1) * pitch);
-  const w = 70;
+  const w = 80;
   const ports = Array.from({ length: pins }).map((_, i) => ({ x: w, y: pad + i * pitch }));
   return {
     w, h, ports,
@@ -146,14 +146,14 @@ function connector(pins: number): SymbolDef {
 
 /** 用户上传的自定义 SVG 符号：固定 90×50 框，左右各一端口（5 栅格） */
 function customSvgSymbol(svg: string): SymbolDef {
-  const w = 90, h = 50;
+  const w = 100, h = 60;
   const uri = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
   return {
-    w, h, ports: [{ x: 0, y: 25 }, { x: 90, y: 25 }],
+    w, h, ports: [{ x: 0, y: 30 }, { x: 100, y: 30 }],
     render: (ref, label) => (
       <g>
-        <line x1={-10} y1={25} x2={0} y2={25} stroke={PIN} strokeWidth={1.4} />
-        <line x1={w} y1={25} x2={w + 10} y2={25} stroke={PIN} strokeWidth={1.4} />
+        <line x1={-10} y1={30} x2={0} y2={30} stroke={PIN} strokeWidth={1.4} />
+        <line x1={w} y1={30} x2={w + 10} y2={30} stroke={PIN} strokeWidth={1.4} />
         <image href={uri} x={0} y={0} width={w} height={h} preserveAspectRatio="xMidYMid meet" />
         <text x={w / 2} y={-4} textAnchor="middle" fontSize={9} fontWeight={700} fill="#0e7490" fontFamily="monospace">{ref}</text>
         <text x={w / 2} y={h + 12} textAnchor="middle" fontSize={8} fill="#334155" fontFamily="monospace">{label.length > 14 ? label.slice(0, 12) + '..' : label}</text>

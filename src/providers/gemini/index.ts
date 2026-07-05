@@ -9,20 +9,10 @@ import { MOCK_COMPONENTS } from '../mock/data';
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
-const LS_KEY = 'cc_gemini_key';
-
-/** 运行时 Gemini Key：localStorage 优先（AI顾问里可配置），其次 Vercel 环境变量 */
+/** Gemini Key：仅从 Vercel 环境变量 VITE_GEMINI_API_KEY 读取（Settings → Environment Variables 配置后 Redeploy） */
 export function getGeminiKey(): string | null {
-  try {
-    const ls = localStorage.getItem(LS_KEY);
-    if (ls?.trim()) return ls.trim();
-  } catch { /* SSR/隐私模式 */ }
   const env = ((import.meta as unknown as { env: Record<string, string | undefined> }).env ?? {}).VITE_GEMINI_API_KEY;
   return env?.trim() || null;
-}
-
-export function setGeminiKey(key: string) {
-  try { localStorage.setItem(LS_KEY, key.trim()); } catch { /* ignore */ }
 }
 
 /** 通用一次性文本补全 */

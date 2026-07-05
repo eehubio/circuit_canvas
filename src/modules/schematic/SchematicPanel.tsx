@@ -38,7 +38,7 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
     const out: Record<string, { x: number; y: number }> = {};
     const cats: Record<string, PlacedComponent[]> = {};
     items.forEach((i) => { (cats[i.category] = cats[i.category] || []).push(i); });
-    const colX: Record<string, number> = { connector: 40, power: 230, mcu: 430, ic: 680, passive: 430 };
+    const colX: Record<string, number> = { connector: 40, power: 240, mcu: 440, ic: 680, passive: 440 };
     Object.entries(cats).forEach(([cat, list]) => list.forEach((c, i) => { out[c.instanceId] = { x: colX[cat] ?? 430, y: cat === 'passive' ? 260 + i * 60 : 40 + i * 110 }; }));
     return out;
   }, [items]);
@@ -111,13 +111,13 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
     const onMM = (e: MouseEvent) => {
       if (netDragRef.current.active) {
         const d = netDragRef.current;
-        setNets((useSchematicStore.getState().nets || []).map((nn) => nn.id === d.id ? { ...nn, midDx: Math.round((d.dx + (e.clientX - d.sx) / zoom) / 5) * 5 } : nn));
+        setNets((useSchematicStore.getState().nets || []).map((nn) => nn.id === d.id ? { ...nn, midDx: Math.round((d.dx + (e.clientX - d.sx) / zoom) / 10) * 10 } : nn));
         return;
       }
       if (dragRef.current.active) {
         const d = dragRef.current;
-        const nx = Math.round(Math.max(0, d.startX + (e.clientX - d.sx) / zoom) / 5) * 5;
-        const ny = Math.round(Math.max(0, d.startY + (e.clientY - d.sy) / zoom) / 5) * 5;
+        const nx = Math.round(Math.max(0, d.startX + (e.clientX - d.sx) / zoom) / 10) * 10;
+        const ny = Math.round(Math.max(0, d.startY + (e.clientY - d.sy) / zoom) / 10) * 10;
         setPos(d.iid, { x: nx, y: ny });
       } else if (panRef.current.active) {
         const dx = e.clientX - panRef.current.sx, dy = e.clientY - panRef.current.sy;
@@ -216,7 +216,7 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
         onMouseDown={(e) => { if (e.button === 0 && !linking) panRef.current = { active: true, sx: e.clientX, sy: e.clientY, px: pan.x, py: pan.y, moved: false }; }}
         onClick={() => { if (!panRef.current.moved) { setSel(null); setSelSym(null); if (linking) setLinking(null); } }}>
         <svg ref={svgRef} width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMinYMin meet" style={{ minWidth: '100%' }}>
-          <defs><pattern id="schg" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.7" fill="#d9d2b8" /></pattern></defs>
+          <defs><pattern id="schg" x="-5" y="-5" width="10" height="10" patternUnits="userSpaceOnUse"><circle cx="5" cy="5" r="0.6" fill="#d9d2b8" /></pattern></defs>
           <g transform={`translate(${pan.x},${pan.y}) scale(${zoom})`}>
           <rect x={-2000} y={-2000} width={W + 4000} height={H + 4000} fill="url(#schg)" />
           {items.length === 0 && <text x={W / 2} y={H / 2} textAnchor="middle" fontSize={13} fill="#94a3b8">添加器件后自动生成原理图</text>}
@@ -235,7 +235,7 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
             const fpk = near(fPorts, tCenter), tpk = near(tPorts, fCenter);
             const x1 = fpk.tip.x, y1 = fpk.tip.y;
             const x2 = tpk.tip.x, y2 = tpk.tip.y;
-            const midX = Math.round(((x1 + x2) / 2 + (n.midDx ?? 0)) / 5) * 5;
+            const midX = Math.round(((x1 + x2) / 2 + (n.midDx ?? 0)) / 10) * 10;
             const isSel = sel === n.id;
             return (
               <g key={n.id}>
@@ -280,7 +280,7 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
           })}
           {/* GND 总线 + 接地引线 */}
           {items.length > 0 && (() => {
-            const railY = H - 40;
+            const railY = Math.round((H - 40) / 10) * 10;
             return (
               <g>
                 <line x1={20} y1={railY} x2={W - 20} y2={railY} stroke="#334155" strokeWidth={2.5} />

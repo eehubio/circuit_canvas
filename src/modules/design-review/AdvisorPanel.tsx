@@ -5,7 +5,7 @@
 import { useEffect, useState } from 'react';
 import { useDesignStore } from '../../state/designStore';
 import { getProviders } from '../../providers/factory';
-import { geminiComplete, getGeminiKey, setGeminiKey } from '../../providers/gemini';
+import { geminiComplete, getGeminiKey } from '../../providers/gemini';
 import { recommendLayers } from '../../design-core/document/services';
 import { CATEGORY_DISPLAY, COLORS } from '../../shared/theme';
 import type { PeripheralCircuitRecommendation } from '../../providers/types';
@@ -54,29 +54,6 @@ function ruleSuggestions(comps: { mpn: string; category: string; family?: string
   return out;
 }
 
-/** Gemini 配置区 */
-function GeminiSettings({ onChanged }: { onChanged: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [key, setKey] = useState('');
-  const connected = !!getGeminiKey();
-  return (
-    <div style={{ marginBottom: 10, padding: '8px 10px', borderRadius: 8, background: connected ? '#f0fdf4' : '#f8fafc', border: `1px solid ${connected ? '#bbf7d0' : '#e2e8f0'}` }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} onClick={() => setOpen(!open)}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: connected ? '#16a34a' : '#64748b' }}>{connected ? '✓ Gemini 已连接（真实大模型生成）' : '⚙ 配置 Gemini（当前用内置规则引擎）'}</span>
-        <span style={{ marginLeft: 'auto', fontSize: 10, color: '#94a3b8' }}>{open ? '▲' : '▼'}</span>
-      </div>
-      {open && (
-        <div style={{ marginTop: 8 }}>
-          <div style={{ fontSize: 10, color: '#64748b', marginBottom: 4 }}>在 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{ color: '#0369a1' }}>Google AI Studio</a> 免费申请 API Key，粘贴后立即生效（仅存本机浏览器 localStorage，不上传）</div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <input type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder="AIza..." style={{ flex: 1, padding: '6px 8px', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 11, outline: 'none' }} />
-            <button onClick={() => { setGeminiKey(key); setKey(''); setOpen(false); onChanged(); }} style={{ padding: '6px 12px', borderRadius: 6, border: 'none', background: COLORS.green, color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>保存</button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 export function AdvisorPanel() {
   const doc = useDesignStore((s) => s.doc);
@@ -85,7 +62,6 @@ export function AdvisorPanel() {
   const [sysSugs, setSysSugs] = useState<{ name: string; reason: string; addId?: string }[]>([]);
   const [sysSource, setSysSource] = useState<'gemini' | 'rules' | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
-  const [, forceUpdate] = useState(0);
 
   const coreList = doc.components.filter((c) => c.category !== 'passive').map((c) => ({ mpn: c.mpn, category: c.category, family: c.display?.family }));
   const coreSig = coreList.map((c) => c.mpn).sort().join(',');
@@ -135,13 +111,11 @@ export function AdvisorPanel() {
 
   return (
     <div>
-      <GeminiSettings onChanged={() => { forceUpdate((x) => x + 1); analyze(); }} />
-
       {/* 系统补全建议（基于画布实际器件） */}
       <Section title="🧠 系统补全建议" badge={sysSugs.length || undefined}>
         {doc.components.length === 0 ? <Empty text="添加器件后，AI 分析系统还缺什么" /> : analyzing ? <Empty text="分析中..." /> : (
           <>
-            <div style={{ fontSize: 9.5, color: '#94a3b8', marginBottom: 6 }}>{sysSource === 'gemini' ? '由 Gemini 基于画布器件实时生成' : '规则引擎基于画布器件动态生成（配置 Gemini 后由大模型生成）'}</div>
+            <div style={{ fontSize: 9.5, color: '#94a3b8', marginBottom: 6 }}>{sysSource === 'gemini' ? '由 Gemini 基于画布器件实时生成' : '规则引擎基于画布器件动态生成（在 Vercel 配置 VITE_GEMINI_API_KEY 后由 Gemini 生成）'}</div>
             {sysSugs.length === 0 ? <Empty text="当前构成已较完整 ✓" /> : sysSugs.map((g, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '7px 9px', marginBottom: 5, borderRadius: 7, background: '#fff', border: '1px solid #f1f5f9' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
