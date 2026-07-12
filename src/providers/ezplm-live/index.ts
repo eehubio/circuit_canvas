@@ -121,7 +121,9 @@ export function mapEzplmPart(raw: Raw): ComponentSearchResult {
   const mpn = str(raw.mpn) ?? str(raw.model) ?? str(raw.partNumber) ?? str(raw.name) ?? id;
   const manufacturer = str(raw.manufacturer) ?? str(raw.vendor) ?? str(raw.brand) ?? '—';
   const fpRaw = pickName(raw.footprint);
-  const footprint = normalizeFootprint(fpRaw);
+  // 保留原始 KiCad 封装名 —— padFootprintFor 的解析器会从名字生成真实焊盘；
+  // 仅当名字缺失时回退内置默认
+  const footprint = fpRaw ?? 'SOIC-8';
   const attrs = pickAttrs(raw.attributes);
   const description = str(raw.description) ?? str(raw.productName) ?? str(raw.title) ?? Object.entries(attrs).slice(0, 3).map(([k, v]) => `${k}:${v}`).join(' ');
   const category = inferCategory([mpn, manufacturer, description, fpRaw ?? '', Object.values(attrs).join(' ')].join(' '));
@@ -138,15 +140,6 @@ export function mapEzplmPart(raw: Raw): ComponentSearchResult {
     coreParams: attrs,
     datasheetUrl: pickUrl(raw.pdf) ?? pickUrl(raw.datasheet),
     imageUrl: pickUrl(raw.image) ?? pickUrl(raw.photo),
-    // org 标记 → source='EZPLM'，BOM 中显示「本组织·ezPLM」徽标
-    org: {
-      organizationId: 'ezplm',
-      materialId: id,
-      internalPartNumber: str(raw.materialCode),
-      approved: true,
-      preferred: false,
-      stockQuantity: typeof raw.stock === 'number' ? raw.stock : undefined,
-    },
   };
 }
 

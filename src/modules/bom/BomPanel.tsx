@@ -46,8 +46,8 @@ export function BomPanel({ isFullscreen, onToggleFullscreen }: { isFullscreen?: 
                 <td style={{ padding: '7px 10px', color: '#64748b' }}>{l.footprint}</td>
                 <td style={{ padding: '7px 10px' }}>
                   {srcOf(l.reference) === 'EZPLM'
-                    ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>本组织·ezPLM价格/库存</span>
-                    : <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: '#fef3c7', color: '#92400e', fontWeight: 600 }}>非本组织·网络估价</span>}
+                    ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: '#e0f2fe', color: '#0369a1', fontWeight: 700 }}>ezPLM</span>
+                    : <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: '#fef3c7', color: '#92400e', fontWeight: 600 }}>演示·网络估价</span>}
                 </td>
                 <td style={{ padding: '7px 10px', textAlign: 'right', color: '#059669', fontWeight: 600 }}>{fmtMoney(l.unitPrice?.amount)}</td>
                 <td style={{ padding: '7px 10px', textAlign: 'right' }}>{l.quantity}</td>

@@ -9,6 +9,7 @@ import type {
 } from './types';
 import type { ComponentSearchResult } from '../../providers/types';
 import { geometryFor } from '../../providers/mock/data';
+import { padFootprintFor } from '../geometry/footprint-pads';
 import { findOverlaps } from '../collision';
 
 const REF_PREFIX: Record<ComponentCategory, string> = { mcu: 'U', power: 'U', passive: 'C', connector: 'J', ic: 'U' };
@@ -24,6 +25,13 @@ export function nextReference(category: ComponentCategory, existing: PlacedCompo
 /** 搜索结果 → 已放置器件（位置暂置 0，由放置引擎求解）。 */
 export function searchResultToPlaced(r: ComponentSearchResult, reference: string): PlacedComponent {
   const fpName = r.defaultFootprintName;
+  // KiCad 名解析命中 → 用真实焊盘范围推导几何（本体 + courtyard），碰撞/避让随之精确
+  const fp = padFootprintFor(fpName);
+  const geometry = fp ? (() => {
+    const exW = Math.max(...fp.pads.map((p) => Math.abs(p.x) + p.w / 2), fp.bodyW / 2) * 2;
+    const exH = Math.max(...fp.pads.map((p) => Math.abs(p.y) + p.h / 2), fp.bodyH / 2) * 2;
+    return { footprintId: fpName, bodyWidthMm: fp.bodyW, bodyHeightMm: fp.bodyH, courtyardWidthMm: exW + 0.6, courtyardHeightMm: exH + 0.6, padCount: fp.pads.length, rotationStep: 90, anchor: { x: 0, y: 0 } };
+  })() : geometryFor(fpName);
   return {
     instanceId: nanoid(10),
     componentId: r.componentId,
@@ -31,11 +39,11 @@ export function searchResultToPlaced(r: ComponentSearchResult, reference: string
     reference,
     category: r.category,
     manufacturer: r.manufacturer,
-    footprint: { footprintId: fpName, name: fpName, geometry: geometryFor(fpName), confidence: 1 },
+    footprint: { footprintId: fpName, name: fpName, geometry, confidence: 1 },
     placement: { xMm: 0, yMm: 0, rotation: 0, side: 'TOP', locked: false },
     quantity: 1,
     unitPrice: r.unitPrice,
-    source: r.org ? 'EZPLM' : 'MOCK',
+    source: r.org || r.componentId.startsWith('ez_') ? 'EZPLM' : 'MOCK',
     display: { description: r.description, family: r.family, attributes: r.attributes, pins: r.pins, datasheetUrl: r.datasheetUrl, imageUrl: r.imageUrl },
   };
 }

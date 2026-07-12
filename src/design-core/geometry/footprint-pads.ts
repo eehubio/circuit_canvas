@@ -10,6 +10,8 @@
  * 正式版可由 EzplmComponentDataProvider 返回真实焊盘，结构相同。
  */
 
+import { parseKicadFootprintName } from './kicad-name-parser';
+
 export interface Pad {
   /** 焊盘中心相对封装中心 (mm) */
   x: number;
@@ -126,6 +128,12 @@ export const PAD_FOOTPRINTS: Record<string, PadFootprint> = {
   },
 };
 
+const parsedCache = new Map<string, PadFootprint | null>();
+
 export function padFootprintFor(name: string): PadFootprint | null {
-  return PAD_FOOTPRINTS[name] ?? null;
+  const builtin = PAD_FOOTPRINTS[name];
+  if (builtin) return builtin;
+  // ezPLM 返回的标准 KiCad 封装名 → 参数化解析真实焊盘
+  if (!parsedCache.has(name)) parsedCache.set(name, parseKicadFootprintName(name));
+  return parsedCache.get(name) ?? null;
 }
