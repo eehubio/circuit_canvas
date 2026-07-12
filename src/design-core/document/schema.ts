@@ -57,6 +57,7 @@ const placedComponentSchema = z.object({
       pins: z.number().optional(),
       datasheetUrl: z.string().optional(),
       imageUrl: z.string().optional(),
+      stepUrl: z.string().optional(),
     })
     .optional(),
 });

@@ -5,6 +5,7 @@
  * 正式版可由 ezPLM 返回 .kicad_sym 解析结果替换，接口保持「给定器件 → 返回符号图元」。
  */
 import type { PlacedComponent } from '../../design-core/document/types';
+import { padFootprintFor as padFootprintForSym } from '../../design-core/geometry/footprint-pads';
 
 const STROKE = '#334155';
 const PIN = '#7c2d12';
@@ -168,6 +169,15 @@ function customSvgSymbol(svg: string): SymbolDef {
 /** 根据器件选符号 */
 export function symbolFor(c: PlacedComponent): SymbolDef {
   if (c.customSymbolSvg) return customSvgSymbol(c.customSymbolSvg);
+  // ezPLM 实时物料：族/引脚名未知，按真实引脚数生成编号符号（不套内置模板）
+  if (c.componentId.startsWith('ez_') && c.category !== 'passive') {
+    const pinCount = c.display?.pins ?? padFootprintForSym(c.footprint.name)?.pads.length ?? 6;
+    const per = Math.min(12, Math.max(2, Math.ceil(pinCount / 2)));
+    const left = Array.from({ length: per }, (_, i) => String(i + 1));
+    const right = Array.from({ length: per }, (_, i) => String(pinCount - i));
+    if (pinCount > per * 2) { left[per - 1] = '…'; right[per - 1] = '…'; }
+    return ic(per, { left, right });
+  }
   const fam = c.display?.family ?? '';
   if (c.category === 'passive') {
     if (fam === 'MLCC' || fam.includes('Cap')) return capacitor();
@@ -195,5 +205,12 @@ export function symbolFor(c: PlacedComponent): SymbolDef {
   if (fam.includes('CAN')) {
     return ic(3, { left: ['TXD', 'RXD', 'VCC'], right: ['CANH', 'CANL', 'GND'] });
   }
-  return ic(3, { left: ['1', '2', '3'], right: ['4', '5', '6'] });
+  // ezPLM 实时物料 / 未知族：按真实引脚数生成（引脚号 1..N 分左右两列）
+  // 真实引脚名需解析器件的 symbol 符号文件，当前接口未提供文件内容，先以编号呈现
+  const pinCount = c.display?.pins ?? padFootprintForSym(c.footprint.name)?.pads.length ?? 6;
+  const per = Math.min(12, Math.max(2, Math.ceil(pinCount / 2)));
+  const left = Array.from({ length: per }, (_, i) => String(i + 1));
+  const right = Array.from({ length: per }, (_, i) => String(pinCount - i));
+  if (pinCount > per * 2) { left[per - 1] = '…'; right[per - 1] = '…'; }
+  return ic(per, { left, right });
 }

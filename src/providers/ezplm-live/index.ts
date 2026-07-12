@@ -12,7 +12,7 @@
  */
 import type { ComponentSearchResult } from '../types';
 import type { ComponentCategory } from '../../design-core/document/types';
-import { PAD_FOOTPRINTS } from '../../design-core/geometry/footprint-pads';
+import { padFootprintFor } from '../../design-core/geometry/footprint-pads';
 
 const EZ_PREFIX = 'ez_';
 
@@ -84,27 +84,6 @@ function pickAttrs(v: unknown): Record<string, string> {
   return out;
 }
 
-/** 封装名归一化：能对上内置焊盘库的用内置名（画布上有真实焊盘），否则保留原名 */
-function normalizeFootprint(name: string | undefined): string {
-  if (!name) return 'SOIC-8';
-  const known = Object.keys(PAD_FOOTPRINTS);
-  const exact = known.find((k) => k.toLowerCase() === name.toLowerCase());
-  if (exact) return exact;
-  const up = name.toUpperCase().replace(/\s/g, '');
-  const hit = known.find((k) => up.includes(k.toUpperCase().replace(/\s/g, '')));
-  if (hit) return hit;
-  // 常见别名
-  if (/0402/.test(up)) return '0402';
-  if (/0603/.test(up)) return '0603';
-  if (/SOT-?223/.test(up)) return 'SOT-223';
-  if (/SOT-?23/.test(up)) return 'TSOT-23-8';
-  if (/SOI?C-?8\b|SOP-?8\b/.test(up)) return 'SOIC-8';
-  if (/SOI?C-?16|SOP-?16|SSOP-?16|TSSOP-?16/.test(up)) return 'SOP-16';
-  if (/L?QFP-?48/.test(up)) return 'LQFP-48';
-  if (/L?QFP-?100|L?QFP-?64/.test(up)) return 'LQFP-100';
-  return name; // 未知封装：保留原名，几何走通用兜底
-}
-
 /** 类别推断：手册未提供 category 字段，按型号/描述/参数关键词判断 */
 function inferCategory(text: string): ComponentCategory {
   const t = text.toUpperCase();
@@ -135,10 +114,12 @@ export function mapEzplmPart(raw: Raw): ComponentSearchResult {
     defaultFootprintName: footprint,
     family: str(raw.family) ?? 'ezPLM',
     description: description || `${manufacturer} ${mpn}`,
-    pins: typeof raw.pins === 'number' ? raw.pins : 8,
+    pins: typeof raw.pins === 'number' ? raw.pins : padFootprintFor(footprint)?.pads.length ?? 8,
     attributes: attrs,
     coreParams: attrs,
     datasheetUrl: pickUrl(raw.pdf) ?? pickUrl(raw.datasheet),
+    // 手册的 parts 响应未定义 3D 模型字段；此处防御式探测常见命名，命中则启用 STEP 下载
+    stepUrl: pickUrl(raw.step) ?? pickUrl(raw.model3d) ?? pickUrl((raw as Record<string, unknown>)['3d_model']) ?? pickUrl(raw.stepFile),
     imageUrl: pickUrl(raw.image) ?? pickUrl(raw.photo),
   };
 }

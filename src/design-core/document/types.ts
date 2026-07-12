@@ -95,6 +95,7 @@ export interface PlacedComponent {
     /** ezPLM 实时物料附带：Datasheet PDF / 器件图片链接 */
     datasheetUrl?: string;
     imageUrl?: string;
+    stepUrl?: string;
   };
 }
 

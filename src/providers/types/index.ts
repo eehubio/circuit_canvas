@@ -57,6 +57,8 @@ export interface ComponentSearchResult {
   productUrl?: string;
   /** Datasheet PDF 链接 */
   datasheetUrl?: string;
+  /** 3D 模型（STEP）文件链接（若接口提供） */
+  stepUrl?: string;
   /** 核心参数（约10项，键值对） */
   coreParams?: Record<string, string>;
 }

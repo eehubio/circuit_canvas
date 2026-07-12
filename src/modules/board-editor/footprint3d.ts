@@ -5,6 +5,7 @@
  * 单位 mm，与设计内核一致。
  */
 import * as THREE from 'three';
+import { padFootprintFor } from '../../design-core/geometry/footprint-pads';
 import type { PlacedComponent } from '../../design-core/document/types';
 
 const MAT = {
@@ -135,6 +136,44 @@ function makeHeader(cols: number, rows: number): THREE.Group {
   return g;
 }
 
+
+/** 从 2D 焊盘数据构建通用 3D 模型 —— 引脚位于每个焊盘的真实位置，与 2D 布局严格一致。
+ *  SMD 矩形焊盘 → 金属引脚片；圆形小盘(<1.2mm) → 焊球(WLCSP/BGA)；圆形大盘 → 通孔引脚。 */
+function makeFromPads(fp: import('../../design-core/geometry/footprint-pads').PadFootprint, fpName: string): THREE.Group {
+  const g = new THREE.Group();
+  const N = fpName.toUpperCase();
+  const isBall = fp.pads.every((p) => p.round) && /(WLCSP|BGA|CSP)/.test(N);
+  const bodyT = isBall ? 0.6 : /(QFN|DFN|SON)/.test(N) ? 0.9 : 1.2;
+  const body = new THREE.Mesh(new THREE.BoxGeometry(fp.bodyW, bodyT, fp.bodyH), MAT.blackBody);
+  body.position.y = bodyT / 2 + (isBall ? 0.3 : 0.06);
+  g.add(body);
+  // 引脚1凹点
+  if (fp.pin1) {
+    const dot = new THREE.Mesh(new THREE.CylinderGeometry(Math.min(fp.bodyW, fp.bodyH) * 0.07, Math.min(fp.bodyW, fp.bodyH) * 0.07, 0.05, 10), MAT.darkBody);
+    dot.position.set(Math.max(-fp.bodyW / 2 + 0.4, Math.min(fp.bodyW / 2 - 0.4, fp.pin1.x)), bodyT + (isBall ? 0.3 : 0.06) + 0.03, Math.max(-fp.bodyH / 2 + 0.4, Math.min(fp.bodyH / 2 - 0.4, fp.pin1.y)));
+    g.add(dot);
+  }
+  for (const p of fp.pads) {
+    if (p.round && p.w < 1.2) {
+      // 焊球
+      const ball = new THREE.Mesh(new THREE.SphereGeometry(p.w / 2, 10, 8), MAT.lead);
+      ball.position.set(p.x, p.w / 2 * 0.7, p.y);
+      g.add(ball);
+    } else if (p.round) {
+      // 通孔引脚
+      const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 5, 10), MAT.gold);
+      pin.position.set(p.x, 2.5, p.y);
+      g.add(pin);
+    } else {
+      // SMD 引脚片：按焊盘尺寸/位置
+      const lead = new THREE.Mesh(new THREE.BoxGeometry(p.w, 0.22, p.h), MAT.lead);
+      lead.position.set(p.x, 0.11, p.y);
+      g.add(lead);
+    }
+  }
+  return g;
+}
+
 /** 模组（ESP32 等）：黑色 PCB 模块 + 屏蔽罩 */
 function makeModule(w: number, h: number): THREE.Group {
   const g = new THREE.Group();
@@ -168,8 +207,11 @@ export function buildComponent3D(comp: PlacedComponent): THREE.Group {
     case 'Module-44': group = makeModule(18.0, 25.5); break;
     case 'USB-C-16P': group = makeUsbC(); break;
     case 'THT-2.54mm': group = makeHeader(2, 5); break;
-    default:
-      group = makeChip(comp.footprint.geometry.bodyWidthMm, comp.footprint.geometry.bodyHeightMm, 1.2, { perSideX: 4 });
+    default: {
+      const fp = padFootprintFor(comp.footprint.name);
+      group = fp ? makeFromPads(fp, comp.footprint.name)
+        : makeChip(comp.footprint.geometry.bodyWidthMm, comp.footprint.geometry.bodyHeightMm, 1.2, { perSideX: 4 });
+    }
   }
   return group;
 }
