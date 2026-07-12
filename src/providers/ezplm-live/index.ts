@@ -94,11 +94,21 @@ function inferCategory(text: string): ComponentCategory {
   return 'ic';
 }
 
+let loggedSample = false;
+
 /** 单个物料映射 */
 export function mapEzplmPart(raw: Raw): ComponentSearchResult {
+  if (!loggedSample) {
+    loggedSample = true;
+    // 诊断辅助：浏览器控制台可查看真实字段结构，用于校准映射
+    console.info('[ezPLM] 首条物料原始字段样例:', raw);
+  }
   const id = str(raw.id) ?? str(raw.partlibId) ?? String(Math.random()).slice(2);
   const mpn = str(raw.mpn) ?? str(raw.model) ?? str(raw.partNumber) ?? str(raw.name) ?? id;
-  const manufacturer = str(raw.manufacturer) ?? str(raw.vendor) ?? str(raw.brand) ?? '—';
+  // 厂商字段防御式提取：兼容字符串 / {name} 对象 / 多种字段名
+  const manufacturer = pickName(raw.manufacturer) ?? pickName(raw.vendor) ?? pickName(raw.brand)
+    ?? pickName((raw as Record<string, unknown>).mfr) ?? pickName((raw as Record<string, unknown>).manufacturerName)
+    ?? pickName((raw as Record<string, unknown>)['厂商']) ?? '—';
   const fpRaw = pickName(raw.footprint);
   // 保留原始 KiCad 封装名 —— padFootprintFor 的解析器会从名字生成真实焊盘；
   // 仅当名字缺失时回退内置默认

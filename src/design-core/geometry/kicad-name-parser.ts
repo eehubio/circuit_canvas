@@ -87,7 +87,9 @@ function headerPads(cols: number, rows: number, pitch: number): PadFootprint {
   return { bodyW: cols * pitch, bodyH: rows * pitch, pads, pin1: { x: x0, y: y0 } };
 }
 
-/** SOT-23 家族标准落点（预布局近似） */
+/** SOT-23 家族标准落点。
+ *  SOT-23-3：左2右1；SOT-23-5：左3(1,2,3 上→下) + 右2 在【外侧两格】(4 下、5 上，中间空)；
+ *  SOT-23-6：左右各3；SOT-23-8(TSOT)：左右各4。 */
 function sot23(variant: number): PadFootprint {
   if (variant === 3) {
     return { bodyW: 2.9, bodyH: 1.3, pads: [
@@ -98,8 +100,15 @@ function sot23(variant: number): PadFootprint {
   const pitch = 0.95;
   const y0 = -((per - 1) * pitch) / 2;
   const pads: Pad[] = [];
+  // 左列：1..per 上→下
   for (let i = 0; i < per; i++) pads.push({ x: -1.3, y: y0 + i * pitch, w: 1.0, h: 0.6, num: i + 1 });
-  for (let i = 0; i < variant - per; i++) pads.push({ x: 1.3, y: y0 + (per - 1 - i) * pitch, w: 1.0, h: 0.6, num: per + i + 1 });
+  // 右列：下→上编号；奇数脚(如5脚)时右侧只占【外侧】格位，中间空
+  const rightN = variant - per;
+  const rightSlots = rightN === per ? Array.from({ length: per }, (_, i) => i)
+    : [0, per - 1].slice(0, rightN); // 5脚 → 槽位 0(上) 和 per-1(下)
+  // 编号从下往上：pin per+1 在最下
+  rightSlots.sort((a, b) => b - a); // 下→上
+  rightSlots.forEach((slot, k) => pads.push({ x: 1.3, y: y0 + slot * pitch, w: 1.0, h: 0.6, num: per + k + 1 }));
   return { bodyW: 1.6, bodyH: 2.9, pads, pin1: { x: -1.3, y: y0 - 0.6 } };
 }
 

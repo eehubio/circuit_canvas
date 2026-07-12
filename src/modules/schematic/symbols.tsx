@@ -102,8 +102,14 @@ function ic(pinsPerSide: number, pinNames?: { left: string[]; right: string[] })
   const pitch = 20, pad = 10;
   const h = Math.max(60, pad * 2 + (pinsPerSide - 1) * pitch);
   const w = 120;
+  // 名字为 '' 的槽位：不画引脚桩、不建端口（支持奇数脚数左右不对称，如 SOT-23-5）
+  const hasL = (i: number) => !pinNames || !!pinNames.left[i];
+  const hasR = (i: number) => !pinNames || !!pinNames.right[i];
   const ports: { x: number; y: number }[] = [];
-  for (let i = 0; i < pinsPerSide; i++) { ports.push({ x: 0, y: pad + i * pitch }); ports.push({ x: w, y: pad + i * pitch }); }
+  for (let i = 0; i < pinsPerSide; i++) {
+    if (hasL(i)) ports.push({ x: 0, y: pad + i * pitch });
+    if (hasR(i)) ports.push({ x: w, y: pad + i * pitch });
+  }
   return {
     w, h, ports,
     render: (ref, label) => (
@@ -111,8 +117,8 @@ function ic(pinsPerSide: number, pinNames?: { left: string[]; right: string[] })
         <rect width={w} height={h} rx={2} fill={FILL} stroke={STROKE} strokeWidth={1.8} />
         {Array.from({ length: pinsPerSide }).map((_, i) => (
           <g key={i}>
-            <line x1={-10} y1={pad + i * pitch} x2={0} y2={pad + i * pitch} stroke={PIN} strokeWidth={1.4} />
-            <line x1={w} y1={pad + i * pitch} x2={w + 10} y2={pad + i * pitch} stroke={PIN} strokeWidth={1.4} />
+            {hasL(i) && <line x1={-10} y1={pad + i * pitch} x2={0} y2={pad + i * pitch} stroke={PIN} strokeWidth={1.4} />}
+            {hasR(i) && <line x1={w} y1={pad + i * pitch} x2={w + 10} y2={pad + i * pitch} stroke={PIN} strokeWidth={1.4} />}
             {pinNames?.left[i] && <text x={4} y={pad + i * pitch + 3} fontSize={6.5} fill={PIN} fontFamily="monospace">{pinNames.left[i]}</text>}
             {pinNames?.right[i] && <text x={w - 4} y={pad + i * pitch + 3} textAnchor="end" fontSize={6.5} fill={PIN} fontFamily="monospace">{pinNames.right[i]}</text>}
           </g>
@@ -172,10 +178,13 @@ export function symbolFor(c: PlacedComponent): SymbolDef {
   // ezPLM 实时物料：族/引脚名未知，按真实引脚数生成编号符号（不套内置模板）
   if (c.componentId.startsWith('ez_') && c.category !== 'passive') {
     const pinCount = c.display?.pins ?? padFootprintForSym(c.footprint.name)?.pads.length ?? 6;
-    const per = Math.min(12, Math.max(2, Math.ceil(pinCount / 2)));
-    const left = Array.from({ length: per }, (_, i) => String(i + 1));
-    const right = Array.from({ length: per }, (_, i) => String(pinCount - i));
-    if (pinCount > per * 2) { left[per - 1] = '…'; right[per - 1] = '…'; }
+    const leftN = Math.min(12, Math.ceil(pinCount / 2));
+    const rightN = Math.min(12, pinCount - Math.ceil(pinCount / 2));
+    const per = Math.max(leftN, rightN, 2);
+    const left = Array.from({ length: per }, (_, i) => (i < leftN ? String(i + 1) : ''));
+    // 右列自下而上编号：leftN+1 在最下
+    const right = Array.from({ length: per }, (_, i) => (i < rightN ? String(pinCount - i) : ''));
+    if (pinCount > 24) { left[per - 1] = '…'; right[per - 1] = right[per - 1] ? '…' : ''; }
     return ic(per, { left, right });
   }
   const fam = c.display?.family ?? '';
@@ -208,9 +217,11 @@ export function symbolFor(c: PlacedComponent): SymbolDef {
   // ezPLM 实时物料 / 未知族：按真实引脚数生成（引脚号 1..N 分左右两列）
   // 真实引脚名需解析器件的 symbol 符号文件，当前接口未提供文件内容，先以编号呈现
   const pinCount = c.display?.pins ?? padFootprintForSym(c.footprint.name)?.pads.length ?? 6;
-  const per = Math.min(12, Math.max(2, Math.ceil(pinCount / 2)));
-  const left = Array.from({ length: per }, (_, i) => String(i + 1));
-  const right = Array.from({ length: per }, (_, i) => String(pinCount - i));
-  if (pinCount > per * 2) { left[per - 1] = '…'; right[per - 1] = '…'; }
+  const leftN = Math.min(12, Math.ceil(pinCount / 2));
+  const rightN = Math.min(12, pinCount - Math.ceil(pinCount / 2));
+  const per = Math.max(leftN, rightN, 2);
+  const left = Array.from({ length: per }, (_, i) => (i < leftN ? String(i + 1) : ''));
+  const right = Array.from({ length: per }, (_, i) => (i < rightN ? String(pinCount - i) : ''));
+  if (pinCount > 24) { left[per - 1] = '…'; right[per - 1] = right[per - 1] ? '…' : ''; }
   return ic(per, { left, right });
 }

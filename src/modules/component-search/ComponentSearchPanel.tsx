@@ -32,7 +32,8 @@ export function ComponentSearchPanel() {
   const runSearch = useCallback(async () => {
     const seq = ++searchSeq.current;
     // 关键词检索优先走 ezPLM 实时库（需 Vercel 配置 EZPLM_API_KEY）
-    if (keyword.trim()) {
+    // 勾选「仅显示本组织物料」时跳过实时库（系统库物料不属于组织物料）
+    if (keyword.trim() && !orgOnly) {
       const live = await searchEzplmParts(keyword.trim());
       if (seq !== searchSeq.current) return; // 已有更新的请求，丢弃本次结果
       if (live.available && live.items.length) {
