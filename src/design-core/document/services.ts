@@ -36,7 +36,7 @@ export function searchResultToPlaced(r: ComponentSearchResult, reference: string
     quantity: 1,
     unitPrice: r.unitPrice,
     source: r.org ? 'EZPLM' : 'MOCK',
-    display: { description: r.description, family: r.family, attributes: r.attributes, pins: r.pins },
+    display: { description: r.description, family: r.family, attributes: r.attributes, pins: r.pins, datasheetUrl: r.datasheetUrl, imageUrl: r.imageUrl },
   };
 }
 

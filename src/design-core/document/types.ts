@@ -92,6 +92,9 @@ export interface PlacedComponent {
     family?: string;
     attributes?: Record<string, string>;
     pins?: number;
+    /** ezPLM 实时物料附带：Datasheet PDF / 器件图片链接 */
+    datasheetUrl?: string;
+    imageUrl?: string;
   };
 }
 

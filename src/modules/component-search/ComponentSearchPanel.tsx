@@ -4,6 +4,7 @@
  */
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { getProviders } from '../../providers/factory';
+import { searchEzplmParts, ezplmLiveAvailable } from '../../providers/ezplm-live';
 import { useDesignStore } from '../../state/designStore';
 import { CATEGORY_DISPLAY, CATEGORY_LIST, COLORS, fmtMoney } from '../../shared/theme';
 import type { ComponentSearchResult } from '../../providers/types';
@@ -22,7 +23,19 @@ export function ComponentSearchPanel() {
   const components = useDesignStore((s) => s.doc.components);
   const placedIds = useMemo(() => new Set(components.map((c) => c.componentId)), [components]);
 
+  const [liveStatus, setLiveStatus] = useState<'unknown' | 'live' | 'demo'>('unknown');
+  useEffect(() => { ezplmLiveAvailable().then((ok) => setLiveStatus(ok ? 'live' : 'demo')); }, []);
+
   const runSearch = useCallback(async () => {
+    // 关键词检索优先走 ezPLM 实时库（需 Vercel 配置 EZPLM_API_KEY）
+    if (keyword.trim()) {
+      const live = await searchEzplmParts(keyword.trim());
+      if (live.available && live.items.length) {
+        const filtered = category ? live.items.filter((i) => i.category === category) : live.items;
+        setResults(filtered);
+        return;
+      }
+    }
     const res = await providers.components.searchComponents({ keyword, category: category ?? undefined, orgOnly }, ctx);
     setResults(res.items);
   }, [keyword, category, orgOnly]);
@@ -31,6 +44,11 @@ export function ComponentSearchPanel() {
 
   return (
     <div>
+      {liveStatus !== 'unknown' && (
+        <div style={{ fontSize: 10, marginBottom: 8, padding: '4px 8px', borderRadius: 6, background: liveStatus === 'live' ? '#f0fdf4' : '#f8fafc', border: `1px solid ${liveStatus === 'live' ? '#bbf7d0' : '#e2e8f0'}`, color: liveStatus === 'live' ? '#16a34a' : '#94a3b8', fontWeight: 600 }}>
+          {liveStatus === 'live' ? '✓ 已连接 ezPLM 元器件库（实时检索）' : '内置演示数据 · 在 Vercel 配置 EZPLM_API_KEY 后接入实时库'}
+        </div>
+      )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
         {CATEGORY_LIST.map((cat) => (
           <button key={cat} onClick={() => setCategory(category === cat ? null : cat)}

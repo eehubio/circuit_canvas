@@ -12,6 +12,7 @@ import { FootprintLibraryPanel } from './modules/component-search/FootprintLibra
 import { LibraryPreview } from './modules/component-search/LibraryPreview';
 import { padFootprintFor as padFootprintForT } from './design-core/geometry/footprint-pads';
 import { downloadKicadPcb } from './modules/board-editor/pcbExport';
+import { getEzplmReferenceDesigns, isEzplmPart, type ReferenceDesign } from './providers/ezplm-live';
 import type { PlacedComponent as PlacedComponentT } from './design-core/document/types';
 import { BoardCanvas2D } from './modules/board-editor/BoardCanvas2D';
 import { BoardView3D } from './modules/board-editor/BoardView3D';
@@ -342,11 +343,14 @@ function CompDetail({ iid }: { iid: string }) {
   const [alts, setAlts] = useState<{ mpn: string; manufacturer: string; note: string; channel: string; footprint?: string; description?: string }[]>([]);
   const [offers, setOffers] = useState<{ vendor: string; price?: { amount: number; currency: string }; stock?: number; url: string }[]>([]);
   const [detail, setDetail] = useState<Awaited<ReturnType<typeof providers.components.getComponentDetail>>>(null);
+  const [refDesigns, setRefDesigns] = useState<ReferenceDesign[]>([]);
   useEffect(() => {
     if (!c) return;
+    setRefDesigns([]);
     providers.components.getAlternatives(c.componentId, ctx).then(setAlts);
     providers.components.getSupplierOffers(c.componentId, ctx).then(setOffers);
     providers.components.getComponentDetail(c.componentId, ctx).then(setDetail);
+    if (isEzplmPart(c.componentId)) getEzplmReferenceDesigns(c.componentId).then(setRefDesigns);
   }, [c?.componentId]);
   if (!c) return null;
   const disp = CATEGORY_DISPLAY[c.category];
@@ -361,16 +365,16 @@ function CompDetail({ iid }: { iid: string }) {
           <div style={{ fontSize: 14, fontFamily: 'monospace', color: COLORS.green, fontWeight: 600, wordBreak: 'break-all' }}>{c.mpn}</div>
           <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{disp.name} · {c.manufacturer} · {c.footprint.name}</div>
         </div>
-        <ComponentImage c={c} imageUrl={detail?.imageUrl} />
+        <ComponentImage c={c} imageUrl={detail?.imageUrl ?? c.display?.imageUrl} />
       </div>
 
       {/* 官网 + PDF */}
       <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-        {detail?.productUrl
+        {(detail?.productUrl)
           ? <a href={detail.productUrl} target="_blank" rel="noreferrer" style={linkBtn}>🌐 官网</a>
           : <a href={`https://www.google.com/search?q=${encodeURIComponent(c.manufacturer + ' ' + c.mpn)}`} target="_blank" rel="noreferrer" style={linkBtn}>🌐 官网检索</a>}
-        {detail?.datasheetUrl
-          ? <a href={detail.datasheetUrl} target="_blank" rel="noreferrer" style={{ ...linkBtn, borderColor: '#fecaca', background: '#fef2f2', color: '#dc2626' }}>📄 PDF下载</a>
+        {(detail?.datasheetUrl ?? c.display?.datasheetUrl)
+          ? <a href={detail?.datasheetUrl ?? c.display?.datasheetUrl} target="_blank" rel="noreferrer" style={{ ...linkBtn, borderColor: '#fecaca', background: '#fef2f2', color: '#dc2626' }}>📄 PDF下载</a>
           : <a href={`https://www.google.com/search?q=${encodeURIComponent(c.mpn + ' datasheet pdf')}`} target="_blank" rel="noreferrer" style={{ ...linkBtn, borderColor: '#fecaca', background: '#fef2f2', color: '#dc2626' }}>📄 PDF检索</a>}
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: 12, color: '#059669', fontWeight: 700, alignSelf: 'center' }}>{fmtMoney(c.unitPrice?.amount)}</span>
@@ -396,6 +400,19 @@ function CompDetail({ iid }: { iid: string }) {
       {c.display?.family === 'Footprint' && <FootprintPartEditor c={c} />}
 
       <LibraryPreview c={c} />
+
+      {/* 参考设计（ezPLM 实时） */}
+      {refDesigns.length > 0 && (
+        <div style={{ marginTop: 12, padding: 10, borderRadius: 8, background: '#f5f3ff', border: '1px solid #ddd6fe' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#6d28d9', marginBottom: 6 }}>📐 参考设计（来自 ezPLM）</div>
+          {refDesigns.map((rd, i) => (
+            <a key={i} href={rd.link} target="_blank" rel="noreferrer" style={{ display: 'block', padding: '6px 8px', marginBottom: 4, borderRadius: 6, background: '#fff', border: '1px solid #ede9fe', textDecoration: 'none' }}>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: '#4c1d95' }}>{rd.name} <span style={{ fontSize: 9, color: '#94a3b8' }}>↗</span></div>
+              {rd.description && <div style={{ fontSize: 10, color: '#64748b', marginTop: 1 }}>{rd.description}</div>}
+            </a>
+          ))}
+        </div>
+      )}
 
       {/* 采购渠道 */}
       {offers.length > 0 && (

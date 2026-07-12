@@ -55,6 +55,8 @@ const placedComponentSchema = z.object({
       family: z.string().optional(),
       attributes: z.record(z.string()).optional(),
       pins: z.number().optional(),
+      datasheetUrl: z.string().optional(),
+      imageUrl: z.string().optional(),
     })
     .optional(),
 });
