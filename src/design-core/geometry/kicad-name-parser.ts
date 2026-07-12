@@ -38,22 +38,28 @@ function dualRowPads(pins: number, pitch: number, bodyW: number, bodyH: number):
   return { bodyW, bodyH, pads, pin1: { x: -rowGap / 2, y: y0 - pitch * 0.6 } };
 }
 
-/** 四边：LQFP/TQFP/QFP（鸥翼外伸）与 QFN/UFQFPN/VFQFPN/DFN（贴边） */
+/** 四边：LQFP/TQFP/QFP（鸥翼外伸）与 QFN/UFQFPN/VFQFPN/DFN（贴边）。
+ *  长方形本体按边长比例分配引脚数（如 QFP-128 14×20 → 短边26 + 长边38），并校验跨度不超边长。 */
 function quadPads(pins: number, pitch: number, bodyW: number, bodyH: number, noLead: boolean): PadFootprint {
-  const per = pins / 4;
+  const half = pins / 2;
+  // 每对边的引脚数按边长比例分配；再校正保证 (n-1)*pitch ≤ 边长-1（留边距）
+  let nY = Math.round((half * bodyH) / (bodyW + bodyH)); // 左/右各 nY（沿 H 分布）
+  let nX = half - nY;                                     // 上/下各 nX（沿 W 分布）
+  const fits = (n: number, dim: number) => (n - 1) * pitch <= dim - 0.8;
+  while (nY > 1 && !fits(nY, bodyH)) { nY--; nX++; }
+  while (nX > 1 && !fits(nX, bodyW)) { nX--; nY++; }
   const padLen = noLead ? 0.8 : 1.2;
   const padW = Math.max(0.22, Math.min(0.6 * pitch, pitch - 0.15));
-  // 鸥翼焊盘中心在本体外；QFN 焊盘中心贴本体边缘
   const cxL = noLead ? bodyW / 2 - padLen / 2 + 0.3 : bodyW / 2 + padLen / 2;
   const cyT = noLead ? bodyH / 2 - padLen / 2 + 0.3 : bodyH / 2 + padLen / 2;
-  const span = (per - 1) * pitch;
+  const spanY = (nY - 1) * pitch, spanX = (nX - 1) * pitch;
   const pads: Pad[] = [];
   let n = 1;
-  for (let i = 0; i < per; i++) pads.push({ x: -cxL, y: -span / 2 + i * pitch, w: padLen, h: padW, num: n++ }); // 左，上→下
-  for (let i = 0; i < per; i++) pads.push({ x: -span / 2 + i * pitch, y: cyT, w: padW, h: padLen, num: n++ }); // 下，左→右
-  for (let i = 0; i < per; i++) pads.push({ x: cxL, y: span / 2 - i * pitch, w: padLen, h: padW, num: n++ }); // 右，下→上
-  for (let i = 0; i < per; i++) pads.push({ x: span / 2 - i * pitch, y: -cyT, w: padW, h: padLen, num: n++ }); // 上，右→左
-  return { bodyW, bodyH, pads, pin1: { x: -cxL - 0.4, y: -span / 2 - 0.4 } };
+  for (let i = 0; i < nY; i++) pads.push({ x: -cxL, y: -spanY / 2 + i * pitch, w: padLen, h: padW, num: n++ }); // 左，上→下
+  for (let i = 0; i < nX; i++) pads.push({ x: -spanX / 2 + i * pitch, y: cyT, w: padW, h: padLen, num: n++ }); // 下，左→右
+  for (let i = 0; i < nY; i++) pads.push({ x: cxL, y: spanY / 2 - i * pitch, w: padLen, h: padW, num: n++ }); // 右，下→上
+  for (let i = 0; i < nX; i++) pads.push({ x: spanX / 2 - i * pitch, y: -cyT, w: padW, h: padLen, num: n++ }); // 上，右→左
+  return { bodyW, bodyH, pads, pin1: { x: -cxL - 0.4, y: -spanY / 2 - 0.4 } };
 }
 
 /** 球栅（WLCSP/BGA）：按本体与间距铺球，近似矩形阵列 */
@@ -140,10 +146,12 @@ export function parseKicadFootprintName(name: string): PadFootprint | null {
   if (/SOD-?123/.test(N)) return { bodyW: 2.7, bodyH: 1.6, pads: [{ x: -1.75, y: 0, w: 0.9, h: 1.2, num: 1 }, { x: 1.75, y: 0, w: 0.9, h: 1.2, num: 2 }], pin1: { x: -2.2, y: 0 } };
   if (/SOD-?323/.test(N)) return { bodyW: 1.7, bodyH: 1.25, pads: [{ x: -1.05, y: 0, w: 0.7, h: 0.6, num: 1 }, { x: 1.05, y: 0, w: 0.7, h: 0.6, num: 2 }], pin1: { x: -1.4, y: 0 } };
 
-  // 四边无引脚：QFN / UFQFPN / VFQFPN / HVQFN / DFN / SON
-  if (/(U|V|HV|W)?(QFN|DFN|SON)/.test(N) && pins && pitch && bodyW && bodyH) {
-    if (pins % 4 === 0 && bodyW === bodyH) return quadPads(pins, pitch, bodyW, bodyH, true);
-    if (pins % 2 === 0) return dualRowPads(pins, pitch, bodyW, bodyH); // DFN 双列
+  // 四边无引脚 QFN（含长方形本体）；DFN/SON 本身是双列封装
+  if (/(U|V|HV|W)?QFN/.test(N) && pins && pitch && bodyW && bodyH && pins % 4 === 0) {
+    return quadPads(pins, pitch, bodyW, bodyH, true);
+  }
+  if (/(DFN|SON)/.test(N) && pins && pitch && bodyW && bodyH && pins % 2 === 0) {
+    return dualRowPads(pins, pitch, bodyW, bodyH);
   }
   // 四边鸥翼：LQFP / TQFP / QFP
   if (/(L|T)?QFP/.test(N) && pins && pitch && bodyW && bodyH && pins % 4 === 0) {

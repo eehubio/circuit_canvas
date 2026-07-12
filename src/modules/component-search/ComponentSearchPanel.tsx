@@ -2,7 +2,7 @@
  * modules/component-search/ComponentSearchPanel.tsx
  * 元器件搜索面板 —— 通过 ComponentDataProvider 检索，结果加入画布。
  */
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { getProviders } from '../../providers/factory';
 import { searchEzplmParts, ezplmLiveAvailable } from '../../providers/ezplm-live';
 import { useDesignStore } from '../../state/designStore';
@@ -26,10 +26,15 @@ export function ComponentSearchPanel() {
   const [liveStatus, setLiveStatus] = useState<'unknown' | 'live' | 'demo'>('unknown');
   useEffect(() => { ezplmLiveAvailable().then((ok) => setLiveStatus(ok ? 'live' : 'demo')); }, []);
 
+  // 竞态守卫：只采纳最新一次请求的结果（快速输入时旧请求可能后返回，会覆盖正确结果）
+  const searchSeq = useRef(0);
+
   const runSearch = useCallback(async () => {
+    const seq = ++searchSeq.current;
     // 关键词检索优先走 ezPLM 实时库（需 Vercel 配置 EZPLM_API_KEY）
     if (keyword.trim()) {
       const live = await searchEzplmParts(keyword.trim());
+      if (seq !== searchSeq.current) return; // 已有更新的请求，丢弃本次结果
       if (live.available && live.items.length) {
         const filtered = category ? live.items.filter((i) => i.category === category) : live.items;
         setResults(filtered);
@@ -37,10 +42,15 @@ export function ComponentSearchPanel() {
       }
     }
     const res = await providers.components.searchComponents({ keyword, category: category ?? undefined, orgOnly }, ctx);
+    if (seq !== searchSeq.current) return;
     setResults(res.items);
   }, [keyword, category, orgOnly]);
 
-  useEffect(() => { runSearch(); }, [runSearch]);
+  // 300ms 防抖：停止输入后才发请求（避免竞态 + 节省 ezPLM 每日调用配额）
+  useEffect(() => {
+    const t = setTimeout(runSearch, 300);
+    return () => clearTimeout(t);
+  }, [runSearch]);
 
   return (
     <div>
