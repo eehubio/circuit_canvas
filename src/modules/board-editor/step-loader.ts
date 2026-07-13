@@ -90,22 +90,57 @@ export function ensureStepModel(url: string | undefined) {
       const result = occt.ReadStepFile(buf, null);
       if (!result?.success || !result.meshes?.length) throw new Error('STEP 解析失败（文件格式异常）');
 
+      // ── 材质分配 ──
+      // STEP 里 OCCT 给的颜色常缺省/纯黑；按几何特征区分：
+      // 薄而扁的网格 = 引脚(亮银金属)，大体积 = 塑封体(深灰哑光)，其余按原色
       const group = new THREE.Group();
-      for (const m of result.meshes) {
+      const meshInfos = result.meshes.map((m) => {
+        const pos = m.attributes.position.array;
+        let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+        for (let i = 0; i < pos.length; i += 3) {
+          minX = Math.min(minX, pos[i]); maxX = Math.max(maxX, pos[i]);
+          minY = Math.min(minY, pos[i + 1]); maxY = Math.max(maxY, pos[i + 1]);
+          minZ = Math.min(minZ, pos[i + 2]); maxZ = Math.max(maxZ, pos[i + 2]);
+        }
+        const dx = maxX - minX, dy = maxY - minY, dz = maxZ - minZ;
+        return { m, vol: Math.max(dx, 0.01) * Math.max(dy, 0.01) * Math.max(dz, 0.01), dz, maxZ, minZ };
+      });
+      const maxVol = Math.max(...meshInfos.map((i) => i.vol), 0.001);
+      const topZ = Math.max(...meshInfos.map((i) => i.maxZ));
+      const botZ = Math.min(...meshInfos.map((i) => i.minZ));
+      const height = Math.max(topZ - botZ, 0.001);
+
+      for (const info of meshInfos) {
+        const m = info.m;
         const geo = new THREE.BufferGeometry();
         geo.setAttribute('position', new THREE.Float32BufferAttribute(m.attributes.position.array, 3));
         if (m.attributes.normal) geo.setAttribute('normal', new THREE.Float32BufferAttribute(m.attributes.normal.array, 3));
         else geo.computeVertexNormals();
         if (m.index) geo.setIndex(m.index.array);
-        const color = Array.isArray(m.color) && m.color.length >= 3
-          ? new THREE.Color(m.color[0], m.color[1], m.color[2])
-          : new THREE.Color(0x2a2a30);
-        const mat = new THREE.MeshStandardMaterial({ color, metalness: 0.35, roughness: 0.55 });
+
+        // STEP 原色（若非黑且非纯白，说明作者确实指定了颜色，予以尊重）
+        const raw = Array.isArray(m.color) && m.color.length >= 3 ? new THREE.Color(m.color[0], m.color[1], m.color[2]) : null;
+        const rawIsMeaningful = raw ? (raw.r + raw.g + raw.b > 0.25 && raw.r + raw.g + raw.b < 2.85) : false;
+
+        // 引脚判定：位于模型底部区域 且 体积远小于主体
+        const nearBottom = info.minZ < botZ + height * 0.42;
+        const isLead = info.vol < maxVol * 0.32 && nearBottom;
+
+        let mat: THREE.MeshStandardMaterial;
+        if (isLead) {
+          // 亮银引脚（镀锡/镀金脚）
+          mat = new THREE.MeshStandardMaterial({ color: 0xd8dce3, metalness: 0.92, roughness: 0.24, envMapIntensity: 1.2 });
+        } else if (rawIsMeaningful) {
+          mat = new THREE.MeshStandardMaterial({ color: raw!, metalness: 0.25, roughness: 0.62 });
+        } else {
+          // 塑封体：深灰哑光（不是纯黑，避免"黑黢黢"看不出体积）
+          mat = new THREE.MeshStandardMaterial({ color: 0x3b3f46, metalness: 0.18, roughness: 0.72 });
+        }
         group.add(new THREE.Mesh(geo, mat));
       }
+
       // KiCad 3D 模型约定 Z 轴朝上；场景 Y 轴朝上 → 绕 X 轴 -90°
       group.rotation.x = -Math.PI / 2;
-      // 底面贴板：算包围盒把最低点抬到 y=0
       const box = new THREE.Box3().setFromObject(group);
       group.position.y = -box.min.y;
       const wrapper = new THREE.Group();

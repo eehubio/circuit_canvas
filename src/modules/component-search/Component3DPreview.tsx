@@ -14,7 +14,7 @@ export function Component3DPreview({ c }: { c: PlacedComponent }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const version = useLibFileStore((s) => s.version); // STEP 转换完成时重建
   const [webglFail, setWebglFail] = useState(false);
-  const rot = useRef({ x: -0.5, y: 0.6, dragging: false, sx: 0, sy: 0, auto: true });
+  const rot = useRef({ x: -0.62, y: 0.72, dragging: false, sx: 0, sy: 0, auto: true });
   const zoomRef = useRef(1);
 
   useEffect(() => {
@@ -30,16 +30,39 @@ export function Component3DPreview({ c }: { c: PlacedComponent }) {
     const W = el.clientWidth || 300, H = 180;
     renderer.setSize(W, H);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.18;
     el.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    scene.add(new THREE.AmbientLight(0xffffff, 0.75));
-    const dir = new THREE.DirectionalLight(0xffffff, 0.9);
-    dir.position.set(4, 8, 6);
-    scene.add(dir);
-    const dir2 = new THREE.DirectionalLight(0xffffff, 0.35);
-    dir2.position.set(-5, 3, -4);
-    scene.add(dir2);
+    // 环境反射：给金属引脚提供高光来源（无 HDR 文件，用渐变天空盒近似 studio 环境）
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const envScene = new THREE.Scene();
+    envScene.background = new THREE.Color(0xf2f6fa);
+    const envTop = new THREE.Mesh(
+      new THREE.SphereGeometry(50, 12, 8),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.BackSide }),
+    );
+    envScene.add(envTop);
+    const softBox = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    softBox.position.set(0, 22, 8);
+    softBox.rotation.x = -Math.PI / 2.2;
+    envScene.add(softBox);
+    const envRT = pmrem.fromScene(envScene, 0.04);
+    scene.environment = envRT.texture;
+
+    // 三点光：主光 + 补光 + 轮廓光
+    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+    const key = new THREE.DirectionalLight(0xffffff, 1.35);
+    key.position.set(5, 9, 6);
+    scene.add(key);
+    const fill = new THREE.DirectionalLight(0xdce6f2, 0.55);
+    fill.position.set(-6, 3, 5);
+    scene.add(fill);
+    const rim = new THREE.DirectionalLight(0xffffff, 0.7);
+    rim.position.set(-2, 4, -7);
+    scene.add(rim);
 
     // 模型：buildComponent3D 内部已做 STEP 缓存优先 + 触发异步转换
     const pivot = new THREE.Group();
@@ -56,13 +79,21 @@ export function Component3DPreview({ c }: { c: PlacedComponent }) {
 
     const maxDim = Math.max(size.x, size.y, size.z, 0.5);
     const camera = new THREE.PerspectiveCamera(40, W / H, 0.01, maxDim * 50);
-    const baseDist = maxDim * 2.1;
+    const baseDist = maxDim * 2.4;
     camera.position.set(0, 0, baseDist);
 
-    // 淡色地面参考网格
-    const grid = new THREE.GridHelper(maxDim * 3, 10, 0xd7dee6, 0xe8eef3);
-    grid.position.y = -size.y / 2 - 0.02;
-    pivot.add(grid);
+    // 绿色 PCB 底板（提供尺度参照与层次感，模型贴在板面上）
+    const padding = Math.max(maxDim * 0.55, 1.2);
+    const boardW = size.x + padding * 2;
+    const boardD = size.z + padding * 2;
+    const boardT = Math.max(maxDim * 0.09, 0.35);
+    const board = new THREE.Mesh(
+      new THREE.BoxGeometry(boardW, boardT, boardD),
+      new THREE.MeshStandardMaterial({ color: 0x2f8f4e, metalness: 0.05, roughness: 0.72 }),
+    );
+    // 器件底面对齐板面顶部
+    board.position.y = -size.y / 2 - boardT / 2;
+    pivot.add(board);
 
     let raf = 0;
     const animate = () => {
@@ -85,7 +116,7 @@ export function Component3DPreview({ c }: { c: PlacedComponent }) {
     };
     const onUp = () => { rot.current.dragging = false; };
     const onWheel = (e: WheelEvent) => { e.preventDefault(); zoomRef.current = Math.min(6, Math.max(0.4, zoomRef.current * (e.deltaY > 0 ? 0.9 : 1.12))); };
-    const onDbl = () => { rot.current.x = -0.5; rot.current.y = 0.6; rot.current.auto = true; zoomRef.current = 1; };
+    const onDbl = () => { rot.current.x = -0.62; rot.current.y = 0.72; rot.current.auto = true; zoomRef.current = 1; };
     renderer.domElement.addEventListener('mousedown', onDown);
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
@@ -106,6 +137,8 @@ export function Component3DPreview({ c }: { c: PlacedComponent }) {
         if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
         else mat?.dispose();
       });
+      envRT.texture.dispose();
+      pmrem.dispose();
       renderer.dispose();
       el.removeChild(renderer.domElement);
     };
@@ -123,7 +156,7 @@ export function Component3DPreview({ c }: { c: PlacedComponent }) {
 
   return (
     <div>
-      <div ref={boxRef} title="拖拽旋转 · 滚轮缩放 · 双击复位" style={{ height: 180, borderRadius: 6, background: 'linear-gradient(180deg,#fafcff,#eef3f7)', cursor: 'grab', overflow: 'hidden' }} />
+      <div ref={boxRef} title="拖拽旋转 · 滚轮缩放 · 双击复位" style={{ height: 190, borderRadius: 6, background: 'linear-gradient(180deg,#fdfdfe,#eaf0f6)', cursor: 'grab', overflow: 'hidden' }} />
       <div style={{ marginTop: 5 }}>
         <span style={{ fontSize: 9, padding: '1px 7px', borderRadius: 4, fontWeight: 700, color: label[1], background: label[2] }}>{label[0]}</span>
       </div>
