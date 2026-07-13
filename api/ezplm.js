@@ -50,7 +50,7 @@ export default async function handler(req, res) {
     const fileUrl = String(req.query.url ?? '');
     let host = '';
     try { host = new URL(fileUrl).hostname; } catch { return res.status(400).send(JSON.stringify({ error: 'invalid url' })); }
-    const okHost = /(^|[.])ezplm[.]cn$/.test(host) || /[.]aliyuncs[.]com$/.test(host) || /[.]myqcloud[.]com$/.test(host) || /[.]amazonaws[.]com$/.test(host);
+    const okHost = /(^|[.])ezplm[.](cn|com)$/.test(host) || /[.]aliyuncs[.]com$/.test(host) || /[.]myqcloud[.]com$/.test(host) || /[.]amazonaws[.]com$/.test(host);
     if (!okHost) return res.status(403).send(JSON.stringify({ error: 'host not allowed', host }));
     try {
       const f = await fetch(fileUrl, { headers: apiKey ? { 'X-API-Key': apiKey } : {} });

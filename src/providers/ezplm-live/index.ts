@@ -132,10 +132,11 @@ export function mapEzplmPart(raw: Raw): ComponentSearchResult {
   const footprint = fpRaw ?? 'SOIC-8';
   // 库文件链接（防御式：footprint/symbol 字段可能是 {name,url} 对象，或独立字段）
   const R = raw as Record<string, unknown>;
-  const footprintFileUrl = pickFileUrl(raw.footprint) ?? pickFileUrl(R.footprintFile) ?? pickFileUrl(R.footprintUrl)
-    ?? pickFileUrl(R.footprint_file) ?? pickFileUrl(R.kicadMod) ?? pickFileUrl(R.mod);
-  const symbolFileUrl = pickFileUrl(raw.symbol) ?? pickFileUrl(R.symbolFile) ?? pickFileUrl(R.symbolUrl)
-    ?? pickFileUrl(R.symbol_file) ?? pickFileUrl(R.kicadSym) ?? pickFileUrl(R.sym);
+  // 真实字段结构（已确认）：footprint.kicadModFile.url / footprint.stepFile.url / symbol.kicadSymFile.url
+  const fpObj = raw.footprint && typeof raw.footprint === 'object' ? (raw.footprint as Raw) : undefined;
+  const symObj = raw.symbol && typeof raw.symbol === 'object' ? (raw.symbol as Raw) : undefined;
+  const footprintFileUrl = pickFileUrl(fpObj?.kicadModFile) ?? pickFileUrl(raw.footprint) ?? pickFileUrl(R.footprintFile) ?? pickFileUrl(R.footprintUrl);
+  const symbolFileUrl = pickFileUrl(symObj?.kicadSymFile) ?? pickFileUrl(raw.symbol) ?? pickFileUrl(R.symbolFile) ?? pickFileUrl(R.symbolUrl);
   // 分类（接口返回的原始分类文本，直接展示；并优先用于类别归类）
   const classification = pickName(raw.category) ?? pickName((raw as Record<string, unknown>).classification)
     ?? pickName((raw as Record<string, unknown>).catalog) ?? pickName((raw as Record<string, unknown>)['分类']);
@@ -154,9 +155,9 @@ export function mapEzplmPart(raw: Raw): ComponentSearchResult {
     attributes: attrs,
     coreParams: attrs,
     datasheetUrl: pickUrl(raw.pdf) ?? pickUrl(raw.datasheet),
+    productUrl: pickUrl(raw.officialUrl) ?? pickUrl(R.official_url),
     // 手册的 parts 响应未定义 3D 模型字段；此处防御式探测常见命名，命中则启用 STEP 下载
-    stepUrl: pickFileUrl(raw.step) ?? pickFileUrl(raw.model3d) ?? pickFileUrl(R['3d_model']) ?? pickFileUrl(raw.stepFile)
-      ?? (typeof raw.footprint === 'object' && raw.footprint ? pickFileUrl((raw.footprint as Record<string, unknown>).model3d) ?? pickFileUrl((raw.footprint as Record<string, unknown>).step) : undefined),
+    stepUrl: pickFileUrl(fpObj?.stepFile) ?? pickFileUrl(raw.step) ?? pickFileUrl(raw.model3d) ?? pickFileUrl(raw.stepFile),
     footprintFileUrl,
     symbolFileUrl,
     classification,

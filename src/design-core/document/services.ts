@@ -44,7 +44,7 @@ export function searchResultToPlaced(r: ComponentSearchResult, reference: string
     quantity: 1,
     unitPrice: r.unitPrice,
     source: r.org || r.componentId.startsWith('ez_') ? 'EZPLM' : 'MOCK',
-    display: { description: r.description, family: r.family, attributes: r.attributes, pins: r.pins, datasheetUrl: r.datasheetUrl, imageUrl: r.imageUrl, stepUrl: r.stepUrl, footprintFileUrl: r.footprintFileUrl, symbolFileUrl: r.symbolFileUrl, classification: r.classification },
+    display: { description: r.description, family: r.family, attributes: r.attributes, pins: r.pins, datasheetUrl: r.datasheetUrl, imageUrl: r.imageUrl, stepUrl: r.stepUrl, officialUrl: r.productUrl, footprintFileUrl: r.footprintFileUrl, symbolFileUrl: r.symbolFileUrl, classification: r.classification },
   };
 }
 

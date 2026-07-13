@@ -58,6 +58,7 @@ const placedComponentSchema = z.object({
       datasheetUrl: z.string().optional(),
       imageUrl: z.string().optional(),
       stepUrl: z.string().optional(),
+      officialUrl: z.string().optional(),
       footprintFileUrl: z.string().optional(),
       symbolFileUrl: z.string().optional(),
       classification: z.string().optional(),

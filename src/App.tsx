@@ -381,8 +381,8 @@ function CompDetail({ iid }: { iid: string }) {
 
       {/* 官网 + PDF */}
       <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-        {(detail?.productUrl)
-          ? <a href={detail.productUrl} target="_blank" rel="noreferrer" style={linkBtn}>🌐 官网</a>
+        {(detail?.productUrl ?? c.display?.officialUrl)
+          ? <a href={detail?.productUrl ?? c.display?.officialUrl} target="_blank" rel="noreferrer" style={linkBtn}>🌐 官网</a>
           : <a href={`https://www.google.com/search?q=${encodeURIComponent(c.manufacturer + ' ' + c.mpn)}`} target="_blank" rel="noreferrer" style={linkBtn}>🌐 官网检索</a>}
         {(detail?.datasheetUrl ?? c.display?.datasheetUrl)
           ? <a href={detail?.datasheetUrl ?? c.display?.datasheetUrl} target="_blank" rel="noreferrer" style={{ ...linkBtn, borderColor: '#fecaca', background: '#fef2f2', color: '#dc2626' }}>📄 PDF下载</a>
