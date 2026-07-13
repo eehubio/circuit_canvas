@@ -84,6 +84,9 @@ const boardSchema = z.object({
   ),
   layerCount: z.number().int().optional(),
   mountingHolesEnabled: z.boolean().optional(),
+  cutWidthMm: z.number().optional(),
+  cutHeightMm: z.number().optional(),
+  cornerRadiusMm: z.number().optional(),
 });
 
 const connectionSchema = z.object({
@@ -91,7 +94,7 @@ const connectionSchema = z.object({
   fromId: z.string(),
   toId: z.string(),
   label: z.string(),
-  style: z.enum(['single', 'double', 'none', 'bus']),
+  style: z.enum(['single', 'double', 'back', 'none', 'bus']),
   color: z.string().optional(),
   labelDx: z.number().optional(),
   labelDy: z.number().optional(),

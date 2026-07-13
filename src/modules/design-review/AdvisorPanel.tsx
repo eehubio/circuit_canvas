@@ -5,7 +5,7 @@
 import { useEffect, useState } from 'react';
 import { useDesignStore } from '../../state/designStore';
 import { getProviders } from '../../providers/factory';
-import { geminiComplete, getGeminiKey } from '../../providers/gemini';
+import { geminiComplete, geminiAvailable, extractJson } from '../../providers/gemini';
 import { recommendLayers } from '../../design-core/document/services';
 import { CATEGORY_DISPLAY, COLORS } from '../../shared/theme';
 import type { PeripheralCircuitRecommendation } from '../../providers/types';
@@ -70,11 +70,11 @@ export function AdvisorPanel() {
     if (!doc.components.length) { setSysSugs([]); setSysSource(null); return; }
     setAnalyzing(true);
     const all = doc.components.map((c) => ({ mpn: c.mpn, category: c.category, family: c.display?.family }));
-    if (getGeminiKey()) {
+    if (await geminiAvailable()) {
       try {
         const prompt = `你是资深硬件工程师。当前 PCB 画布上已有器件：\n${all.map((c) => `- ${c.mpn}（${c.category}${c.family ? '/' + c.family : ''}）`).join('\n')}\n\n请分析构成完整可工作系统还缺哪些功能器件/子电路（晶振、复位、去耦、ESD、接口、供电等），按重要性给出至多8条。严格输出 JSON 数组，勿输出其它文字：\n[{"name":"器件/子电路名","reason":"必要性(30字内)"}]`;
         const text = await geminiComplete(prompt);
-        const parsed = JSON.parse(text.replace(/\`\`\`json|\`\`\`/g, '').trim());
+        const parsed = extractJson<{ name: string; reason: string }[]>(text);
         setSysSugs(parsed.slice(0, 8));
         setSysSource('gemini');
       } catch (e) {
@@ -115,7 +115,7 @@ export function AdvisorPanel() {
       <Section title="🧠 系统补全建议" badge={sysSugs.length || undefined}>
         {doc.components.length === 0 ? <Empty text="添加器件后，AI 分析系统还缺什么" /> : analyzing ? <Empty text="分析中..." /> : (
           <>
-            <div style={{ fontSize: 9.5, color: '#94a3b8', marginBottom: 6 }}>{sysSource === 'gemini' ? '由 Gemini 基于画布器件实时生成' : '规则引擎基于画布器件动态生成（在 Vercel 配置 VITE_GEMINI_API_KEY 后由 Gemini 生成）'}</div>
+            <div style={{ fontSize: 9.5, color: '#94a3b8', marginBottom: 6 }}>{sysSource === 'gemini' ? '由 Gemini 基于画布器件实时生成' : '规则引擎基于画布器件动态生成（在 Vercel 配置 GEMINI_API_KEY 后由 Gemini 生成）'}</div>
             {sysSugs.length === 0 ? <Empty text="当前构成已较完整 ✓" /> : sysSugs.map((g, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '7px 9px', marginBottom: 5, borderRadius: 7, background: '#fff', border: '1px solid #f1f5f9' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>

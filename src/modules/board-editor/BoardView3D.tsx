@@ -7,7 +7,8 @@ import { useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useDesignStore } from '../../state/designStore';
 import { buildComponent3D, MAT } from './footprint3d';
-import { mountingHoleCenters, HOLE_DIAMETER_MM } from '../../design-core/collision';
+import { mountingHoleCenters, HOLE_DIAMETER_MM, lshapeCut } from '../../design-core/collision';
+import { lshapeRoundedSegments } from '../../design-core/geometry/board-outline';
 import { useLibFileStore } from '../../design-core/geometry/lib-file-registry';
 import { stepStats } from './step-loader';
 import type { CircuitCanvasDocument } from '../../design-core/document/types';
@@ -181,14 +182,14 @@ function rebuildBoard(group: THREE.Group, doc: CircuitCanvasDocument) {
     // 用 Shape 构造圆角矩形 / L 形，再挤出厚度
     const shape = new THREE.Shape();
     if (doc.board.shape === 'lshape') {
-      const cutW = W * 0.45, cutH = H * 0.4;
-      shape.moveTo(-W / 2, -H / 2);
-      shape.lineTo(W / 2, -H / 2);
-      shape.lineTo(W / 2, H / 2 - cutH);
-      shape.lineTo(W / 2 - cutW, H / 2 - cutH);
-      shape.lineTo(W / 2 - cutW, H / 2);
-      shape.lineTo(-W / 2, H / 2);
-      shape.lineTo(-W / 2, -H / 2);
+      const { cutW, cutH } = lshapeCut(doc.board);
+      const r = doc.board.cornerRadiusMm ?? 0;
+      const { move, segs } = lshapeRoundedSegments(-W / 2, -H / 2, W, H, cutW, cutH, r);
+      shape.moveTo(move.x, move.y);
+      for (const sg of segs) {
+        if (sg.type === 'L') shape.lineTo(sg.p.x, sg.p.y);
+        else shape.quadraticCurveTo(sg.c.x, sg.c.y, sg.p.x, sg.p.y);
+      }
     } else {
       // 矩形 / 圆角矩形
       const r = doc.board.shape === 'rounded' ? Math.min(W, H) * 0.08 : 1.5;

@@ -15,6 +15,8 @@ import { downloadKicadPcb } from './modules/board-editor/pcbExport';
 import { getEzplmReferenceDesigns, isEzplmPart, type ReferenceDesign } from './providers/ezplm-live';
 import { ensureFootprintFile, ensureSymbolFile, useLibFileStore } from './design-core/geometry/lib-file-registry';
 import { fetchDigikeyOffer, formatDkPrice, type DigikeyOffer } from './providers/digikey';
+import { geminiComplete, geminiAvailable, extractJson } from './providers/gemini';
+import { searchEzplmParts } from './providers/ezplm-live';
 import { ensureStepBytes } from './modules/board-editor/step-loader';
 import type { PlacedComponent as PlacedComponentT } from './design-core/document/types';
 import { BoardCanvas2D } from './modules/board-editor/BoardCanvas2D';
@@ -47,6 +49,7 @@ export default function App() {
   const remove = useDesignStore((s) => s.removeComponent);
   const setBoardSize = useDesignStore((s) => s.setBoardSize);
   const setBoardShape = useDesignStore((s) => s.setBoardShape);
+  const setBoardCut = useDesignStore((s) => s.setBoardCut);
   const toggleMountingHoles = useDesignStore((s) => s.toggleMountingHoles);
   const activeLayer = useDesignStore((s) => s.activeLayer);
   const setActiveLayer = useDesignStore((s) => s.setActiveLayer);
@@ -104,7 +107,13 @@ export default function App() {
     setAiBusy(true);
     try {
       const result = await providers.ai.generateScheme({ prompt: aiPrompt }, ctx);
-      // ezPLM 映射链：组织物料(org 命中) → 云端库(detail 命中但无 org) → 封装占位(未命中)
+      // Gemini 真实链路：直接携带完整器件（已完成 ezPLM 云端映射 / 封装占位）
+      if (result.items?.length) {
+        setAiProposal({ rationale: result.rationale, details: result.items as unknown as NonNullable<typeof aiProposal>['details'] });
+        setAiBusy(false);
+        return;
+      }
+      // Mock 链路：componentIds → 目录映射
       const mapped = await Promise.all(result.componentIds.map(async (id) => {
         const d = await providers.components.getComponentDetail(id, ctx);
         if (d) return { ...d, mapSource: d.org ? ('本组织' as const) : ('ezPLM云端' as const) };
@@ -240,6 +249,22 @@ export default function App() {
               <div style={{ width: 1, height: 16, background: '#E8F3EE', margin: '0 2px' }} />
               <button title="四角定位孔（开启后器件自动避让）" onClick={toggleMountingHoles}
                 style={{ padding: '0 8px', height: 22, borderRadius: 4, border: `1.5px solid ${doc.board.mountingHolesEnabled ? COLORS.green : '#E8F3EE'}`, background: doc.board.mountingHolesEnabled ? COLORS.greenBg : '#fff', color: doc.board.mountingHolesEnabled ? COLORS.green : '#94a3b8', fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>⊙ 定位孔</button>
+              {doc.board.shape === 'lshape' && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 6, fontSize: 10.5, color: '#64748b' }}>
+                  切角
+                  <input type="number" value={Math.round(doc.board.cutWidthMm ?? doc.board.widthMm * 0.45)} min={5} max={doc.board.widthMm * 0.9}
+                    onChange={(e) => setBoardCut(Number(e.target.value), doc.board.cutHeightMm ?? doc.board.heightMm * 0.4, doc.board.cornerRadiusMm ?? 0)}
+                    style={{ width: 42, padding: '2px 4px', borderRadius: 4, border: '1px solid #E8F3EE', fontSize: 11, textAlign: 'center' }} />
+                  ×
+                  <input type="number" value={Math.round(doc.board.cutHeightMm ?? doc.board.heightMm * 0.4)} min={5} max={doc.board.heightMm * 0.9}
+                    onChange={(e) => setBoardCut(doc.board.cutWidthMm ?? doc.board.widthMm * 0.45, Number(e.target.value), doc.board.cornerRadiusMm ?? 0)}
+                    style={{ width: 42, padding: '2px 4px', borderRadius: 4, border: '1px solid #E8F3EE', fontSize: 11, textAlign: 'center' }} />
+                  mm · 圆角
+                  <input type="number" value={doc.board.cornerRadiusMm ?? 0} min={0} max={15}
+                    onChange={(e) => setBoardCut(doc.board.cutWidthMm ?? doc.board.widthMm * 0.45, doc.board.cutHeightMm ?? doc.board.heightMm * 0.4, Number(e.target.value))}
+                    style={{ width: 36, padding: '2px 4px', borderRadius: 4, border: '1px solid #E8F3EE', fontSize: 11, textAlign: 'center' }} />
+                </span>
+              )}
             </div>
             <div style={{ flex: 1 }} />
             {([['bom', '🧾 BOM清单'], ['block', '📊 系统框图'], ['schematic', '⚡ 原理图']] as const).map(([id, label]) => (
@@ -358,6 +383,39 @@ function CompDetail({ iid }: { iid: string }) {
   const [detail, setDetail] = useState<Awaited<ReturnType<typeof providers.components.getComponentDetail>>>(null);
   const [refDesigns, setRefDesigns] = useState<ReferenceDesign[]>([]);
   const [dkOffer, setDkOffer] = useState<DigikeyOffer | null>(null);
+  const [aiAlts, setAiAlts] = useState<{ mpn: string; manufacturer: string; description?: string; footprint: string }[] | null>(null);
+  const [aiAltBusy, setAiAltBusy] = useState(false);
+  const [aiAltMsg, setAiAltMsg] = useState('');
+
+  const searchAiAlts = async () => {
+    if (!c || aiAltBusy) return;
+    setAiAltBusy(true);
+    setAiAltMsg('');
+    setAiAlts(null);
+    try {
+      if (!(await geminiAvailable())) { setAiAltMsg('未配置 Gemini（Vercel 环境变量 GEMINI_API_KEY）'); setAiAltBusy(false); return; }
+      // 1) 大模型给候选替代型号
+      const text = await geminiComplete(`器件 ${c.mpn}（${c.manufacturer}，${c.display?.description ?? ''}，封装 ${c.footprint.name}）。
+请给出 5 个功能等效或引脚兼容的替代器件型号（不同厂商优先，含国产替代）。严格输出 JSON 数组，勿输出其它文字：
+["型号1","型号2","型号3","型号4","型号5"]`);
+      const candidates = extractJson<string[]>(text).filter((m) => typeof m === 'string' && m.trim()).slice(0, 6);
+      // 2) 逐个经 ezPLM API 验证并取详情（比对映射到我们数据库）
+      const found: NonNullable<typeof aiAlts> = [];
+      for (const cand of candidates) {
+        if (found.length >= 5) break;
+        const live = await searchEzplmParts(cand.trim(), 3).catch(() => ({ available: false, items: [] }));
+        const hit = live.items.find((i) => i.mpn.toUpperCase().startsWith(cand.trim().toUpperCase()) && i.mpn !== c.mpn) ?? live.items.find((i) => i.mpn !== c.mpn);
+        if (hit && !found.some((f) => f.mpn === hit.mpn)) {
+          found.push({ mpn: hit.mpn, manufacturer: hit.manufacturer, description: hit.description, footprint: hit.defaultFootprintName });
+        }
+      }
+      setAiAlts(found);
+      if (!found.length) setAiAltMsg('大模型候选型号均未在 ezPLM 库中命中');
+    } catch (e) {
+      setAiAltMsg('搜索失败：' + (e as Error).message);
+    }
+    setAiAltBusy(false);
+  };
   useEffect(() => {
     if (!c) return;
     setRefDesigns([]);
@@ -393,15 +451,6 @@ function CompDetail({ iid }: { iid: string }) {
         {(detail?.datasheetUrl ?? c.display?.datasheetUrl)
           ? <a href={detail?.datasheetUrl ?? c.display?.datasheetUrl} target="_blank" rel="noreferrer" style={{ ...linkBtn, borderColor: '#fecaca', background: '#fef2f2', color: '#dc2626' }}>📄 PDF下载</a>
           : <a href={`https://www.google.com/search?q=${encodeURIComponent(c.mpn + ' datasheet pdf')}`} target="_blank" rel="noreferrer" style={{ ...linkBtn, borderColor: '#fecaca', background: '#fef2f2', color: '#dc2626' }}>📄 PDF检索</a>}
-        {dkOffer?.productUrl && (
-          <a href={dkOffer.productUrl} target="_blank" rel="noreferrer" title={`DigiKey${dkOffer.digikeyPn ? ' · ' + dkOffer.digikeyPn : ''}，点击跳转商品页`}
-            style={{ ...linkBtn, borderColor: '#fecdd3', background: '#fff1f2', color: '#be123c', display: 'inline-flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1.25, padding: '4px 10px' }}>
-            <span style={{ fontWeight: 800 }}>DigiKey {formatDkPrice(dkOffer)}</span>
-            {dkOffer.stock != null && <span style={{ fontSize: 9, opacity: 0.8 }}>库存 {dkOffer.stock.toLocaleString()}</span>}
-          </a>
-        )}
-        <div style={{ flex: 1 }} />
-        <span style={{ fontSize: 12, color: '#059669', fontWeight: 700, alignSelf: 'center' }}>{fmtMoney(c.unitPrice?.amount)}</span>
       </div>
 
       {/* 核心参数 */}
@@ -438,21 +487,55 @@ function CompDetail({ iid }: { iid: string }) {
         </div>
       )}
 
-      {/* 采购渠道 */}
-      {offers.length > 0 && (
-        <div style={{ marginTop: 12, padding: 10, borderRadius: 8, background: '#f0f9ff', border: '1px solid #bae6fd' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#0369a1', marginBottom: 6 }}>🛒 采购渠道（价格/库存来自 ezPLM 供应链）</div>
-          {offers.map((o, i) => (
-            <a key={i} href={o.url} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', marginBottom: 4, borderRadius: 6, background: '#fff', border: '1px solid #e0f2fe', textDecoration: 'none' }}>
-              <span style={{ fontSize: 11.5, fontWeight: 700, color: '#0369a1', width: 66 }}>{o.vendor}</span>
-              <span style={{ fontSize: 11, color: '#059669', fontWeight: 600 }}>{fmtMoney(o.price?.amount)}</span>
-              <span style={{ fontSize: 10, color: '#64748b' }}>库存 {o.stock?.toLocaleString() ?? '—'}</span>
-              <span style={{ flex: 1 }} />
-              <span style={{ fontSize: 10, color: '#94a3b8' }}>跳转 ↗</span>
-            </a>
-          ))}
+      {/* 采购渠道：DigiKey 真实 API；Mouser/CECPORT 暂为演示数据（接入 API 后替换） */}
+      <div style={{ marginTop: 12, padding: 10, borderRadius: 8, background: '#f0f9ff', border: '1px solid #bae6fd' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#0369a1', marginBottom: 6 }}>🛒 采购渠道</div>
+        {dkOffer?.found ? (
+          <a href={dkOffer.productUrl} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', marginBottom: 4, borderRadius: 6, background: '#fff', border: '1px solid #e0f2fe', textDecoration: 'none' }}>
+            <span style={{ fontSize: 11.5, fontWeight: 700, color: '#be123c', width: 66 }}>DigiKey</span>
+            <span style={{ fontSize: 9, padding: '0 5px', borderRadius: 3, background: '#dcfce7', color: '#166534', fontWeight: 700 }}>实时</span>
+            <span style={{ fontSize: 11, color: '#059669', fontWeight: 600 }}>{formatDkPrice(dkOffer)}</span>
+            <span style={{ fontSize: 10, color: '#64748b' }}>库存 {dkOffer.stock?.toLocaleString() ?? '—'}</span>
+            <span style={{ flex: 1 }} />
+            <span style={{ fontSize: 10, color: '#94a3b8' }}>跳转 ↗</span>
+          </a>
+        ) : (
+          <div style={{ fontSize: 10, color: '#94a3b8', padding: '4px 8px', marginBottom: 4 }}>DigiKey：{dkOffer === null ? '查询中… / 未配置' : '未收录该型号'}</div>
+        )}
+        {mockOffers(c.mpn).map((o) => (
+          <a key={o.vendor} href={o.url} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', marginBottom: 4, borderRadius: 6, background: '#fff', border: '1px solid #e0f2fe', textDecoration: 'none', opacity: 0.85 }}>
+            <span style={{ fontSize: 11.5, fontWeight: 700, color: '#0369a1', width: 66 }}>{o.vendor}</span>
+            <span style={{ fontSize: 9, padding: '0 5px', borderRadius: 3, background: '#fef3c7', color: '#92400e', fontWeight: 700 }}>演示</span>
+            <span style={{ fontSize: 11, color: '#059669', fontWeight: 600 }}>¥{o.price.toFixed(2)}</span>
+            <span style={{ fontSize: 10, color: '#64748b' }}>库存 {o.stock.toLocaleString()}</span>
+            <span style={{ flex: 1 }} />
+            <span style={{ fontSize: 10, color: '#94a3b8' }}>跳转 ↗</span>
+          </a>
+        ))}
+      </div>
+
+      {/* AI 替代料：Gemini 找候选 → ezPLM API 验证映射 */}
+      <div style={{ marginTop: 10, padding: 10, borderRadius: 8, background: '#fffbeb', border: '1px solid #fde68a' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: aiAlts?.length || aiAltMsg ? 6 : 0 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#b45309' }}>💡 替代料（AI × ezPLM）</span>
+          <span style={{ flex: 1 }} />
+          <button onClick={searchAiAlts} disabled={aiAltBusy} style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: aiAltBusy ? '#d6d3d1' : '#b45309', color: '#fff', fontSize: 10.5, fontWeight: 700, cursor: aiAltBusy ? 'default' : 'pointer' }}>
+            {aiAltBusy ? '搜索中…' : '🤖 AI 搜索替代料'}
+          </button>
         </div>
-      )}
+        {aiAltMsg && <div style={{ fontSize: 10, color: '#92400e' }}>{aiAltMsg}</div>}
+        {aiAlts?.map((a, i) => (
+          <div key={i} style={{ padding: '6px 8px', marginBottom: 4, borderRadius: 6, background: '#fff', border: '1px solid #fef3c7' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 9, padding: '0 5px', borderRadius: 3, background: '#e0f2fe', color: '#0369a1', fontWeight: 700 }}>ezPLM</span>
+              <span style={{ fontFamily: 'monospace', fontSize: 11.5, fontWeight: 700 }}>{a.mpn}</span>
+              <span style={{ fontSize: 9.5, color: '#94a3b8' }}>{a.manufacturer}</span>
+              <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 4, background: '#f1f5f9', color: '#475569', fontWeight: 600 }}>{a.footprint}</span>
+            </div>
+            {a.description && <div style={{ fontSize: 10, color: '#475569', marginTop: 2 }}>{a.description}</div>}
+          </div>
+        ))}
+      </div>
 
       {/* 替代料（本组织映射） */}
       {alts.length > 0 && (
@@ -473,6 +556,17 @@ function CompDetail({ iid }: { iid: string }) {
       )}
     </div>
   );
+}
+
+/** Mouser/CECPORT 演示报价：按型号稳定哈希生成（接入真实 API 后替换本函数） */
+function mockOffers(mpn: string): { vendor: string; price: number; stock: number; url: string }[] {
+  let h = 0;
+  for (const ch of mpn) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const base = 0.5 + (h % 2400) / 100;
+  return [
+    { vendor: 'Mouser', price: base * 1.08, stock: 800 + (h % 42000), url: `https://www.mouser.cn/c/?q=${encodeURIComponent(mpn)}` },
+    { vendor: 'CECPORT', price: base * 0.96, stock: 300 + ((h >> 3) % 26000), url: `https://www.cecport.com/search?k=${encodeURIComponent(mpn)}` },
+  ];
 }
 
 /** 封装占位器件编辑：补充型号 / 上传 SVG 原理图符号 */

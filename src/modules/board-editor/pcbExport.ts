@@ -10,6 +10,7 @@
  * 嘉立创EDA专业版：文件 → 导入 → KiCad，可直接导入本文件。
  * Altium：.PcbDoc 为专有二进制格式，前端无法生成；较新版 AD 的 Import Wizard 支持导入 KiCad 工程。
  */
+import { lshapeCut } from '../../design-core/collision';
 import type { CircuitCanvasDocument, PlacedComponent } from '../../design-core/document/types';
 import { padFootprintFor } from '../../design-core/geometry/footprint-pads';
 import { mountingHoleCenters, HOLE_DIAMETER_MM } from '../../design-core/collision';
@@ -29,7 +30,8 @@ function edgeCuts(doc: CircuitCanvasDocument): string[] {
     return L;
   }
   if (doc.board.shape === 'lshape') {
-    const cw = W * 0.45, ch = H * 0.4;
+    // 切角尺寸随设置；圆角在制造导出中省略（KiCad 内可后期倒角）
+    const { cutW: cw, cutH: ch } = lshapeCut(doc.board);
     line(0, 0, W, 0);
     line(W, 0, W, H - ch);
     line(W, H - ch, W - cw, H - ch);

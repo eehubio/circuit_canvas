@@ -35,6 +35,7 @@ interface DesignState {
   rotateComponent: (instanceId: string) => void;
   setBoardSize: (w: number, h: number) => void;
   setBoardShape: (shape: BoardShapeKind) => void;
+  setBoardCut: (cutW: number, cutH: number, cornerR: number) => void;
   toggleMountingHoles: () => void;
   setActiveLayer: (layer: 'TOP' | 'BOTTOM') => void;
   flipComponentLayer: (instanceId: string) => void;
@@ -133,6 +134,14 @@ export const useDesignStore = create<DesignState>()(
       set((s) => {
         s.doc.board.widthMm = w;
         s.doc.board.heightMm = h;
+        s.doc = touchDocument(s.doc);
+      }),
+
+    setBoardCut: (cutW, cutH, cornerR) =>
+      set((s) => {
+        s.doc.board.cutWidthMm = Math.max(5, cutW);
+        s.doc.board.cutHeightMm = Math.max(5, cutH);
+        s.doc.board.cornerRadiusMm = Math.max(0, Math.min(15, cornerR));
         s.doc = touchDocument(s.doc);
       }),
 

@@ -7,7 +7,8 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 import { useDesignStore } from '../../state/designStore';
 import { PX_PER_MM, footprintBodyRect } from '../../design-core/geometry';
 import { padFootprintFor } from '../../design-core/geometry/footprint-pads';
-import { mountingHoleCenters, HOLE_DIAMETER_MM } from '../../design-core/collision';
+import { mountingHoleCenters, HOLE_DIAMETER_MM, lshapeCut } from '../../design-core/collision';
+import { lshapeRoundedPathD } from '../../design-core/geometry/board-outline';
 import { CATEGORY_DISPLAY } from '../../shared/theme';
 import type { PlacedComponent } from '../../design-core/document/types';
 
@@ -105,7 +106,7 @@ export function BoardCanvas2D() {
         </defs>
         <rect width="100%" height="100%" fill="url(#grid)" />
         <g transform={`translate(${pan.x},${pan.y}) scale(${zoom})`}>
-          <BoardOutline shape={doc.board.shape} x={ORIGIN.x} y={ORIGIN.y} w={bw} h={bh} />
+          <BoardOutline shape={doc.board.shape} x={ORIGIN.x} y={ORIGIN.y} w={bw} h={bh} board={doc.board} />
           {/* 定位孔 */}
           {mountingHoleCenters(doc.board).map((c, i) => (
             <g key={i}>
@@ -142,15 +143,17 @@ export function BoardCanvas2D() {
 
 const zbtn: React.CSSProperties = { width: 24, height: 24, border: '1px solid #e2e8f0', borderRadius: 4, background: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 700, color: '#475569' };
 
-function BoardOutline({ shape, x, y, w, h }: { shape: string; x: number; y: number; w: number; h: number }) {
+function BoardOutline({ shape, x, y, w, h, board }: { shape: string; x: number; y: number; w: number; h: number; board: import('../../design-core/document/types').BoardDefinition }) {
   const fill = '#f8fdf9', stroke = '#2D5F3F';
   if (shape === 'circle') {
     const r = Math.min(w, h) / 2;
     return <circle cx={x + w / 2} cy={y + h / 2} r={r} fill={fill} stroke={stroke} strokeWidth={2} />;
   }
   if (shape === 'lshape') {
-    const cutW = w * 0.45, cutH = h * 0.4;
-    return <path d={`M${x},${y} H${x + w} V${y + h - cutH} H${x + w - cutW} V${y + h} H${x} Z`} fill={fill} stroke={stroke} strokeWidth={2} />;
+    const { cutW: cwMm, cutH: chMm } = lshapeCut(board);
+    const cutW = cwMm * PX_PER_MM, cutH = chMm * PX_PER_MM;
+    const r = (board.cornerRadiusMm ?? 0) * PX_PER_MM;
+    return <path d={lshapeRoundedPathD(x, y, w, h, cutW, cutH, r)} fill={fill} stroke={stroke} strokeWidth={2} />;
   }
   return <rect x={x} y={y} width={w} height={h} rx={shape === 'rounded' ? 18 : 6} fill={fill} stroke={stroke} strokeWidth={2} />;
 }

@@ -144,7 +144,7 @@ export function LibraryPreview({ c }: { c: PlacedComponent }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7 }}>
             <span style={{ flex: 1, fontSize: 9.5, color: '#94a3b8' }}>{c.display?.stepUrl ? 'STEP 源文件（ezPLM）' : 'ezPLM 未提供该器件的 STEP 文件'}</span>
             {c.display?.stepUrl
-              ? <a href={c.display.stepUrl} target="_blank" rel="noreferrer" style={{ ...dlBtn, padding: '4px 10px', textDecoration: 'none' }}>⬇ .step</a>
+              ? <a href={`/api/ezplm?path=file&url=${encodeURIComponent(c.display.stepUrl)}&dl=${encodeURIComponent(c.mpn + '.step')}`} style={{ ...dlBtn, padding: '4px 10px', textDecoration: 'none' }}>⬇ .step</a>
               : <button disabled style={{ ...dlBtn, opacity: 0.45, cursor: 'not-allowed', padding: '4px 10px' }}>⬇ .step</button>}
           </div>
         </div>

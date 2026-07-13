@@ -82,18 +82,6 @@ export function Component3DPreview({ c }: { c: PlacedComponent }) {
     const baseDist = maxDim * 2.4;
     camera.position.set(0, 0, baseDist);
 
-    // 绿色 PCB 底板（提供尺度参照与层次感，模型贴在板面上）
-    const padding = Math.max(maxDim * 0.55, 1.2);
-    const boardW = size.x + padding * 2;
-    const boardD = size.z + padding * 2;
-    const boardT = Math.max(maxDim * 0.09, 0.35);
-    const board = new THREE.Mesh(
-      new THREE.BoxGeometry(boardW, boardT, boardD),
-      new THREE.MeshStandardMaterial({ color: 0x2f8f4e, metalness: 0.05, roughness: 0.72 }),
-    );
-    // 器件底面对齐板面顶部
-    board.position.y = -size.y / 2 - boardT / 2;
-    pivot.add(board);
 
     let raf = 0;
     const animate = () => {

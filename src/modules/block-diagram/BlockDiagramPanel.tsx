@@ -186,7 +186,7 @@ export function BlockDiagramPanel({ isFullscreen, onToggleFullscreen }: { isFull
         {sel?.type === 'arrow' && (() => {
           const a = conns.find((c) => c.id === sel.id);
           if (!a) return null;
-          const styles: [string, string][] = [['single', '→单向'], ['double', '↔双向'], ['bus', '≡总线'], ['none', '—无箭头']];
+          const styles: [string, string][] = [['single', '→单向'], ['back', '←反向'], ['double', '↔双向'], ['bus', '≡总线'], ['none', '—无箭头']];
           return (
             <>
               <div style={{ width: 1, height: 14, background: '#E8F3EE' }} />
@@ -220,8 +220,8 @@ export function BlockDiagramPanel({ isFullscreen, onToggleFullscreen }: { isFull
                 <g key={a.id}>
                   <line x1={f.x} y1={f.y} x2={t.x} y2={t.y} stroke="transparent" strokeWidth={12} style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setSel({ type: 'arrow', id: a.id }); }} />
                   <line x1={f.x} y1={f.y} x2={t.x} y2={t.y} stroke={isSel ? '#2563eb' : a.style === 'bus' ? '#475569' : '#64748b'} strokeWidth={sw}
-                    markerEnd={a.style === 'none' || a.style === 'bus' ? undefined : 'url(#bdarrow)'}
-                    markerStart={a.style === 'double' ? 'url(#bdarrow)' : undefined}
+                    markerEnd={a.style === 'single' || a.style === 'double' ? 'url(#bdarrow)' : undefined}
+                    markerStart={a.style === 'double' || a.style === 'back' ? 'url(#bdarrow)' : undefined}
                     style={{ pointerEvents: 'none' }} />
                   {a.label && (
                     <text x={mx} y={my} transform={a.labelRot ? `rotate(${a.labelRot} ${mx} ${my})` : undefined}

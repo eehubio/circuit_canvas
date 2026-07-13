@@ -144,6 +144,8 @@ export interface AiSchemeRequest {
 export interface AiSchemeResult {
   componentIds: string[];
   rationale: string;
+  /** Gemini 真实链路：完整器件对象（含 ezPLM 映射来源），存在时优先于 componentIds */
+  items?: (ComponentSearchResult & { mapSource?: string })[];
 }
 export interface AiModelProvider {
   generateScheme(req: AiSchemeRequest, ctx: AccessContext): Promise<AiSchemeResult>;

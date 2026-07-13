@@ -50,6 +50,10 @@ export interface BoardDefinition {
   layerCount?: number;
   /** 是否启用四角定位孔 */
   mountingHolesEnabled?: boolean;
+  /** L 形切角尺寸（mm，缺省 45%W / 40%H）与凸角圆角半径（mm，缺省 0 直角） */
+  cutWidthMm?: number;
+  cutHeightMm?: number;
+  cornerRadiusMm?: number;
 }
 
 /* ---------- 已放置器件 ---------- */
@@ -117,7 +121,7 @@ export interface FunctionalBlock {
   componentIds?: string[]; // 关联的器件 instanceId
 }
 
-export type ConnectionStyle = 'single' | 'double' | 'none' | 'bus';
+export type ConnectionStyle = 'single' | 'double' | 'back' | 'none' | 'bus';
 
 export interface LogicalConnection {
   id: string;

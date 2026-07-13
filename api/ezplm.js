@@ -58,6 +58,10 @@ export default async function handler(req, res) {
       res.status(f.status);
       res.setHeader('Content-Type', f.headers.get('content-type') ?? 'application/octet-stream');
       res.setHeader('Cache-Control', 'public, max-age=86400');
+      // dl 参数：作为附件下载（浏览器直接保存，不再跳转 CDN 签名链接）
+      if (req.query.dl) {
+        res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(String(req.query.dl))}"`);
+      }
       return res.send(buf);
     } catch (err) {
       return res.status(502).send(JSON.stringify({ error: 'file fetch failed', detail: String(err) }));

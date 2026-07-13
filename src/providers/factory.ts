@@ -21,7 +21,7 @@ import {
   EzplmIdentityProvider, EzplmProjectProvider,
 } from './ezplm';
 
-import { getGeminiKey } from './gemini';
+import { geminiAvailable } from './gemini';
 import type { AiModelProvider, AiSchemeRequest, AccessContext } from './types';
 
 /** 动态 AI Provider：每次调用时检查 Gemini Key（localStorage/env），有则走 Gemini，无则回退 Mock */
@@ -29,9 +29,8 @@ function makeAi(): AiModelProvider {
   const mock = new MockAiModelProvider();
   return {
     async generateScheme(req: AiSchemeRequest, ctx: AccessContext) {
-      const key = getGeminiKey();
-      if (key) {
-        try { return await new GeminiAiProvider(key).generateScheme(req, ctx); }
+      if (await geminiAvailable()) {
+        try { return await new GeminiAiProvider().generateScheme(req, ctx); }
         catch (e) { console.warn('[AI] Gemini 调用失败，回退 Mock:', e); }
       }
       return (mock.generateScheme as (r: AiSchemeRequest, c?: AccessContext) => ReturnType<AiModelProvider["generateScheme"]>)(req, ctx);
