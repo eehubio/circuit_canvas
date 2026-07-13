@@ -59,6 +59,12 @@ export interface ComponentSearchResult {
   datasheetUrl?: string;
   /** 3D 模型（STEP）文件链接（若接口提供） */
   stepUrl?: string;
+  /** .kicad_mod 封装文件链接（运行时解析出逐点精确焊盘） */
+  footprintFileUrl?: string;
+  /** .kicad_sym 符号文件链接（运行时解析出真实引脚名符号） */
+  symbolFileUrl?: string;
+  /** 器件分类（接口原始分类文本） */
+  classification?: string;
   /** 核心参数（约10项，键值对） */
   coreParams?: Record<string, string>;
 }

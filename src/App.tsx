@@ -13,6 +13,7 @@ import { LibraryPreview } from './modules/component-search/LibraryPreview';
 import { padFootprintFor as padFootprintForT } from './design-core/geometry/footprint-pads';
 import { downloadKicadPcb } from './modules/board-editor/pcbExport';
 import { getEzplmReferenceDesigns, isEzplmPart, type ReferenceDesign } from './providers/ezplm-live';
+import { ensureFootprintFile, ensureSymbolFile, useLibFileStore } from './design-core/geometry/lib-file-registry';
 import type { PlacedComponent as PlacedComponentT } from './design-core/document/types';
 import { BoardCanvas2D } from './modules/board-editor/BoardCanvas2D';
 import { BoardView3D } from './modules/board-editor/BoardView3D';
@@ -51,6 +52,15 @@ export default function App() {
   const toggleAllRefDes = useDesignStore((s) => s.toggleAllRefDes);
   const hideAllRefDes = useDesignStore((s) => s.hideAllRefDes);
   const toggleRefDesHidden = useDesignStore((s) => s.toggleRefDesHidden);
+  // 库文件版本：真实 .kicad_mod/.kicad_sym 解析注册后递增 → 全树切换到精确数据
+  useLibFileStore((st) => st.version);
+  // 画布器件按需拉取 ezPLM 库文件（幂等）
+  useEffect(() => {
+    for (const c of doc.components) {
+      ensureFootprintFile(c.footprint.name, c.display?.footprintFileUrl);
+      ensureSymbolFile(c.mpn, c.display?.symbolFileUrl);
+    }
+  }, [doc.components]);
   const placeScheme = useDesignStore((s) => s.placeScheme);
   const loadDocument = useDesignStore((s) => s.loadDocument);
 
@@ -363,7 +373,8 @@ function CompDetail({ iid }: { iid: string }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 16, fontWeight: 700 }}>{c.reference}</div>
           <div style={{ fontSize: 14, fontFamily: 'monospace', color: COLORS.green, fontWeight: 600, wordBreak: 'break-all' }}>{c.mpn}</div>
-          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{disp.name} · {c.manufacturer} · {c.footprint.name}</div>
+          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{c.display?.classification ?? disp.name} · {c.manufacturer} · {c.footprint.name}</div>
+          {c.display?.classification && <span style={{ display: 'inline-block', marginTop: 4, fontSize: 9.5, padding: '1px 7px', borderRadius: 4, background: '#f1f5f9', color: '#475569', fontWeight: 600 }}>分类：{c.display.classification}</span>}
         </div>
         <ComponentImage c={c} imageUrl={detail?.imageUrl ?? c.display?.imageUrl} />
       </div>

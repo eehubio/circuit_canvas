@@ -8,10 +8,12 @@ import * as THREE from 'three';
 import { useDesignStore } from '../../state/designStore';
 import { buildComponent3D, MAT } from './footprint3d';
 import { mountingHoleCenters, HOLE_DIAMETER_MM } from '../../design-core/collision';
+import { useLibFileStore } from '../../design-core/geometry/lib-file-registry';
 import type { CircuitCanvasDocument } from '../../design-core/document/types';
 
 export function BoardView3D() {
   const doc = useDesignStore((s) => s.doc);
+  const libVersion = useLibFileStore((s) => s.version);
   const mountRef = useRef<HTMLDivElement>(null);
   const stateRef = useRef<{
     renderer?: THREE.WebGLRenderer; scene?: THREE.Scene; camera?: THREE.PerspectiveCamera;
@@ -113,7 +115,7 @@ export function BoardView3D() {
     const st = stateRef.current;
     if (!st.boardGroup) return;
     rebuildBoard(st.boardGroup, doc);
-  }, [doc.board.widthMm, doc.board.heightMm, doc.board.shape, doc.board.mountingHolesEnabled, doc.components]);
+  }, [doc.board.widthMm, doc.board.heightMm, doc.board.shape, doc.board.mountingHolesEnabled, doc.components, libVersion]);
 
   return (
     <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>

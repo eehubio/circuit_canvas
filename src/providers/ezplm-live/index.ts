@@ -110,12 +110,18 @@ export function mapEzplmPart(raw: Raw): ComponentSearchResult {
     ?? pickName((raw as Record<string, unknown>).mfr) ?? pickName((raw as Record<string, unknown>).manufacturerName)
     ?? pickName((raw as Record<string, unknown>)['厂商']) ?? '—';
   const fpRaw = pickName(raw.footprint);
-  // 保留原始 KiCad 封装名 —— padFootprintFor 的解析器会从名字生成真实焊盘；
-  // 仅当名字缺失时回退内置默认
+  // 保留原始 KiCad 封装名 —— 优先运行时解析真实 .kicad_mod 文件（下方 URL），
+  // 文件拉取中/失败时回退名字参数化解析；名字也缺失时回退内置默认
   const footprint = fpRaw ?? 'SOIC-8';
+  // 库文件链接（防御式：footprint/symbol 字段可能是 {name,url} 对象，或独立字段）
+  const footprintFileUrl = pickUrl(raw.footprint) ?? pickUrl((raw as Record<string, unknown>).footprintFile) ?? pickUrl((raw as Record<string, unknown>).footprintUrl);
+  const symbolFileUrl = pickUrl(raw.symbol) ?? pickUrl((raw as Record<string, unknown>).symbolFile) ?? pickUrl((raw as Record<string, unknown>).symbolUrl);
+  // 分类（接口返回的原始分类文本，直接展示；并优先用于类别归类）
+  const classification = pickName(raw.category) ?? pickName((raw as Record<string, unknown>).classification)
+    ?? pickName((raw as Record<string, unknown>).catalog) ?? pickName((raw as Record<string, unknown>)['分类']);
   const attrs = pickAttrs(raw.attributes);
   const description = str(raw.description) ?? str(raw.productName) ?? str(raw.title) ?? Object.entries(attrs).slice(0, 3).map(([k, v]) => `${k}:${v}`).join(' ');
-  const category = inferCategory([mpn, manufacturer, description, fpRaw ?? '', Object.values(attrs).join(' ')].join(' '));
+  const category = inferCategory([classification ?? '', mpn, manufacturer, description, fpRaw ?? '', Object.values(attrs).join(' ')].join(' '));
   return {
     componentId: EZ_PREFIX + id,
     mpn,
@@ -129,7 +135,11 @@ export function mapEzplmPart(raw: Raw): ComponentSearchResult {
     coreParams: attrs,
     datasheetUrl: pickUrl(raw.pdf) ?? pickUrl(raw.datasheet),
     // 手册的 parts 响应未定义 3D 模型字段；此处防御式探测常见命名，命中则启用 STEP 下载
-    stepUrl: pickUrl(raw.step) ?? pickUrl(raw.model3d) ?? pickUrl((raw as Record<string, unknown>)['3d_model']) ?? pickUrl(raw.stepFile),
+    stepUrl: pickUrl(raw.step) ?? pickUrl(raw.model3d) ?? pickUrl((raw as Record<string, unknown>)['3d_model']) ?? pickUrl(raw.stepFile)
+      ?? (typeof raw.footprint === 'object' && raw.footprint ? pickUrl((raw.footprint as Record<string, unknown>).model3d) ?? pickUrl((raw.footprint as Record<string, unknown>).step) : undefined),
+    footprintFileUrl,
+    symbolFileUrl,
+    classification,
     imageUrl: pickUrl(raw.image) ?? pickUrl(raw.photo),
   };
 }

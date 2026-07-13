@@ -6,6 +6,7 @@
  */
 import type { PlacedComponent } from '../../design-core/document/types';
 import { padFootprintFor as padFootprintForSym } from '../../design-core/geometry/footprint-pads';
+import { symbolOverrideFor, type ParsedSymbol } from '../../design-core/geometry/lib-file-registry';
 
 const STROKE = '#334155';
 const PIN = '#7c2d12';
@@ -172,9 +173,35 @@ function customSvgSymbol(svg: string): SymbolDef {
   };
 }
 
+
+/** ezPLM 真实 .kicad_sym 解析结果 → 符号（真实引脚名/编号，端口=引脚连接点，stubLen=0） */
+function parsedSymbol(ps: ParsedSymbol): SymbolDef {
+  return {
+    w: ps.w, h: ps.h, stubLen: 0,
+    ports: ps.pins.map((p) => ({ x: p.tipX, y: p.tipY, name: p.name })),
+    render: (ref, label) => (
+      <g>
+        {ps.rects.map((r, i) => <rect key={i} x={r.x} y={r.y} width={r.w} height={r.h} rx={1} fill={FILL} stroke={STROKE} strokeWidth={1.6} />)}
+        {ps.pins.map((p, i) => (
+          <g key={i}>
+            <line x1={p.tipX} y1={p.tipY} x2={p.endX} y2={p.endY} stroke={PIN} strokeWidth={1.3} />
+            {p.name && <text x={p.nameX} y={p.nameY} textAnchor={p.endX >= p.tipX ? 'start' : 'end'} fontSize={6.5} fill={PIN} fontFamily="monospace">{p.name}</text>}
+            {p.number && <text x={p.numX} y={p.numY} textAnchor="middle" fontSize={5.5} fill="#94a3b8" fontFamily="monospace">{p.number}</text>}
+          </g>
+        ))}
+        <text x={ps.w / 2} y={-5} textAnchor="middle" fontSize={9} fontWeight={700} fill="#0e7490" fontFamily="monospace">{ref}</text>
+        <text x={ps.w / 2} y={ps.h + 12} textAnchor="middle" fontSize={8} fill="#334155" fontFamily="monospace">{label.length > 18 ? label.slice(0, 16) + '..' : label}</text>
+      </g>
+    ),
+  };
+}
+
 /** 根据器件选符号 */
 export function symbolFor(c: PlacedComponent): SymbolDef {
   if (c.customSymbolSvg) return customSvgSymbol(c.customSymbolSvg);
+  // ezPLM 真实符号文件解析结果优先（真实引脚名）
+  const parsed = symbolOverrideFor(c.mpn);
+  if (parsed) return parsedSymbol(parsed);
   // ezPLM 实时物料：族/引脚名未知，按真实引脚数生成编号符号（不套内置模板）
   if (c.componentId.startsWith('ez_') && c.category !== 'passive') {
     const pinCount = c.display?.pins ?? padFootprintForSym(c.footprint.name)?.pads.length ?? 6;

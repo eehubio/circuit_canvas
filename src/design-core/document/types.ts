@@ -96,6 +96,9 @@ export interface PlacedComponent {
     datasheetUrl?: string;
     imageUrl?: string;
     stepUrl?: string;
+    footprintFileUrl?: string;
+    symbolFileUrl?: string;
+    classification?: string;
   };
 }
 

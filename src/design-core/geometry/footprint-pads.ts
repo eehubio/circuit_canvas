@@ -11,6 +11,7 @@
  */
 
 import { parseKicadFootprintName } from './kicad-name-parser';
+import { footprintOverrideFor } from './lib-file-registry';
 
 export interface Pad {
   /** 焊盘中心相对封装中心 (mm) */
@@ -131,6 +132,9 @@ export const PAD_FOOTPRINTS: Record<string, PadFootprint> = {
 const parsedCache = new Map<string, PadFootprint | null>();
 
 export function padFootprintFor(name: string): PadFootprint | null {
+  // 运行时解析的真实 .kicad_mod 覆盖优先（逐点精确）
+  const override = footprintOverrideFor(name);
+  if (override) return override;
   const builtin = PAD_FOOTPRINTS[name];
   if (builtin) return builtin;
   // ezPLM 返回的标准 KiCad 封装名 → 参数化解析真实焊盘

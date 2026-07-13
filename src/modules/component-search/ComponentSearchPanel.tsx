@@ -98,7 +98,7 @@ function ResultCard({ r, expanded, onToggle, onAdd, placed }: {
             <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 600, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.mpn}</span>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 3, fontSize: 11, color: '#6b7280' }}>
-            <span>{r.defaultFootprintName}</span><span>·</span><span>{r.manufacturer}</span><span>·</span>
+            <span>{r.classification ?? r.defaultFootprintName}</span><span>·</span><span>{r.manufacturer}</span><span>·</span>
             <span style={{ color: '#059669', fontWeight: 600 }}>{fmtMoney(r.unitPrice?.amount)}</span>
           </div>
         </div>

@@ -45,6 +45,25 @@ export default async function handler(req, res) {
   if (path === 'status') {
     return res.status(200).send(JSON.stringify({ configured: !!apiKey }));
   }
+  // 库文件拉取：footprint/symbol/step 等文件链接（规避浏览器 CORS）；仅允许可信域
+  if (path === 'file') {
+    const fileUrl = String(req.query.url ?? '');
+    let host = '';
+    try { host = new URL(fileUrl).hostname; } catch { return res.status(400).send(JSON.stringify({ error: 'invalid url' })); }
+    const okHost = /(^|[.])ezplm[.]cn$/.test(host) || /[.]aliyuncs[.]com$/.test(host) || /[.]myqcloud[.]com$/.test(host) || /[.]amazonaws[.]com$/.test(host);
+    if (!okHost) return res.status(403).send(JSON.stringify({ error: 'host not allowed', host }));
+    try {
+      const f = await fetch(fileUrl, { headers: apiKey ? { 'X-API-Key': apiKey } : {} });
+      const buf = Buffer.from(await f.arrayBuffer());
+      res.status(f.status);
+      res.setHeader('Content-Type', f.headers.get('content-type') ?? 'application/octet-stream');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.send(buf);
+    } catch (err) {
+      return res.status(502).send(JSON.stringify({ error: 'file fetch failed', detail: String(err) }));
+    }
+  }
+
   if (!apiKey) {
     return res.status(501).send(JSON.stringify({ error: 'EZPLM_API_KEY not configured', hint: 'Vercel → Settings → Environment Variables 添加 EZPLM_API_KEY 后 Redeploy' }));
   }
