@@ -13,6 +13,9 @@ const footprintOverrides = new Map<string, PadFootprint>(); // key: 封装名
 export interface ParsedSymbol {
   w: number; h: number;
   rects: { x: number; y: number; w: number; h: number }[];
+  /** 多边形/折线（运放三角形等），SVG path d */
+  polys: string[];
+  circles: { x: number; y: number; r: number }[];
   pins: { tipX: number; tipY: number; endX: number; endY: number; name: string; number: string; nameX: number; nameY: number; numX: number; numY: number }[];
 }
 const symbolOverrides = new Map<string, ParsedSymbol>(); // key: mpn
@@ -99,63 +102,116 @@ export function parseKicadSym(text: string): ParsedSymbol | null {
     const lib = roots.find((r): r is SExpr[] => isList(r) && head(r) === 'kicad_symbol_lib');
     const symRoot = lib ? find(lib, 'symbol') : roots.find((r): r is SExpr[] => isList(r) && head(r) === 'symbol');
     if (!symRoot) return null;
-    // 收集所有嵌套子 symbol（_0_1 图形单元 / _1_1 引脚单元）里的 rectangle 与 pin
-    const rects: SExpr[][] = [];
-    const pins: SExpr[][] = [];
-    const walk = (node: SExpr[]) => {
-      rects.push(...findAll(node, 'rectangle'));
-      pins.push(...findAll(node, 'pin'));
-      for (const sub of findAll(node, 'symbol')) walk(sub);
+
+    // 按【单元】分组收集图形与引脚（多单元符号如双运放 LM358：_1_1/_2_1/_3_1；_0_* 为公共图形）
+    interface RawUnit { rects: SExpr[][]; polys: SExpr[][]; circles: SExpr[][]; pins: SExpr[][] }
+    const units = new Map<number, RawUnit>();
+    const unitOf = (name: string): number => {
+      const m = name.match(/_(\d+)_\d+$/);
+      return m ? parseInt(m[1], 10) : 1;
     };
-    walk(symRoot);
-    if (!pins.length) return null;
-
-    // 世界范围（mm，Y上）：引脚连接点 + 矩形
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    const rawPins = pins.map((p) => {
-      const at = find(p, 'at');
-      const len = num(find(p, 'length'), 1) || 2.54;
-      const x = num(at, 1), y = num(at, 2), ang = num(at, 3);
-      const rad = (ang * Math.PI) / 180;
-      // 引脚从连接点(at)沿角度方向延伸 length 指向本体
-      const ex = x + Math.cos(rad) * len, ey = y + Math.sin(rad) * len;
-      const nameL = find(p, 'name'), numL = find(p, 'number');
-      minX = Math.min(minX, x, ex); maxX = Math.max(maxX, x, ex);
-      minY = Math.min(minY, y, ey); maxY = Math.max(maxY, y, ey);
-      return { x, y, ex, ey, ang, name: String(nameL?.[1] ?? ''), number: String(numL?.[1] ?? '') };
-    });
-    const rawRects = rects.map((r) => {
-      const s1 = find(r, 'start'), e1 = find(r, 'end');
-      const x1 = num(s1, 1), y1 = num(s1, 2), x2 = num(e1, 1), y2 = num(e1, 2);
-      minX = Math.min(minX, x1, x2); maxX = Math.max(maxX, x1, x2);
-      minY = Math.min(minY, y1, y2); maxY = Math.max(maxY, y1, y2);
-      return { x1, y1, x2, y2 };
-    });
-    // 原点平移量对齐 2.54 栅格 → 端口像素坐标保持 10px 栅格
+    const bucket = (u: number): RawUnit => {
+      if (!units.has(u)) units.set(u, { rects: [], polys: [], circles: [], pins: [] });
+      return units.get(u)!;
+    };
+    // 根符号直挂的图形归单元 1
+    const rootB = bucket(1);
+    rootB.rects.push(...findAll(symRoot, 'rectangle'));
+    rootB.polys.push(...findAll(symRoot, 'polyline'));
+    rootB.circles.push(...findAll(symRoot, 'circle'));
+    rootB.pins.push(...findAll(symRoot, 'pin'));
+    for (const sub of findAll(symRoot, 'symbol')) {
+      const u = unitOf(String(sub[1] ?? ''));
+      const b = bucket(u);
+      b.rects.push(...findAll(sub, 'rectangle'));
+      b.polys.push(...findAll(sub, 'polyline'));
+      b.circles.push(...findAll(sub, 'circle'));
+      b.pins.push(...findAll(sub, 'pin'));
+    }
+    // 公共单元 0 合并进最小编号的实际单元
+    const realUnits = [...units.keys()].filter((u) => u > 0).sort((a, b) => a - b);
+    if (units.has(0) && realUnits.length) {
+      const tgt = bucket(realUnits[0]), src = units.get(0)!;
+      tgt.rects.push(...src.rects); tgt.polys.push(...src.polys);
+      tgt.circles.push(...src.circles); tgt.pins.push(...src.pins);
+      units.delete(0);
+    }
     const g = 2.54;
-    const ox = Math.floor(minX / g) * g;
-    const oyTop = Math.ceil(maxY / g) * g;
-    const toPx = (x: number, y: number) => ({ x: (x - ox) * S, y: (oyTop - y) * S });
-    const wh = toPx(Math.ceil(maxX / g) * g, Math.floor(minY / g) * g);
+    const S2 = S; // px per mm
+    // 逐单元解析原始 mm 坐标并计算包围盒
+    const parsedUnits = realUnits.map((u) => {
+      const b = units.get(u)!;
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      const grow = (x: number, y: number) => { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y); };
+      const pins = b.pins.map((pn) => {
+        const at = find(pn, 'at');
+        const len = num(find(pn, 'length'), 1) || 2.54;
+        const x = num(at, 1), y = num(at, 2), ang = num(at, 3);
+        const rad = (ang * Math.PI) / 180;
+        const ex = x + Math.cos(rad) * len, ey = y + Math.sin(rad) * len;
+        grow(x, y); grow(ex, ey);
+        const nameL = find(pn, 'name'), numL = find(pn, 'number');
+        return { x, y, ex, ey, name: String(nameL?.[1] ?? ''), number: String(numL?.[1] ?? '') };
+      });
+      const rects = b.rects.map((r) => {
+        const s1 = find(r, 'start'), e1 = find(r, 'end');
+        const x1 = num(s1, 1), y1 = num(s1, 2), x2 = num(e1, 1), y2 = num(e1, 2);
+        grow(x1, y1); grow(x2, y2);
+        return { x1, y1, x2, y2 };
+      });
+      const polys = b.polys.map((pl) => {
+        const pts = find(pl, 'pts');
+        const xy = pts ? findAll(pts, 'xy').map((q) => ({ x: num(q, 1), y: num(q, 2) })) : [];
+        xy.forEach((q) => grow(q.x, q.y));
+        return xy;
+      }).filter((xy) => xy.length >= 2);
+      const circles = b.circles.map((ci) => {
+        const c1 = find(ci, 'center');
+        const r1 = num(find(ci, 'radius'), 1);
+        const cx = num(c1, 1), cy = num(c1, 2);
+        grow(cx - r1, cy - r1); grow(cx + r1, cy + r1);
+        return { cx, cy, r: r1 };
+      });
+      if (!pins.length && !rects.length && !polys.length) return null;
+      if (!Number.isFinite(minX)) { minX = 0; maxX = 0; minY = 0; maxY = 0; }
+      return { pins, rects, polys, circles, minX, maxX, minY, maxY };
+    }).filter((x): x is NonNullable<typeof x> => !!x);
+    if (!parsedUnits.length || !parsedUnits.some((u) => u.pins.length)) return null;
 
-    return {
-      w: wh.x, h: wh.y,
-      rects: rawRects.map((r) => {
+    // 单元水平排布：每单元独立归一化（原点对齐 2.54 栅格保证端口在 10px 栅格），x 偏移取 10px 倍数
+    const out: ParsedSymbol = { w: 0, h: 0, rects: [], polys: [], circles: [], pins: [] };
+    let xCursor = 0;
+    for (const un of parsedUnits) {
+      const ox = Math.floor(un.minX / g) * g;
+      const oyTop = Math.ceil(un.maxY / g) * g;
+      const toPx = (x: number, y: number) => ({ x: xCursor + (x - ox) * S2, y: (oyTop - y) * S2 });
+      const wh = { w: (Math.ceil(un.maxX / g) * g - ox) * S2, h: (oyTop - Math.floor(un.minY / g) * g) * S2 };
+      for (const r of un.rects) {
         const a = toPx(Math.min(r.x1, r.x2), Math.max(r.y1, r.y2));
-        return { x: a.x, y: a.y, w: Math.abs(r.x2 - r.x1) * S, h: Math.abs(r.y2 - r.y1) * S };
-      }),
-      pins: rawPins.map((p) => {
+        out.rects.push({ x: a.x, y: a.y, w: Math.abs(r.x2 - r.x1) * S2, h: Math.abs(r.y2 - r.y1) * S2 });
+      }
+      for (const pl of un.polys) {
+        const d = pl.map((q, i) => { const a = toPx(q.x, q.y); return `${i === 0 ? 'M' : 'L'}${a.x.toFixed(1)},${a.y.toFixed(1)}`; }).join(' ');
+        out.polys.push(d);
+      }
+      for (const ci of un.circles) {
+        const a = toPx(ci.cx, ci.cy);
+        out.circles.push({ x: a.x, y: a.y, r: ci.r * S2 });
+      }
+      for (const p of un.pins) {
         const tip = toPx(p.x, p.y), end = toPx(p.ex, p.ey);
-        // 引脚名靠本体端，编号在线中上方
-        const mid = { x: (tip.x + end.x) / 2, y: (tip.y + end.y) / 2 };
-        return {
+        out.pins.push({
           tipX: tip.x, tipY: tip.y, endX: end.x, endY: end.y,
           name: p.name === '~' ? '' : p.name, number: p.number,
           nameX: end.x + (end.x >= tip.x ? 3 : -3), nameY: end.y + 2.5,
-          numX: mid.x, numY: mid.y - 2,
-        };
-      }),
-    };
+          numX: (tip.x + end.x) / 2, numY: (tip.y + end.y) / 2 - 2,
+        });
+      }
+      out.h = Math.max(out.h, wh.h);
+      xCursor += Math.ceil((wh.w + 20) / 10) * 10; // 单元间隔，保持 10px 栅格
+    }
+    out.w = Math.max(10, xCursor - 20);
+    return out;
   } catch {
     return null;
   }

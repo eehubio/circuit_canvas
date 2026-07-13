@@ -181,7 +181,9 @@ function parsedSymbol(ps: ParsedSymbol): SymbolDef {
     ports: ps.pins.map((p) => ({ x: p.tipX, y: p.tipY, name: p.name })),
     render: (ref, label) => (
       <g>
-        {ps.rects.map((r, i) => <rect key={i} x={r.x} y={r.y} width={r.w} height={r.h} rx={1} fill={FILL} stroke={STROKE} strokeWidth={1.6} />)}
+        {ps.rects.map((r, i) => <rect key={'r' + i} x={r.x} y={r.y} width={r.w} height={r.h} rx={1} fill={FILL} stroke={STROKE} strokeWidth={1.6} />)}
+        {ps.polys.map((d, i) => <path key={'p' + i} d={d} fill={FILL} stroke={STROKE} strokeWidth={1.6} strokeLinejoin="round" />)}
+        {ps.circles.map((ci, i) => <circle key={'c' + i} cx={ci.x} cy={ci.y} r={ci.r} fill="none" stroke={STROKE} strokeWidth={1.4} />)}
         {ps.pins.map((p, i) => (
           <g key={i}>
             <line x1={p.tipX} y1={p.tipY} x2={p.endX} y2={p.endY} stroke={PIN} strokeWidth={1.3} />

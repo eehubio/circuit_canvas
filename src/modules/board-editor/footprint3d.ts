@@ -6,6 +6,7 @@
  */
 import * as THREE from 'three';
 import { padFootprintFor } from '../../design-core/geometry/footprint-pads';
+import { stepModelFor, ensureStepModel } from './step-loader';
 import type { PlacedComponent } from '../../design-core/document/types';
 
 const MAT = {
@@ -190,6 +191,13 @@ function makeModule(w: number, h: number): THREE.Group {
  * 根据器件生成 3D 模型 Group（局部坐标，y 向上，停在 z=0 平面上方）。
  */
 export function buildComponent3D(comp: PlacedComponent): THREE.Group {
+  // ezPLM 真实 STEP 模型优先（已转换缓存则直接使用；否则触发异步加载，先用参数化模型）
+  const stepUrl = comp.display?.stepUrl;
+  if (stepUrl) {
+    const real = stepModelFor(stepUrl);
+    if (real) return real;
+    ensureStepModel(stepUrl);
+  }
   const fp = comp.footprint.name;
   let group: THREE.Group;
 

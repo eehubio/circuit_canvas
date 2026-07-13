@@ -14,6 +14,7 @@ import { padFootprintFor as padFootprintForT } from './design-core/geometry/foot
 import { downloadKicadPcb } from './modules/board-editor/pcbExport';
 import { getEzplmReferenceDesigns, isEzplmPart, type ReferenceDesign } from './providers/ezplm-live';
 import { ensureFootprintFile, ensureSymbolFile, useLibFileStore } from './design-core/geometry/lib-file-registry';
+import { fetchDigikeyOffer, formatDkPrice, type DigikeyOffer } from './providers/digikey';
 import type { PlacedComponent as PlacedComponentT } from './design-core/document/types';
 import { BoardCanvas2D } from './modules/board-editor/BoardCanvas2D';
 import { BoardView3D } from './modules/board-editor/BoardView3D';
@@ -354,9 +355,12 @@ function CompDetail({ iid }: { iid: string }) {
   const [offers, setOffers] = useState<{ vendor: string; price?: { amount: number; currency: string }; stock?: number; url: string }[]>([]);
   const [detail, setDetail] = useState<Awaited<ReturnType<typeof providers.components.getComponentDetail>>>(null);
   const [refDesigns, setRefDesigns] = useState<ReferenceDesign[]>([]);
+  const [dkOffer, setDkOffer] = useState<DigikeyOffer | null>(null);
   useEffect(() => {
     if (!c) return;
     setRefDesigns([]);
+    setDkOffer(null);
+    fetchDigikeyOffer(c.mpn).then((o) => { if (o?.found) setDkOffer(o); });
     providers.components.getAlternatives(c.componentId, ctx).then(setAlts);
     providers.components.getSupplierOffers(c.componentId, ctx).then(setOffers);
     providers.components.getComponentDetail(c.componentId, ctx).then(setDetail);
@@ -387,6 +391,13 @@ function CompDetail({ iid }: { iid: string }) {
         {(detail?.datasheetUrl ?? c.display?.datasheetUrl)
           ? <a href={detail?.datasheetUrl ?? c.display?.datasheetUrl} target="_blank" rel="noreferrer" style={{ ...linkBtn, borderColor: '#fecaca', background: '#fef2f2', color: '#dc2626' }}>📄 PDF下载</a>
           : <a href={`https://www.google.com/search?q=${encodeURIComponent(c.mpn + ' datasheet pdf')}`} target="_blank" rel="noreferrer" style={{ ...linkBtn, borderColor: '#fecaca', background: '#fef2f2', color: '#dc2626' }}>📄 PDF检索</a>}
+        {dkOffer?.productUrl && (
+          <a href={dkOffer.productUrl} target="_blank" rel="noreferrer" title={`DigiKey${dkOffer.digikeyPn ? ' · ' + dkOffer.digikeyPn : ''}，点击跳转商品页`}
+            style={{ ...linkBtn, borderColor: '#fecdd3', background: '#fff1f2', color: '#be123c', display: 'inline-flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1.25, padding: '4px 10px' }}>
+            <span style={{ fontWeight: 800 }}>DigiKey {formatDkPrice(dkOffer)}</span>
+            {dkOffer.stock != null && <span style={{ fontSize: 9, opacity: 0.8 }}>库存 {dkOffer.stock.toLocaleString()}</span>}
+          </a>
+        )}
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: 12, color: '#059669', fontWeight: 700, alignSelf: 'center' }}>{fmtMoney(c.unitPrice?.amount)}</span>
       </div>

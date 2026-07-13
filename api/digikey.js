@@ -1,0 +1,96 @@
+/**
+ * api/digikey.js — Vercel Serverless Function：DigiKey ProductInformation V4 代理
+ *
+ * Client Secret 必须留在服务端（同 ezPLM Key 的理由）。Vercel 环境变量：
+ *   DIGIKEY_CLIENT_ID / DIGIKEY_CLIENT_SECRET（不带 VITE_ 前缀）
+ * 可选：DIGIKEY_LOCALE_SITE(默认 CN) / DIGIKEY_LOCALE_CURRENCY(默认 CNY) / DIGIKEY_LOCALE_LANGUAGE(默认 zhs)
+ *
+ * 前端调用：
+ *   GET /api/digikey?path=status          → { configured }
+ *   GET /api/digikey?path=price&mpn=XXX   → { found, unitPrice, currency, stock, productUrl, digikeyPn, description }
+ */
+
+const TOKEN_URL = 'https://api.digikey.com/v1/oauth2/token';
+const SEARCH_URL = 'https://api.digikey.com/products/v4/search/keyword';
+
+// token 缓存（serverless 热实例内复用；DigiKey token 约 10 分钟有效）
+let tokenCache = { token: null, expiresAt: 0 };
+
+async function getToken(clientId, clientSecret) {
+  if (tokenCache.token && Date.now() < tokenCache.expiresAt - 30_000) return tokenCache.token;
+  const body = new URLSearchParams({ client_id: clientId, client_secret: clientSecret, grant_type: 'client_credentials' });
+  const r = await fetch(TOKEN_URL, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+  if (!r.ok) throw new Error(`token ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  const j = await r.json();
+  tokenCache = { token: j.access_token, expiresAt: Date.now() + (j.expires_in ?? 600) * 1000 };
+  return tokenCache.token;
+}
+
+/** 防御式提取首个商品的价格/库存/链接（V4 结构） */
+function mapProduct(p) {
+  if (!p) return { found: false };
+  const variation = Array.isArray(p.ProductVariations) ? p.ProductVariations[0] : undefined;
+  const breaks = variation?.StandardPricing ?? p.StandardPricing ?? [];
+  const firstBreak = Array.isArray(breaks) && breaks.length ? breaks[0] : undefined;
+  const unitPrice = typeof p.UnitPrice === 'number' && p.UnitPrice > 0 ? p.UnitPrice
+    : typeof firstBreak?.UnitPrice === 'number' ? firstBreak.UnitPrice : undefined;
+  return {
+    found: true,
+    unitPrice,
+    stock: typeof p.QuantityAvailable === 'number' ? p.QuantityAvailable : undefined,
+    productUrl: typeof p.ProductUrl === 'string' ? p.ProductUrl : undefined,
+    digikeyPn: variation?.DigiKeyProductNumber ?? p.DigiKeyProductNumber ?? undefined,
+    description: p.Description?.ProductDescription ?? p.ProductDescription ?? undefined,
+    manufacturer: p.Manufacturer?.Name ?? undefined,
+  };
+}
+
+export default async function handler(req, res) {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  const { path, mpn } = req.query ?? {};
+  const clientId = process.env.DIGIKEY_CLIENT_ID;
+  const clientSecret = process.env.DIGIKEY_CLIENT_SECRET;
+
+  if (path === 'status') {
+    return res.status(200).send(JSON.stringify({ configured: !!(clientId && clientSecret) }));
+  }
+  if (!clientId || !clientSecret) {
+    return res.status(501).send(JSON.stringify({ error: 'DIGIKEY_CLIENT_ID / DIGIKEY_CLIENT_SECRET not configured' }));
+  }
+  if (path !== 'price' || !mpn) {
+    return res.status(400).send(JSON.stringify({ error: 'usage: ?path=price&mpn=XXX' }));
+  }
+
+  try {
+    const token = await getToken(clientId, clientSecret);
+    const site = process.env.DIGIKEY_LOCALE_SITE ?? 'CN';
+    const currency = process.env.DIGIKEY_LOCALE_CURRENCY ?? 'CNY';
+    const language = process.env.DIGIKEY_LOCALE_LANGUAGE ?? 'zhs';
+    const r = await fetch(SEARCH_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'X-DIGIKEY-Client-Id': clientId,
+        'X-DIGIKEY-Locale-Site': site,
+        'X-DIGIKEY-Locale-Currency': currency,
+        'X-DIGIKEY-Locale-Language': language,
+      },
+      body: JSON.stringify({ Keywords: String(mpn), Limit: 3, Offset: 0 }),
+    });
+    if (!r.ok) {
+      return res.status(r.status).send(JSON.stringify({ error: `digikey ${r.status}`, detail: (await r.text()).slice(0, 300) }));
+    }
+    const j = await r.json();
+    const products = Array.isArray(j?.Products) ? j.Products : [];
+    // 优先精确匹配厂商料号
+    const exact = products.find((p) => String(p?.ManufacturerProductNumber ?? '').toUpperCase() === String(mpn).toUpperCase());
+    const out = mapProduct(exact ?? products[0]);
+    out.currency = currency;
+    // 缓存 10 分钟（价格/库存时效性数据）
+    res.setHeader('Cache-Control', 'public, max-age=600');
+    return res.status(200).send(JSON.stringify(out));
+  } catch (err) {
+    return res.status(502).send(JSON.stringify({ error: 'digikey request failed', detail: String(err).slice(0, 300) }));
+  }
+}
