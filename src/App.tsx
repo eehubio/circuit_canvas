@@ -101,7 +101,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [selectedId, undo, redo, rotate, remove, flipLayer]);
 
-  const [aiProposal, setAiProposal] = useState<{ rationale: string; details: (NonNullable<Awaited<ReturnType<typeof providers.components.getComponentDetail>>> & { mapSource?: string })[] } | null>(null);
+  const [aiProposal, setAiProposal] = useState<{ rationale: string; source?: string; fallbackReason?: string; details: (NonNullable<Awaited<ReturnType<typeof providers.components.getComponentDetail>>> & { mapSource?: string })[] } | null>(null);
 
   const genScheme = async () => {
     if (!aiPrompt.trim()) return;
@@ -110,7 +110,7 @@ export default function App() {
       const result = await providers.ai.generateScheme({ prompt: aiPrompt }, ctx);
       // Gemini 真实链路：直接携带完整器件（已完成 ezPLM 云端映射 / 封装占位）
       if (result.items?.length) {
-        setAiProposal({ rationale: result.rationale, details: result.items as unknown as NonNullable<typeof aiProposal>['details'] });
+        setAiProposal({ rationale: result.rationale, source: result.source, fallbackReason: result.fallbackReason, details: result.items as unknown as NonNullable<typeof aiProposal>['details'] });
         setAiBusy(false);
         return;
       }
@@ -125,7 +125,7 @@ export default function App() {
           description: `未映射到 ezPLM 器件，以封装占位`, pins: 2, mapSource: '封装占位' as const,
         };
       }));
-      setAiProposal({ rationale: result.rationale, details: mapped });
+      setAiProposal({ rationale: result.rationale, source: result.source, fallbackReason: result.fallbackReason, details: mapped });
     } catch (err) {
       alert('生成失败：' + (err as Error).message);
     }
@@ -337,7 +337,12 @@ export default function App() {
       {aiProposal && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(0,0,0,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={() => setAiProposal(null)}>
           <div style={{ width: '100%', maxWidth: 520, background: '#fff', borderRadius: 14, padding: 20, boxShadow: '0 24px 80px rgba(0,0,0,.25)' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: COLORS.green, marginBottom: 8 }}>🤖 AI 方案建议 · 请确认</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: COLORS.green }}>🤖 AI 方案建议 · 请确认</span>
+              {aiProposal.source === 'gemini'
+                ? <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 5, background: '#dcfce7', color: '#166534', fontWeight: 700 }}>✓ Gemini 生成</span>
+                : <span title={aiProposal.fallbackReason} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 5, background: '#fef3c7', color: '#92400e', fontWeight: 700 }}>演示引擎{aiProposal.fallbackReason ? ` · ${aiProposal.fallbackReason.slice(0, 46)}` : ''}</span>}
+            </div>
             <div style={{ fontSize: 12, color: '#475569', padding: '8px 10px', background: '#f7fcf9', borderRadius: 8, marginBottom: 10 }}>{aiProposal.rationale}</div>
             <div style={{ maxHeight: 260, overflow: 'auto', marginBottom: 12 }}>
               {aiProposal.details.map((d) => (

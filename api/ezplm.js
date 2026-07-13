@@ -39,7 +39,7 @@ export function buildSignature({ apiKey, method, path, params, timestamp, nonce 
 export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   const { path, ...params } = req.query ?? {};
-  const apiKey = process.env.EZPLM_API_KEY;
+  const apiKey = (process.env.EZPLM_API_KEY ?? '').trim() || undefined;
 
   // 状态探测：不打上游，不耗配额
   if (path === 'status') {

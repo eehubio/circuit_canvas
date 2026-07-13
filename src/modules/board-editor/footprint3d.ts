@@ -206,12 +206,6 @@ export function buildComponent3D(comp: PlacedComponent): THREE.Group {
     case '0603': group = makeChipComponent(1.6, 0.8, 0.8, comp.display?.family === 'MLCC' ? MAT.capBeige : MAT.darkBody); break;
     case '0805': group = makeChipComponent(2.0, 1.25, 1.0, MAT.capBeige); break;
     case '4018': group = makeCan(4.0, 1.8); break;
-    case 'SOT-223': group = makeSot223(); break;
-    case 'TSOT-23-8': group = makeChip(2.9, 1.6, 1.0, { perSideY: 4 }); break;
-    case 'SOIC-8': group = makeChip(4.9, 3.9, 1.5, { perSideY: 4 }); break;
-    case 'SOP-16': group = makeChip(10.0, 4.0, 1.5, { perSideY: 8 }); break;
-    case 'LQFP-48': group = makeChip(7.0, 7.0, 1.4, { perSideX: 12, perSideY: 12 }); break;
-    case 'LQFP-100': group = makeChip(14.0, 14.0, 1.4, { perSideX: 25, perSideY: 25 }); break;
     case 'Module-44': group = makeModule(18.0, 25.5); break;
     case 'USB-C-16P': group = makeUsbC(); break;
     case 'THT-2.54mm': group = makeHeader(2, 5); break;

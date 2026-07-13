@@ -29,11 +29,18 @@ function makeAi(): AiModelProvider {
   const mock = new MockAiModelProvider();
   return {
     async generateScheme(req: AiSchemeRequest, ctx: AccessContext) {
+      let fallbackReason = '未配置 GEMINI_API_KEY';
       if (await geminiAvailable()) {
-        try { return await new GeminiAiProvider().generateScheme(req, ctx); }
-        catch (e) { console.warn('[AI] Gemini 调用失败，回退 Mock:', e); }
+        try {
+          const out = await new GeminiAiProvider().generateScheme(req, ctx);
+          return { ...out, source: 'gemini' as const };
+        } catch (e) {
+          fallbackReason = String((e as Error).message ?? e).slice(0, 140);
+          console.warn('[AI] Gemini 调用失败，回退 Mock:', fallbackReason);
+        }
       }
-      return (mock.generateScheme as (r: AiSchemeRequest, c?: AccessContext) => ReturnType<AiModelProvider["generateScheme"]>)(req, ctx);
+      const mockOut = await (mock.generateScheme as (r: AiSchemeRequest, c?: AccessContext) => ReturnType<AiModelProvider['generateScheme']>)(req, ctx);
+      return { ...mockOut, source: 'mock' as const, fallbackReason };
     },
   };
 }

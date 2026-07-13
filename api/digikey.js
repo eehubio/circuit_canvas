@@ -49,8 +49,8 @@ function mapProduct(p) {
 export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   const { path, mpn } = req.query ?? {};
-  const clientId = process.env.DIGIKEY_CLIENT_ID;
-  const clientSecret = process.env.DIGIKEY_CLIENT_SECRET;
+  const clientId = (process.env.DIGIKEY_CLIENT_ID ?? '').trim() || undefined;
+  const clientSecret = (process.env.DIGIKEY_CLIENT_SECRET ?? '').trim() || undefined;
 
   if (path === 'status') {
     return res.status(200).send(JSON.stringify({ configured: !!(clientId && clientSecret) }));

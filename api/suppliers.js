@@ -79,10 +79,11 @@ async function queryElement14(key, mpn) {
 export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   const { path, mpn } = req.query ?? {};
-  const mouserKey = process.env.MOUSER_API_KEY;
-  const arrowLogin = process.env.ARROW_LOGIN;
-  const arrowKey = process.env.ARROW_API_KEY;
-  const e14Key = process.env.ELEMENT14_API_KEY;
+  const t = (v) => (v ?? '').trim() || undefined;
+  const mouserKey = t(process.env.MOUSER_API_KEY);
+  const arrowLogin = t(process.env.ARROW_LOGIN);
+  const arrowKey = t(process.env.ARROW_API_KEY);
+  const e14Key = t(process.env.ELEMENT14_API_KEY);
 
   if (path === 'status') {
     return res.status(200).send(JSON.stringify({ mouser: !!mouserKey, arrow: !!(arrowLogin && arrowKey), element14: !!e14Key }));
