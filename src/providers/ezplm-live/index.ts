@@ -161,7 +161,8 @@ export function mapEzplmPart(raw: Raw): ComponentSearchResult {
     footprintFileUrl,
     symbolFileUrl,
     classification,
-    imageUrl: pickUrl(raw.image) ?? pickUrl(raw.photo),
+    imageUrl: pickFileUrl(raw.image) ?? pickFileUrl(raw.photo) ?? pickFileUrl(R.picture) ?? pickFileUrl(R.img)
+      ?? pickFileUrl(R.thumbnail) ?? pickFileUrl(R.imageUrl) ?? pickFileUrl(R.productImage),
   };
 }
 

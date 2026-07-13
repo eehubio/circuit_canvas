@@ -16,6 +16,7 @@ import { getEzplmReferenceDesigns, isEzplmPart, type ReferenceDesign } from './p
 import { ensureFootprintFile, ensureSymbolFile, useLibFileStore } from './design-core/geometry/lib-file-registry';
 import { fetchDigikeyOffer, formatDkPrice, type DigikeyOffer } from './providers/digikey';
 import { geminiComplete, geminiAvailable, extractJson } from './providers/gemini';
+import { fetchSupplierOffers, fmtOfferPrice, type SupplierOffer } from './providers/suppliers';
 import { searchEzplmParts } from './providers/ezplm-live';
 import { ensureStepBytes } from './modules/board-editor/step-loader';
 import type { PlacedComponent as PlacedComponentT } from './design-core/document/types';
@@ -383,6 +384,7 @@ function CompDetail({ iid }: { iid: string }) {
   const [detail, setDetail] = useState<Awaited<ReturnType<typeof providers.components.getComponentDetail>>>(null);
   const [refDesigns, setRefDesigns] = useState<ReferenceDesign[]>([]);
   const [dkOffer, setDkOffer] = useState<DigikeyOffer | null>(null);
+  const [supOffers, setSupOffers] = useState<SupplierOffer[]>([]);
   const [aiAlts, setAiAlts] = useState<{ mpn: string; manufacturer: string; description?: string; footprint: string }[] | null>(null);
   const [aiAltBusy, setAiAltBusy] = useState(false);
   const [aiAltMsg, setAiAltMsg] = useState('');
@@ -421,6 +423,8 @@ function CompDetail({ iid }: { iid: string }) {
     setRefDesigns([]);
     setDkOffer(null);
     fetchDigikeyOffer(c.mpn).then((o) => { if (o?.found) setDkOffer(o); });
+    setSupOffers([]);
+    fetchSupplierOffers(c.mpn).then(setSupOffers);
     providers.components.getAlternatives(c.componentId, ctx).then(setAlts);
     providers.components.getSupplierOffers(c.componentId, ctx).then(setOffers);
     providers.components.getComponentDetail(c.componentId, ctx).then(setDetail);
@@ -440,7 +444,7 @@ function CompDetail({ iid }: { iid: string }) {
           <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{c.display?.classification ?? disp.name} · {c.manufacturer} · {c.footprint.name}</div>
           {c.display?.classification && <span style={{ display: 'inline-block', marginTop: 4, fontSize: 9.5, padding: '1px 7px', borderRadius: 4, background: '#f1f5f9', color: '#475569', fontWeight: 600 }}>分类：{c.display.classification}</span>}
         </div>
-        <ComponentImage c={c} imageUrl={detail?.imageUrl ?? c.display?.imageUrl} />
+        <ComponentImage c={c} imageUrl={detail?.imageUrl ?? c.display?.imageUrl ?? dkOffer?.photoUrl} />
       </div>
 
       {/* 官网 + PDF */}
@@ -502,16 +506,47 @@ function CompDetail({ iid }: { iid: string }) {
         ) : (
           <div style={{ fontSize: 10, color: '#94a3b8', padding: '4px 8px', marginBottom: 4 }}>DigiKey：{dkOffer === null ? '查询中… / 未配置' : '未收录该型号'}</div>
         )}
-        {mockOffers(c.mpn).map((o) => (
-          <a key={o.vendor} href={o.url} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', marginBottom: 4, borderRadius: 6, background: '#fff', border: '1px solid #e0f2fe', textDecoration: 'none', opacity: 0.85 }}>
-            <span style={{ fontSize: 11.5, fontWeight: 700, color: '#0369a1', width: 66 }}>{o.vendor}</span>
+        {/* Mouser/Arrow/element14：配置了 Key → 实时数据；未配置 → 演示数据占位 */}
+        {['Mouser', 'Arrow', 'element14'].map((vendor) => {
+          const real = supOffers.find((o) => o.vendor === vendor);
+          if (real?.configured && real.found) {
+            return (
+              <a key={vendor} href={real.url} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', marginBottom: 4, borderRadius: 6, background: '#fff', border: '1px solid #e0f2fe', textDecoration: 'none' }}>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: '#0369a1', width: 66 }}>{vendor}</span>
+                <span style={{ fontSize: 9, padding: '0 5px', borderRadius: 3, background: '#dcfce7', color: '#166534', fontWeight: 700 }}>实时</span>
+                <span style={{ fontSize: 11, color: '#059669', fontWeight: 600 }}>{fmtOfferPrice(real)}</span>
+                <span style={{ fontSize: 10, color: '#64748b' }}>库存 {real.stock?.toLocaleString() ?? '—'}</span>
+                <span style={{ flex: 1 }} />
+                <span style={{ fontSize: 10, color: '#94a3b8' }}>跳转 ↗</span>
+              </a>
+            );
+          }
+          if (real?.configured && !real.found) {
+            return <div key={vendor} style={{ fontSize: 10, color: '#94a3b8', padding: '4px 8px', marginBottom: 4 }}>{vendor}：未收录该型号</div>;
+          }
+          const mock = mockOffers(c.mpn, vendor);
+          return (
+            <a key={vendor} href={mock.url} target="_blank" rel="noreferrer" title={`配置 ${vendor === 'Mouser' ? 'MOUSER_API_KEY' : vendor === 'Arrow' ? 'ARROW_LOGIN + ARROW_API_KEY' : 'ELEMENT14_API_KEY'} 后显示实时数据`}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', marginBottom: 4, borderRadius: 6, background: '#fff', border: '1px solid #e0f2fe', textDecoration: 'none', opacity: 0.8 }}>
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: '#0369a1', width: 66 }}>{vendor}</span>
+              <span style={{ fontSize: 9, padding: '0 5px', borderRadius: 3, background: '#fef3c7', color: '#92400e', fontWeight: 700 }}>演示</span>
+              <span style={{ fontSize: 11, color: '#059669', fontWeight: 600 }}>¥{mock.price.toFixed(2)}</span>
+              <span style={{ fontSize: 10, color: '#64748b' }}>库存 {mock.stock.toLocaleString()}</span>
+              <span style={{ flex: 1 }} />
+              <span style={{ fontSize: 10, color: '#94a3b8' }}>跳转 ↗</span>
+            </a>
+          );
+        })}
+        {(() => { const m = mockOffers(c.mpn, 'CECPORT'); return (
+          <a href={m.url} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', marginBottom: 4, borderRadius: 6, background: '#fff', border: '1px solid #e0f2fe', textDecoration: 'none', opacity: 0.8 }}>
+            <span style={{ fontSize: 11.5, fontWeight: 700, color: '#0369a1', width: 66 }}>CECPORT</span>
             <span style={{ fontSize: 9, padding: '0 5px', borderRadius: 3, background: '#fef3c7', color: '#92400e', fontWeight: 700 }}>演示</span>
-            <span style={{ fontSize: 11, color: '#059669', fontWeight: 600 }}>¥{o.price.toFixed(2)}</span>
-            <span style={{ fontSize: 10, color: '#64748b' }}>库存 {o.stock.toLocaleString()}</span>
+            <span style={{ fontSize: 11, color: '#059669', fontWeight: 600 }}>¥{m.price.toFixed(2)}</span>
+            <span style={{ fontSize: 10, color: '#64748b' }}>库存 {m.stock.toLocaleString()}</span>
             <span style={{ flex: 1 }} />
             <span style={{ fontSize: 10, color: '#94a3b8' }}>跳转 ↗</span>
           </a>
-        ))}
+        ); })()}
       </div>
 
       {/* AI 替代料：Gemini 找候选 → ezPLM API 验证映射 */}
@@ -558,15 +593,18 @@ function CompDetail({ iid }: { iid: string }) {
   );
 }
 
-/** Mouser/CECPORT 演示报价：按型号稳定哈希生成（接入真实 API 后替换本函数） */
-function mockOffers(mpn: string): { vendor: string; price: number; stock: number; url: string }[] {
+/** 演示报价：按型号+渠道稳定哈希生成（对应渠道接入真实 API 后自动切换实时数据） */
+function mockOffers(mpn: string, vendor: string): { price: number; stock: number; url: string } {
   let h = 0;
-  for (const ch of mpn) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  for (const ch of mpn + vendor) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   const base = 0.5 + (h % 2400) / 100;
-  return [
-    { vendor: 'Mouser', price: base * 1.08, stock: 800 + (h % 42000), url: `https://www.mouser.cn/c/?q=${encodeURIComponent(mpn)}` },
-    { vendor: 'CECPORT', price: base * 0.96, stock: 300 + ((h >> 3) % 26000), url: `https://www.cecport.com/search?k=${encodeURIComponent(mpn)}` },
-  ];
+  const urls: Record<string, string> = {
+    Mouser: `https://www.mouser.cn/c/?q=${encodeURIComponent(mpn)}`,
+    Arrow: `https://www.arrow.com/en/products/search?q=${encodeURIComponent(mpn)}`,
+    element14: `https://cn.element14.com/search?st=${encodeURIComponent(mpn)}`,
+    CECPORT: `https://www.cecport.com/search?k=${encodeURIComponent(mpn)}`,
+  };
+  return { price: base * (0.92 + (h % 20) / 100), stock: 300 + (h % 42000), url: urls[vendor] ?? '#' };
 }
 
 /** 封装占位器件编辑：补充型号 / 上传 SVG 原理图符号 */

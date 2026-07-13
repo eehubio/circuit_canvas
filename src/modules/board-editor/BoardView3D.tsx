@@ -30,7 +30,7 @@ export function BoardView3D() {
     const w = mount.clientWidth, h = mount.clientHeight;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0c1520);
+    scene.background = new THREE.Color(0xf1f5f9);
 
     const camera = new THREE.PerspectiveCamera(45, w / h, 1, 2000);
     let renderer: THREE.WebGLRenderer;

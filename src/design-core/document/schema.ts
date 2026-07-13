@@ -95,6 +95,7 @@ const connectionSchema = z.object({
   toId: z.string(),
   label: z.string(),
   style: z.enum(['single', 'double', 'back', 'none', 'bus']),
+  dir: z.enum(['forward', 'back', 'both', 'none']).optional(),
   color: z.string().optional(),
   labelDx: z.number().optional(),
   labelDy: z.number().optional(),

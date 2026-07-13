@@ -186,13 +186,24 @@ export function BlockDiagramPanel({ isFullscreen, onToggleFullscreen }: { isFull
         {sel?.type === 'arrow' && (() => {
           const a = conns.find((c) => c.id === sel.id);
           if (!a) return null;
-          const styles: [string, string][] = [['single', '→单向'], ['back', '←反向'], ['double', '↔双向'], ['bus', '≡总线'], ['none', '—无箭头']];
+          // 方向与线型解耦：总线也可设单向/反向/双向
+          const effDir = a.dir ?? (a.style === 'single' ? 'forward' : a.style === 'double' ? 'both' : a.style === 'back' ? 'back' : 'none');
+          const isBus = a.style === 'bus';
+          const lineTypes: [boolean, string][] = [[false, '—普通'], [true, '≡总线']];
+          const dirs: [string, string][] = [['forward', '→单向'], ['back', '←反向'], ['both', '↔双向'], ['none', '·无']];
+          const applyLine = (bus: boolean) => setConns(conns.map((c) => c.id === sel.id ? { ...c, style: bus ? 'bus' as const : (effDir === 'forward' ? 'single' : effDir === 'both' ? 'double' : effDir === 'back' ? 'back' : 'none') as typeof c.style, dir: effDir as NonNullable<typeof c.dir> } : c));
+          const applyDir = (d: string) => setConns(conns.map((c) => c.id === sel.id ? { ...c, dir: d as NonNullable<typeof c.dir>, style: isBus ? 'bus' as const : (d === 'forward' ? 'single' : d === 'both' ? 'double' : d === 'back' ? 'back' : 'none') as typeof c.style } : c));
           return (
             <>
               <div style={{ width: 1, height: 14, background: '#E8F3EE' }} />
-              {styles.map(([st, label]) => (
-                <button key={st} onClick={() => setConns(conns.map((c) => c.id === sel.id ? { ...c, style: st as typeof c.style } : c))}
-                  style={{ ...tb, ...(a.style === st ? { borderColor: '#22c55e', color: '#16a34a', background: '#f0fdf4' } : {}) }}>{label}</button>
+              {lineTypes.map(([bus, label]) => (
+                <button key={label} onClick={() => applyLine(bus)}
+                  style={{ ...tb, ...(isBus === bus ? { borderColor: '#22c55e', color: '#16a34a', background: '#f0fdf4' } : {}) }}>{label}</button>
+              ))}
+              <div style={{ width: 1, height: 14, background: '#E8F3EE' }} />
+              {dirs.map(([d, label]) => (
+                <button key={d} onClick={() => applyDir(d)}
+                  style={{ ...tb, ...(effDir === d ? { borderColor: '#22c55e', color: '#16a34a', background: '#f0fdf4' } : {}) }}>{label}</button>
               ))}
               <button onClick={() => setConns(conns.map((c) => c.id === sel.id ? { ...c, fromId: c.toId, toId: c.fromId } : c))} style={tb}>⇄ 反向</button>
               <button onClick={() => setConns(conns.map((c) => c.id === sel.id ? { ...c, labelRot: ((c.labelRot ?? 0) + 90) % 360 } : c))} style={tb}>⟳ 转标签</button>
@@ -220,8 +231,8 @@ export function BlockDiagramPanel({ isFullscreen, onToggleFullscreen }: { isFull
                 <g key={a.id}>
                   <line x1={f.x} y1={f.y} x2={t.x} y2={t.y} stroke="transparent" strokeWidth={12} style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setSel({ type: 'arrow', id: a.id }); }} />
                   <line x1={f.x} y1={f.y} x2={t.x} y2={t.y} stroke={isSel ? '#2563eb' : a.style === 'bus' ? '#475569' : '#64748b'} strokeWidth={sw}
-                    markerEnd={a.style === 'single' || a.style === 'double' ? 'url(#bdarrow)' : undefined}
-                    markerStart={a.style === 'double' || a.style === 'back' ? 'url(#bdarrow)' : undefined}
+                    markerEnd={(() => { const d = a.dir ?? (a.style === 'single' ? 'forward' : a.style === 'double' ? 'both' : a.style === 'back' ? 'back' : 'none'); return d === 'forward' || d === 'both' ? 'url(#bdarrow)' : undefined; })()}
+                    markerStart={(() => { const d = a.dir ?? (a.style === 'single' ? 'forward' : a.style === 'double' ? 'both' : a.style === 'back' ? 'back' : 'none'); return d === 'back' || d === 'both' ? 'url(#bdarrow)' : undefined; })()}
                     style={{ pointerEvents: 'none' }} />
                   {a.label && (
                     <text x={mx} y={my} transform={a.labelRot ? `rotate(${a.labelRot} ${mx} ${my})` : undefined}

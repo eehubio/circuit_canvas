@@ -129,6 +129,8 @@ export interface LogicalConnection {
   toId: string;
   label: string;
   style: ConnectionStyle;
+  /** 箭头方向（与线型解耦，总线也可设方向）；缺省从 style 推断保持兼容 */
+  dir?: 'forward' | 'back' | 'both' | 'none';
   color?: string;
   /** 标签显示偏移与旋转（可拖动/旋转） */
   labelDx?: number;

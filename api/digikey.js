@@ -40,6 +40,7 @@ function mapProduct(p) {
     stock: typeof p.QuantityAvailable === 'number' ? p.QuantityAvailable : undefined,
     productUrl: typeof p.ProductUrl === 'string' ? p.ProductUrl : undefined,
     digikeyPn: variation?.DigiKeyProductNumber ?? p.DigiKeyProductNumber ?? undefined,
+    photoUrl: typeof p.PhotoUrl === 'string' && p.PhotoUrl ? p.PhotoUrl : undefined,
     description: p.Description?.ProductDescription ?? p.ProductDescription ?? undefined,
     manufacturer: p.Manufacturer?.Name ?? undefined,
   };

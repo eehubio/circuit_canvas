@@ -10,6 +10,8 @@ export interface DigikeyOffer {
   stock?: number;
   productUrl?: string;
   digikeyPn?: string;
+  /** DigiKey 商品实拍图（详情面板头图兜底来源） */
+  photoUrl?: string;
 }
 
 let availableCache: boolean | null = null;
