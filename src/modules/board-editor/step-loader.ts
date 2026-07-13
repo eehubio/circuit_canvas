@@ -42,6 +42,15 @@ const inflight = new Set<string>();
 const failed = new Set<string>();
 let lastError = '';
 
+/** 单个 STEP 链接的状态（详情面板 3D 预览用） */
+export function stepStatusFor(url: string | undefined): 'ready' | 'loading' | 'failed' | 'idle' {
+  if (!url) return 'idle';
+  if (modelCache.has(url)) return 'ready';
+  if (inflight.has(url)) return 'loading';
+  if (failed.has(url)) return 'failed';
+  return 'idle';
+}
+
 /** 3D 视图悬浮提示用的汇总状态 */
 export function stepStats() {
   return { ready: modelCache.size, loading: inflight.size, failed: failed.size, lastError };

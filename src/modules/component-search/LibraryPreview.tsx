@@ -12,6 +12,7 @@ import { COLORS } from '../../shared/theme';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { buildKicadMod, buildKicadSym, downloadText } from './kicadExport';
 import { footprintFileStatus, symbolFileStatus, useLibFileStore, type LibFileStatus } from '../../design-core/geometry/lib-file-registry';
+import { Component3DPreview } from './Component3DPreview';
 
 function downloadSvg(svgMarkup: string, filename: string) {
   const blob = new Blob(['<?xml version="1.0" encoding="UTF-8"?>\n' + svgMarkup], { type: 'image/svg+xml' });
@@ -138,12 +139,15 @@ export function LibraryPreview({ c }: { c: PlacedComponent }) {
       </div>
       <div style={{ marginTop: 8, padding: '8px', borderRadius: 8, background: '#fff', border: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#475569' }}>3D 模型 (STEP)</div>
-          <div style={{ fontSize: 9.5, color: '#94a3b8' }}>{c.display?.stepUrl ? 'ezPLM 提供的 STEP 模型文件' : '3D视图为参数化预览；ezPLM 查询接口暂未返回 STEP 文件字段'}</div>
+          <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 6 }}>3D 模型</div>
+          <Component3DPreview c={c} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7 }}>
+            <span style={{ flex: 1, fontSize: 9.5, color: '#94a3b8' }}>{c.display?.stepUrl ? 'STEP 源文件（ezPLM）' : 'ezPLM 未提供该器件的 STEP 文件'}</span>
+            {c.display?.stepUrl
+              ? <a href={c.display.stepUrl} target="_blank" rel="noreferrer" style={{ ...dlBtn, padding: '4px 10px', textDecoration: 'none' }}>⬇ .step</a>
+              : <button disabled style={{ ...dlBtn, opacity: 0.45, cursor: 'not-allowed', padding: '4px 10px' }}>⬇ .step</button>}
+          </div>
         </div>
-        {c.display?.stepUrl
-          ? <a href={c.display.stepUrl} target="_blank" rel="noreferrer" style={{ ...dlBtn, padding: '4px 10px', textDecoration: 'none' }}>⬇ .step</a>
-          : <button disabled title="ezPLM parts 接口的响应字段为 footprint/symbol/pdf，暂无 3D 模型文件" style={{ ...dlBtn, opacity: 0.45, cursor: 'not-allowed', padding: '4px 10px' }}>⬇ .step</button>}
       </div>
     </div>
   );
