@@ -37,6 +37,24 @@ export const useLibFileStore = create<LibFileState>((set) => ({
 const inflight = new Set<string>();
 const failed = new Set<string>();
 
+export type LibFileStatus = 'loaded' | 'loading' | 'failed' | 'nourl';
+
+/** 库文件加载状态（详情面板可见提示用） */
+export function footprintFileStatus(fpName: string, url: string | undefined): LibFileStatus {
+  if (footprintOverrides.has(fpName)) return 'loaded';
+  if (!url) return 'nourl';
+  if (inflight.has(url)) return 'loading';
+  if (failed.has(url)) return 'failed';
+  return 'loading';
+}
+export function symbolFileStatus(mpn: string, url: string | undefined): LibFileStatus {
+  if (symbolOverrides.has(mpn)) return 'loaded';
+  if (!url) return 'nourl';
+  if (inflight.has(url)) return 'loading';
+  if (failed.has(url)) return 'failed';
+  return 'loading';
+}
+
 async function fetchViaProxy(url: string): Promise<string | null> {
   try {
     const r = await fetch(`/api/ezplm?path=file&url=${encodeURIComponent(url)}`);

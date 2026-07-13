@@ -97,10 +97,11 @@ function ResultCard({ r, expanded, onToggle, onAdd, placed }: {
               : isOrg ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>本组织</span> : null}
             <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 600, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.mpn}</span>
           </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 3, fontSize: 11, color: '#6b7280' }}>
-            <span>{r.classification ?? r.defaultFootprintName}</span><span>·</span><span>{r.manufacturer}</span><span>·</span>
-            <span style={{ color: '#059669', fontWeight: 600 }}>{fmtMoney(r.unitPrice?.amount)}</span>
+          <div style={{ display: 'flex', gap: 6, marginTop: 3, fontSize: 11, color: '#6b7280', flexWrap: 'wrap' }}>
+            <span style={{ fontFamily: 'monospace' }}>{r.defaultFootprintName}</span><span>·</span><span>{r.manufacturer}</span>
+            {r.unitPrice != null && <><span>·</span><span style={{ color: '#059669', fontWeight: 600 }}>{fmtMoney(r.unitPrice.amount)}</span></>}
           </div>
+          {r.description && <div style={{ marginTop: 2, fontSize: 10.5, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.description}</div>}
         </div>
         {!placed && <button onClick={(e) => { e.stopPropagation(); onAdd(); }} style={addBtn}>+</button>}
         <span style={{ fontSize: 10, color: '#64748b' }}>{expanded ? '▲' : '▼'}</span>

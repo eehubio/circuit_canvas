@@ -61,6 +61,22 @@ function pickUrl(v: unknown): string | undefined {
   return undefined;
 }
 
+/** 库文件链接：绝对 URL，或站内相对路径（自动补 https://www.ezplm.cn 前缀） */
+function pickFileUrl(v: unknown): string | undefined {
+  const abs = pickUrl(v);
+  if (abs) return abs;
+  const rel = (x: unknown): string | undefined => {
+    if (typeof x === 'string' && x.startsWith('/') && x.length > 1) return `https://www.ezplm.cn${x}`;
+    if (Array.isArray(x)) return rel(x[0]);
+    if (x && typeof x === 'object') {
+      const o = x as Raw;
+      return rel(o.url) ?? rel(o.link) ?? rel(o.file) ?? rel(o.path) ?? rel(o.href) ?? rel(o.download) ?? rel(o.fileUrl);
+    }
+    return undefined;
+  };
+  return rel(v);
+}
+
 /** attributes：对象 | [{name|key|label, value}] → 扁平键值对（取前 10 项） */
 function pickAttrs(v: unknown): Record<string, string> {
   const out: Record<string, string> = {};
@@ -102,6 +118,7 @@ export function mapEzplmPart(raw: Raw): ComponentSearchResult {
     loggedSample = true;
     // 诊断辅助：浏览器控制台可查看真实字段结构，用于校准映射
     console.info('[ezPLM] 首条物料原始字段样例:', raw);
+    console.info('[ezPLM] footprint 字段原始值:', raw.footprint, '| symbol 字段原始值:', raw.symbol);
   }
   const id = str(raw.id) ?? str(raw.partlibId) ?? String(Math.random()).slice(2);
   const mpn = str(raw.mpn) ?? str(raw.model) ?? str(raw.partNumber) ?? str(raw.name) ?? id;
@@ -114,8 +131,11 @@ export function mapEzplmPart(raw: Raw): ComponentSearchResult {
   // 文件拉取中/失败时回退名字参数化解析；名字也缺失时回退内置默认
   const footprint = fpRaw ?? 'SOIC-8';
   // 库文件链接（防御式：footprint/symbol 字段可能是 {name,url} 对象，或独立字段）
-  const footprintFileUrl = pickUrl(raw.footprint) ?? pickUrl((raw as Record<string, unknown>).footprintFile) ?? pickUrl((raw as Record<string, unknown>).footprintUrl);
-  const symbolFileUrl = pickUrl(raw.symbol) ?? pickUrl((raw as Record<string, unknown>).symbolFile) ?? pickUrl((raw as Record<string, unknown>).symbolUrl);
+  const R = raw as Record<string, unknown>;
+  const footprintFileUrl = pickFileUrl(raw.footprint) ?? pickFileUrl(R.footprintFile) ?? pickFileUrl(R.footprintUrl)
+    ?? pickFileUrl(R.footprint_file) ?? pickFileUrl(R.kicadMod) ?? pickFileUrl(R.mod);
+  const symbolFileUrl = pickFileUrl(raw.symbol) ?? pickFileUrl(R.symbolFile) ?? pickFileUrl(R.symbolUrl)
+    ?? pickFileUrl(R.symbol_file) ?? pickFileUrl(R.kicadSym) ?? pickFileUrl(R.sym);
   // 分类（接口返回的原始分类文本，直接展示；并优先用于类别归类）
   const classification = pickName(raw.category) ?? pickName((raw as Record<string, unknown>).classification)
     ?? pickName((raw as Record<string, unknown>).catalog) ?? pickName((raw as Record<string, unknown>)['分类']);
@@ -135,8 +155,8 @@ export function mapEzplmPart(raw: Raw): ComponentSearchResult {
     coreParams: attrs,
     datasheetUrl: pickUrl(raw.pdf) ?? pickUrl(raw.datasheet),
     // 手册的 parts 响应未定义 3D 模型字段；此处防御式探测常见命名，命中则启用 STEP 下载
-    stepUrl: pickUrl(raw.step) ?? pickUrl(raw.model3d) ?? pickUrl((raw as Record<string, unknown>)['3d_model']) ?? pickUrl(raw.stepFile)
-      ?? (typeof raw.footprint === 'object' && raw.footprint ? pickUrl((raw.footprint as Record<string, unknown>).model3d) ?? pickUrl((raw.footprint as Record<string, unknown>).step) : undefined),
+    stepUrl: pickFileUrl(raw.step) ?? pickFileUrl(raw.model3d) ?? pickFileUrl(R['3d_model']) ?? pickFileUrl(raw.stepFile)
+      ?? (typeof raw.footprint === 'object' && raw.footprint ? pickFileUrl((raw.footprint as Record<string, unknown>).model3d) ?? pickFileUrl((raw.footprint as Record<string, unknown>).step) : undefined),
     footprintFileUrl,
     symbolFileUrl,
     classification,

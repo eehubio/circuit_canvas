@@ -11,6 +11,7 @@ import { PX_PER_MM } from '../../design-core/geometry';
 import { COLORS } from '../../shared/theme';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { buildKicadMod, buildKicadSym, downloadText } from './kicadExport';
+import { footprintFileStatus, symbolFileStatus, useLibFileStore, type LibFileStatus } from '../../design-core/geometry/lib-file-registry';
 
 function downloadSvg(svgMarkup: string, filename: string) {
   const blob = new Blob(['<?xml version="1.0" encoding="UTF-8"?>\n' + svgMarkup], { type: 'image/svg+xml' });
@@ -64,7 +65,19 @@ function ZoomPanBox({ children, height = 150 }: { children: React.ReactNode; hei
   );
 }
 
+function StatusBadge({ st }: { st: LibFileStatus }) {
+  const map: Record<LibFileStatus, [string, string, string]> = {
+    loaded: ['ezPLM 精确数据 ✓', '#dcfce7', '#166534'],
+    loading: ['拉取库文件中…（暂用名字解析）', '#fef9c3', '#854d0e'],
+    failed: ['文件解析失败 · 用名字解析兜底', '#fee2e2', '#991b1b'],
+    nourl: ['接口未提供文件链接 · 名字解析', '#f1f5f9', '#64748b'],
+  };
+  const [text, bg, fg] = map[st];
+  return <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 4, background: bg, color: fg, fontWeight: 700 }}>{text}</span>;
+}
+
 export function LibraryPreview({ c }: { c: PlacedComponent }) {
+  useLibFileStore((s) => s.version); // 文件到位时自动刷新状态与预览
   const sym = useMemo(() => symbolFor(c), [c.componentId]);
   const pads = padFootprintFor(c.footprint.name);
 
@@ -107,7 +120,7 @@ export function LibraryPreview({ c }: { c: PlacedComponent }) {
       <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.green, marginBottom: 8 }}>📚 PCB 设计库文件</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={cell}>
-          <div style={cellTitle}>原理图符号</div>
+          <div style={{ ...cellTitle, display: 'flex', alignItems: 'center', gap: 6 }}>原理图符号 <StatusBadge st={symbolFileStatus(c.mpn, c.display?.symbolFileUrl)} /></div>
           <ZoomPanBox>{symSvg}</ZoomPanBox>
           <div style={{ display: 'flex', gap: 4 }}>
             <button onClick={() => downloadText(buildKicadSym(c), `${c.mpn}.kicad_sym`)} style={{ ...dlBtn, flex: 1 }}>⬇ .kicad_sym</button>
@@ -115,7 +128,7 @@ export function LibraryPreview({ c }: { c: PlacedComponent }) {
           </div>
         </div>
         <div style={cell}>
-          <div style={cellTitle}>PCB 封装</div>
+          <div style={{ ...cellTitle, display: 'flex', alignItems: 'center', gap: 6 }}>PCB 封装 <StatusBadge st={footprintFileStatus(c.footprint.name, c.display?.footprintFileUrl)} /></div>
           <ZoomPanBox>{fpSvg ?? <span style={{ fontSize: 10, color: '#94a3b8' }}>无焊盘数据</span>}</ZoomPanBox>
           <div style={{ display: 'flex', gap: 4 }}>
             <button onClick={() => { const m = buildKicadMod(c); if (m) downloadText(m, `${c.footprint.name}.kicad_mod`); }} disabled={!fpSvg} style={{ ...dlBtn, flex: 1, opacity: fpSvg ? 1 : 0.5 }}>⬇ .kicad_mod</button>
