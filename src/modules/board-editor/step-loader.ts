@@ -37,8 +37,25 @@ async function getOcct(): Promise<OcctModule> {
 }
 
 const modelCache = new Map<string, THREE.Group>(); // key: stepUrl
+const bytesCache = new Map<string, Uint8Array>();   // 预取的文件字节（规避签名链接过期）
 const inflight = new Set<string>();
 const failed = new Set<string>();
+let lastError = '';
+
+/** 3D 视图悬浮提示用的汇总状态 */
+export function stepStats() {
+  return { ready: modelCache.size, loading: inflight.size, failed: failed.size, lastError };
+}
+
+/** 器件上画布时预取 STEP 文件字节（签名链接约半小时过期，趁新鲜先拿字节；转换仍懒执行） */
+export function ensureStepBytes(url: string | undefined) {
+  if (!url || bytesCache.has(url) || modelCache.has(url) || inflight.has(url) || failed.has(url)) return;
+  fetch(`/api/ezplm?path=file&url=${encodeURIComponent(url)}`).then(async (r) => {
+    if (!r.ok) return; // 预取失败不算失败，转换时会重试并报错
+    const buf = new Uint8Array(await r.arrayBuffer());
+    if (buf.length > 16 && buf[0] !== 0x7b) bytesCache.set(url, buf); // 0x7b='{' 代理 JSON 错误
+  }).catch(() => { /* 预取失败静默 */ });
+}
 
 export function stepModelFor(url: string | undefined): THREE.Group | undefined {
   if (!url) return undefined;
@@ -50,14 +67,19 @@ export function stepModelFor(url: string | undefined): THREE.Group | undefined {
 export function ensureStepModel(url: string | undefined) {
   if (!url || modelCache.has(url) || inflight.has(url) || failed.has(url)) return;
   inflight.add(url);
+  useLibFileStore.getState().bump(); // 让「转换中」状态可见
   (async () => {
     try {
-      const resp = await fetch(`/api/ezplm?path=file&url=${encodeURIComponent(url)}`);
-      if (!resp.ok) throw new Error(`fetch ${resp.status}`);
-      const buf = new Uint8Array(await resp.arrayBuffer());
-      const occt = await getOcct();
+      let buf = bytesCache.get(url);
+      if (!buf) {
+        const resp = await fetch(`/api/ezplm?path=file&url=${encodeURIComponent(url)}`);
+        if (!resp.ok) throw new Error(`文件拉取失败 HTTP ${resp.status}（签名链接可能已过期，重新搜索该器件可刷新）`);
+        buf = new Uint8Array(await resp.arrayBuffer());
+        if (buf.length > 0 && buf[0] === 0x7b) throw new Error('代理返回错误: ' + new TextDecoder().decode(buf.slice(0, 120)));
+      }
+      const occt = await getOcct().catch((e) => { throw new Error('WASM 引擎加载失败: ' + String(e).slice(0, 120)); });
       const result = occt.ReadStepFile(buf, null);
-      if (!result?.success || !result.meshes?.length) throw new Error('parse failed');
+      if (!result?.success || !result.meshes?.length) throw new Error('STEP 解析失败（文件格式异常）');
 
       const group = new THREE.Group();
       for (const m of result.meshes) {
@@ -83,7 +105,9 @@ export function ensureStepModel(url: string | undefined) {
       useLibFileStore.getState().bump();
     } catch (e) {
       failed.add(url);
-      console.warn('[step] STEP 模型加载失败，使用参数化模型:', url.slice(0, 80), e);
+      lastError = String(e instanceof Error ? e.message : e).slice(0, 160);
+      console.warn('[step] STEP 模型加载失败，使用参数化模型:', url.slice(0, 80), lastError);
+      useLibFileStore.getState().bump(); // 失败状态也要驱动 UI 更新
     } finally {
       inflight.delete(url);
     }

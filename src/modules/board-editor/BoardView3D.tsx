@@ -9,6 +9,7 @@ import { useDesignStore } from '../../state/designStore';
 import { buildComponent3D, MAT } from './footprint3d';
 import { mountingHoleCenters, HOLE_DIAMETER_MM } from '../../design-core/collision';
 import { useLibFileStore } from '../../design-core/geometry/lib-file-registry';
+import { stepStats } from './step-loader';
 import type { CircuitCanvasDocument } from '../../design-core/document/types';
 
 export function BoardView3D() {
@@ -119,6 +120,21 @@ export function BoardView3D() {
 
   return (
     <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+      {(() => {
+        const st = stepStats();
+        const total = doc.components.filter((c) => c.display?.stepUrl).length;
+        if (!total) return null;
+        const allOk = st.ready >= total && !st.loading;
+        return (
+          <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 5, fontSize: 10.5, padding: '4px 10px', borderRadius: 6, background: st.failed ? '#fef2f2' : allOk ? '#f0fdf4' : '#fefce8', border: `1px solid ${st.failed ? '#fecaca' : allOk ? '#bbf7d0' : '#fde68a'}`, color: st.failed ? '#b91c1c' : allOk ? '#15803d' : '#a16207', maxWidth: 380 }}>
+            {st.failed
+              ? `真实3D: ${st.ready} 成功 · ${st.failed} 失败 — ${st.lastError}`
+              : st.loading
+                ? `真实3D模型转换中… (${st.ready}/${total}) 首次需下载 3D 引擎(约8MB)`
+                : `✓ 真实 STEP 模型已加载 (${st.ready}/${total})`}
+          </div>
+        );
+      })()}
       <div ref={mountRef} style={{ width: '100%', height: '100%', cursor: 'grab' }} />
       <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', padding: '5px 14px', borderRadius: 16, background: 'rgba(255,255,255,.08)', border: '1px solid rgba(134,239,172,.25)', color: '#86efac', fontSize: 11, fontWeight: 600, pointerEvents: 'none' }}>
         🖱 拖拽旋转 · 滚轮缩放 · 真实 3D 封装

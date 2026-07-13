@@ -15,6 +15,7 @@ import { downloadKicadPcb } from './modules/board-editor/pcbExport';
 import { getEzplmReferenceDesigns, isEzplmPart, type ReferenceDesign } from './providers/ezplm-live';
 import { ensureFootprintFile, ensureSymbolFile, useLibFileStore } from './design-core/geometry/lib-file-registry';
 import { fetchDigikeyOffer, formatDkPrice, type DigikeyOffer } from './providers/digikey';
+import { ensureStepBytes } from './modules/board-editor/step-loader';
 import type { PlacedComponent as PlacedComponentT } from './design-core/document/types';
 import { BoardCanvas2D } from './modules/board-editor/BoardCanvas2D';
 import { BoardView3D } from './modules/board-editor/BoardView3D';
@@ -60,6 +61,7 @@ export default function App() {
     for (const c of doc.components) {
       ensureFootprintFile(c.footprint.name, c.display?.footprintFileUrl);
       ensureSymbolFile(c.mpn, c.display?.symbolFileUrl);
+      ensureStepBytes(c.display?.stepUrl);
     }
   }, [doc.components]);
   const placeScheme = useDesignStore((s) => s.placeScheme);
