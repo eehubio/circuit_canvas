@@ -3,6 +3,7 @@
  * 2D 画布：渲染板框 + 器件（带丝印），支持拖拽/选中/缩放/平移。
  * 坐标系：板坐标(mm) → 像素用 PX_PER_MM。
  */
+import { useT } from '../../shared/i18n';
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { useDesignStore } from '../../state/designStore';
 import { PX_PER_MM, footprintBodyRect } from '../../design-core/geometry';
@@ -18,6 +19,7 @@ const ORIGIN = { x: 60, y: 40 }; // 板框左上角在 svg 中的像素偏移
 const viewMemory = { zoom: 1, pan: { x: 0, y: 0 } };
 
 export function BoardCanvas2D() {
+  const t = useT();
   const doc = useDesignStore((s) => s.doc);
   const selectedId = useDesignStore((s) => s.selectedId);
   const multiSel = useDesignStore((s) => s.multiSel);
@@ -128,7 +130,7 @@ export function BoardCanvas2D() {
               onRefDesDown={(e) => onRefDesDown(e, c)} />
           ))}
           {doc.components.length === 0 && (
-            <text x={ORIGIN.x + bw / 2} y={ORIGIN.y + bh / 2} textAnchor="middle" fontSize={12} fill="#94a3b8">从左侧添加器件，自动按电气规则摆放</text>
+            <text x={ORIGIN.x + bw / 2} y={ORIGIN.y + bh / 2} textAnchor="middle" fontSize={12} fill="#94a3b8">{t('从左侧添加器件，自动按电气规则摆放')}</text>
           )}
         </g>
       </svg>

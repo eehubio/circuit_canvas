@@ -66,7 +66,7 @@ export function ComponentSearchPanel() {
         {CATEGORY_LIST.map((cat) => (
           <button key={cat} onClick={() => setCategory(category === cat ? null : cat)}
             style={chip(category === cat)}>
-            {CATEGORY_DISPLAY[cat].icon} {CATEGORY_DISPLAY[cat].name}
+            {CATEGORY_DISPLAY[cat].icon} {t(CATEGORY_DISPLAY[cat].name)}
           </button>
         ))}
       </div>
@@ -89,6 +89,7 @@ export function ComponentSearchPanel() {
 function ResultCard({ r, expanded, onToggle, onAdd, placed }: {
   r: ComponentSearchResult; expanded: boolean; onToggle: () => void; onAdd: () => void; placed: boolean;
 }) {
+  const t = useT();
   const isOrg = !!r.org;
   return (
     <div style={{ marginBottom: 8, borderRadius: 8, border: `1px solid ${isOrg ? '#c6e2d0' : '#e5e7eb'}`, background: placed ? '#f3f4f6' : isOrg ? '#f0f9f4' : '#fff', opacity: placed ? 0.55 : 1 }}>
@@ -96,11 +97,11 @@ function ResultCard({ r, expanded, onToggle, onAdd, placed }: {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {r.componentId.startsWith('ez_') ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: '#e0f2fe', color: '#0369a1', fontWeight: 700 }}>ezPLM</span>
-              : isOrg ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>本组织</span> : null}
+              : isOrg ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: '#dcfce7', color: '#166534', fontWeight: 600 }}>{t('本组织')}</span> : null}
             <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 600, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.mpn}</span>
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 3, fontSize: 11, color: '#6b7280', flexWrap: 'wrap' }}>
-            <span style={{ fontFamily: 'monospace' }}>{r.defaultFootprintName}</span><span>·</span><span>{r.manufacturer}</span>
+            <span style={{ fontFamily: 'monospace' }}>{r.defaultFootprintName}</span><span>·</span><span>{t(r.manufacturer)}</span>
             {r.unitPrice != null && <><span>·</span><span style={{ color: '#059669', fontWeight: 600 }}>{fmtMoney(r.unitPrice.amount)}</span></>}
           </div>
           {r.description && <TrText text={r.description} style={{ marginTop: 2, fontSize: 10.5, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} />}

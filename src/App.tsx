@@ -236,30 +236,30 @@ export default function App() {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
           {/* Toolbar */}
           <div style={{ background: '#fff', borderBottom: '2px solid #E8F3EE', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button onClick={undo} style={tbtn}>↩ 撤销</button>
-            <button onClick={redo} style={tbtn}>↪ 重做</button>
-            <button onClick={clearAll} style={tbtn}>🧹 清除</button>
+            <button onClick={undo} style={tbtn}>↩ {t('撤销')}</button>
+            <button onClick={redo} style={tbtn}>↪ {t('重做')}</button>
+            <button onClick={clearAll} style={tbtn}>🧹 {t('清除')}</button>
             <div style={{ width: 1, height: 18, background: '#E8F3EE', margin: '0 4px' }} />
             <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #E8F3EE' }}>
               {(['2d', '3d'] as const).map((v) => (
-                <button key={v} onClick={() => setView(v)} style={{ padding: '7px 14px', border: 'none', background: view === v ? COLORS.green : '#fff', color: view === v ? '#fff' : '#475569', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{v === '2d' ? '2D 布局' : '3D 视图'}</button>
+                <button key={v} onClick={() => setView(v)} style={{ padding: '7px 14px', border: 'none', background: view === v ? COLORS.green : '#fff', color: view === v ? '#fff' : '#475569', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{v === '2d' ? t('2D 布局') : t('3D 视图')}</button>
               ))}
             </div>
             {view === '2d' && (
               <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #E8F3EE' }} title="当前放置层（选中器件按 L 换层）">
                 {(['TOP', 'BOTTOM'] as const).map((l) => (
-                  <button key={l} onClick={() => setActiveLayer(l)} style={{ padding: '7px 12px', border: 'none', background: activeLayer === l ? (l === 'TOP' ? '#c08a2d' : '#3b82c4') : '#fff', color: activeLayer === l ? '#fff' : '#475569', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{l === 'TOP' ? 'Top层' : 'Bottom层'}</button>
+                  <button key={l} onClick={() => setActiveLayer(l)} style={{ padding: '7px 12px', border: 'none', background: activeLayer === l ? (l === 'TOP' ? '#c08a2d' : '#3b82c4') : '#fff', color: activeLayer === l ? '#fff' : '#475569', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{l === 'TOP' ? t('Top层') : t('Bottom层')}</button>
                 ))}
               </div>
             )}
             <div onClick={toggleAllRefDes} title="显示/隐藏全部位号" style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', userSelect: 'none' }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>位号</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>{t('位号')}</span>
               <div style={{ width: 34, height: 18, borderRadius: 9, background: hideAllRefDes ? '#cbd5e1' : COLORS.green, position: 'relative', transition: 'background .15s' }}>
                 <div style={{ position: 'absolute', top: 2, left: hideAllRefDes ? 2 : 18, width: 14, height: 14, borderRadius: 7, background: '#fff', transition: 'left .15s', boxShadow: '0 1px 3px rgba(0,0,0,.25)' }} />
               </div>
             </div>
             <div style={{ flex: 1 }} />
-            <span style={{ fontSize: 11, color: '#94a3b8' }}>{view === '3d' ? '拖拽旋转 · 滚轮缩放' : 'R 旋转 · L 换层 · Delete 删除 · 拖位号可移动'}</span>
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>{view === '3d' ? t('拖拽旋转 · 滚轮缩放') : t('R 旋转 · L 换层 · Delete 删除 · 拖位号可移动')}</span>
           </div>
 
           <div style={{ flex: 1, position: 'relative', minHeight: 0, display: 'flex' }}>
@@ -295,7 +295,7 @@ export default function App() {
               ))}
               <div style={{ width: 1, height: 16, background: '#E8F3EE', margin: '0 2px' }} />
               <button title="四角定位孔（开启后器件自动避让）" onClick={toggleMountingHoles}
-                style={{ padding: '0 8px', height: 22, borderRadius: 4, border: `1.5px solid ${doc.board.mountingHolesEnabled ? COLORS.green : '#E8F3EE'}`, background: doc.board.mountingHolesEnabled ? COLORS.greenBg : '#fff', color: doc.board.mountingHolesEnabled ? COLORS.green : '#94a3b8', fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>⊙ 定位孔</button>
+                style={{ padding: '0 8px', height: 22, borderRadius: 4, border: `1.5px solid ${doc.board.mountingHolesEnabled ? COLORS.green : '#E8F3EE'}`, background: doc.board.mountingHolesEnabled ? COLORS.greenBg : '#fff', color: doc.board.mountingHolesEnabled ? COLORS.green : '#94a3b8', fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>⊙ {t('定位孔')}</button>
               {doc.board.shape === 'lshape' && (
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 6, fontSize: 10.5, color: '#64748b' }}>
                   切角
@@ -335,7 +335,7 @@ export default function App() {
             ))}
           </div>
           <div style={{ flex: 1, overflow: 'auto', padding: 12, background: '#f8fafc' }}>
-            {rightTab === 'advisor' ? <AdvisorPanel /> : selObj ? <CompDetail iid={selObj.instanceId} onBuild={(mpn) => setWizard({ open: true, mpn })} /> : <div style={{ textAlign: 'center', padding: 40, color: '#7F8C8D', fontSize: 12 }}>点击画布中的元件查看详情</div>}
+            {rightTab === 'advisor' ? <AdvisorPanel /> : selObj ? <CompDetail iid={selObj.instanceId} onBuild={(mpn) => setWizard({ open: true, mpn })} /> : <div style={{ textAlign: 'center', padding: 40, color: '#7F8C8D', fontSize: 12 }}>{t('点击画布中的元件查看详情')}</div>}
           </div>
         </aside>
       </div>
