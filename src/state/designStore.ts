@@ -44,6 +44,12 @@ interface DesignState {
   toggleAllRefDes: () => void;
   setComponentMpn: (instanceId: string, mpn: string) => void;
   setCustomSymbol: (instanceId: string, svg: string) => void;
+  /** 整体替换为库中器件（型号+符号+封装全部采用） */
+  replaceComponentWith: (instanceId: string, src: ComponentSearchResult) => void;
+  /** 仅关联原理图符号（借用库中器件的符号，型号/封装不变） */
+  linkSymbolFrom: (instanceId: string, src: { mpn: string; symbolFileUrl?: string }) => void;
+  /** 仅关联 PCB 封装（借用库中器件的封装，型号/符号不变） */
+  linkFootprintFrom: (instanceId: string, src: { footprintName: string; footprintFileUrl?: string; stepUrl?: string; pins?: number }) => void;
   select: (id: string | null) => void;
   toggleMulti: (id: string) => void;
   clearAll: () => void;
@@ -205,6 +211,53 @@ export const useDesignStore = create<DesignState>()(
         if (!c) return;
         c.customSymbolSvg = svg;
         s.doc = touchDocument(s.doc);
+      }),
+
+    replaceComponentWith: (id, src) =>
+      set((s) => {
+        const c = s.doc.components.find((x) => x.instanceId === id);
+        if (!c) return;
+        snapshot(s);
+        c.mpn = src.mpn;
+        c.manufacturer = src.manufacturer;
+        c.category = src.category;
+        c.componentId = src.componentId;
+        c.footprint = { ...c.footprint, name: src.defaultFootprintName };
+        c.customSymbolSvg = undefined;
+        c.display = {
+          ...(c.display ?? {}),
+          family: src.family,
+          description: src.description,
+          pins: src.pins,
+          footprintFileUrl: src.footprintFileUrl,
+          symbolFileUrl: src.symbolFileUrl,
+          symbolFromMpn: undefined,
+          stepUrl: src.stepUrl,
+          datasheetUrl: src.datasheetUrl,
+          officialUrl: src.productUrl,
+        };
+        s.doc = touchDocument(refreshDerived(s.doc));
+      }),
+
+    linkSymbolFrom: (id, src) =>
+      set((s) => {
+        const c = s.doc.components.find((x) => x.instanceId === id);
+        if (!c) return;
+        snapshot(s);
+        c.display = { ...(c.display ?? {}), symbolFileUrl: src.symbolFileUrl, symbolFromMpn: src.mpn };
+        c.customSymbolSvg = undefined; // 库符号优先于此前上传的 SVG
+        s.doc = touchDocument(s.doc);
+      }),
+
+    linkFootprintFrom: (id, src) =>
+      set((s) => {
+        const c = s.doc.components.find((x) => x.instanceId === id);
+        if (!c) return;
+        snapshot(s);
+        c.footprint = { ...c.footprint, name: src.footprintName };
+        c.display = { ...(c.display ?? {}), footprintFileUrl: src.footprintFileUrl, stepUrl: src.stepUrl, pins: src.pins ?? c.display?.pins };
+
+        s.doc = touchDocument(refreshDerived(s.doc));
       }),
 
     select: (id) => set((s) => { s.selectedId = id; }),

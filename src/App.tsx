@@ -66,7 +66,7 @@ export default function App() {
   useEffect(() => {
     for (const c of doc.components) {
       ensureFootprintFile(c.footprint.name, c.display?.footprintFileUrl);
-      ensureSymbolFile(c.mpn, c.display?.symbolFileUrl);
+      ensureSymbolFile(c.display?.symbolFromMpn ?? c.mpn, c.display?.symbolFileUrl); // 仅关联符号时按来源型号注册
       ensureStepBytes(c.display?.stepUrl);
     }
   }, [doc.components]);
@@ -708,6 +708,37 @@ function mockOffers(mpn: string, vendor: string): { price: number; stock: number
 function FootprintPartEditor({ c, onBuild }: { c: PlacedComponentT; onBuild?: (mpn: string) => void }) {
   const setMpn = useDesignStore((s) => s.setComponentMpn);
   const setSvg = useDesignStore((s) => s.setCustomSymbol);
+  const linkSymbol = useDesignStore((s) => s.linkSymbolFrom);
+  const linkFootprint = useDesignStore((s) => s.linkFootprintFrom);
+  const addFull = useDesignStore((s) => s.replaceComponentWith);
+  // 关联模式：full=整体替换 / symbol=仅借符号 / footprint=仅借封装
+  const [mode, setMode] = useState<'full' | 'symbol' | 'footprint' | null>(null);
+  const [kw, setKw] = useState('');
+  const [results, setResults] = useState<Awaited<ReturnType<typeof searchEzplmParts>>['items']>([]);
+  const [busy, setBusy] = useState(false);
+  const seq = useRef(0);
+  const doSearch = useCallback((q: string) => {
+    const n = ++seq.current;
+    if (!q.trim()) { setResults([]); setBusy(false); return; }
+    setBusy(true);
+    setTimeout(async () => {
+      if (n !== seq.current) return;
+      const r = await searchEzplmParts(q.trim(), 6).catch(() => ({ items: [] as typeof results }));
+      if (n !== seq.current) return;
+      setResults(r.items); setBusy(false);
+    }, 250);
+  }, []);
+  const openMode = (m: 'full' | 'symbol' | 'footprint') => {
+    const next = mode === m ? null : m;
+    setMode(next);
+    if (next) { const q = c.mpn.startsWith('fp_') ? '' : c.mpn; setKw(q); setResults([]); doSearch(q); }
+  };
+  const applyPick = (r: (typeof results)[number]) => {
+    if (mode === 'full') addFull(c.instanceId, r);
+    else if (mode === 'symbol') linkSymbol(c.instanceId, { mpn: r.mpn, symbolFileUrl: r.symbolFileUrl });
+    else if (mode === 'footprint') linkFootprint(c.instanceId, { footprintName: r.defaultFootprintName, footprintFileUrl: r.footprintFileUrl, stepUrl: r.stepUrl, pins: r.pins });
+    setMode(null); setKw(''); setResults([]);
+  };
   const [mpnText, setMpnText] = useState(c.mpn.startsWith('fp_') || c.display?.family === 'Footprint' ? '' : c.mpn);
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -726,7 +757,38 @@ function FootprintPartEditor({ c, onBuild }: { c: PlacedComponentT; onBuild?: (m
           onKeyDown={(e) => { if (e.key === 'Enter' && mpnText.trim()) setMpn(c.instanceId, mpnText); }} />
         <button onClick={() => mpnText.trim() && setMpn(c.instanceId, mpnText)} style={{ padding: '6px 12px', borderRadius: 6, border: 'none', background: '#a21caf', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>设为型号</button>
       </div>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+      {/* 从 ezPLM 库关联：整体 / 仅符号 / 仅封装 */}
+      <div style={{ marginTop: 8, padding: 8, borderRadius: 6, background: '#fff', border: '1px solid #f0abfc' }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: '#86198f', marginBottom: 5 }}>🔗 从 ezPLM 库关联</div>
+        <div style={{ display: 'flex', gap: 5 }}>
+          {([['full', '📦 匹配型号', '型号+符号+封装全部替换'], ['symbol', '📐 仅符号', '只借用该器件的原理图符号，型号与封装不变'], ['footprint', '🔲 仅封装', '只借用该器件的 PCB 封装与 3D，型号与符号不变']] as const).map(([m, label, tip]) => (
+            <button key={m} onClick={() => openMode(m)} title={tip}
+              style={{ flex: 1, padding: '5px 4px', borderRadius: 5, fontSize: 10, fontWeight: 700, cursor: 'pointer',
+                border: `1px solid ${mode === m ? '#a21caf' : '#e9d5ff'}`, background: mode === m ? '#fae8ff' : '#fff', color: mode === m ? '#86198f' : '#a855f7' }}>{label}</button>
+          ))}
+        </div>
+        {mode && (
+          <div style={{ marginTop: 6 }}>
+            <input autoFocus value={kw} onChange={(e) => { setKw(e.target.value); doSearch(e.target.value); }}
+              placeholder={mode === 'symbol' ? '搜索型号，借用其原理图符号…' : mode === 'footprint' ? '搜索型号，借用其封装…' : '搜索 ezPLM 型号…'}
+              style={{ width: '100%', padding: '5px 8px', borderRadius: 5, border: '1px solid #e9d5ff', fontSize: 11, outline: 'none', boxSizing: 'border-box' }} />
+            {busy && <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>搜索中…</div>}
+            {!busy && kw.trim() && !results.length && <div style={{ fontSize: 10, color: '#b45309', marginTop: 4 }}>无匹配结果</div>}
+            {results.map((r) => (
+              <div key={r.componentId} onClick={() => applyPick(r)}
+                style={{ padding: '5px 8px', marginTop: 4, borderRadius: 5, background: '#fdf4ff', border: '1px solid #f0abfc', cursor: 'pointer', fontSize: 10.5 }}>
+                <b style={{ fontFamily: 'monospace' }}>{r.mpn}</b>
+                <span style={{ color: '#94a3b8' }}> · {r.manufacturer}</span>
+                <div style={{ color: '#a855f7', fontSize: 9.5, marginTop: 1 }}>
+                  {mode === 'symbol' ? `借用符号${r.symbolFileUrl ? '（含 KiCad 符号文件）' : '（按引脚数生成）'}` : mode === 'footprint' ? `借用封装 ${r.defaultFootprintName}` : `${r.defaultFootprintName}`}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 8 }}>
         <button onClick={() => onBuild?.(mpnText.trim() || c.mpn)} title="打开构建向导：上传 PDF / 输入 URL 由 AI 提取管脚与封装，或手工填写"
           style={{ padding: '5px 10px', borderRadius: 6, border: 'none', background: '#6d28d9', color: '#fff', fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}>🤖 从 URL / PDF 提取生成</button>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, color: '#86198f', cursor: 'pointer' }}>
@@ -735,6 +797,11 @@ function FootprintPartEditor({ c, onBuild }: { c: PlacedComponentT; onBuild?: (m
           <input type="file" accept=".svg,image/svg+xml" onChange={onFile} style={{ display: 'none' }} />
         </label>
       </div>
+      {(c.display?.symbolFromMpn || (c.display?.footprintFileUrl && c.display?.family === 'Footprint')) && (
+        <div style={{ marginTop: 6, fontSize: 9.5, color: '#16a34a', fontWeight: 700 }}>
+          {c.display?.symbolFromMpn && <div>✓ 符号已关联自 {c.display.symbolFromMpn}</div>}
+        </div>
+      )}
     </div>
   );
 }

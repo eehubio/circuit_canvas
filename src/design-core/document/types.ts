@@ -103,6 +103,8 @@ export interface PlacedComponent {
     officialUrl?: string;
     footprintFileUrl?: string;
     symbolFileUrl?: string;
+    /** 仅关联符号时：符号来自库中哪个型号（符号覆盖表按此 key 查） */
+    symbolFromMpn?: string;
     classification?: string;
   };
 }

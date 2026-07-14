@@ -202,7 +202,8 @@ function parsedSymbol(ps: ParsedSymbol): SymbolDef {
 export function symbolFor(c: PlacedComponent): SymbolDef {
   if (c.customSymbolSvg) return customSvgSymbol(c.customSymbolSvg);
   // ezPLM 真实符号文件解析结果优先（真实引脚名）
-  const parsed = symbolOverrideFor(c.mpn);
+  const symKey = c.display?.symbolFromMpn ?? c.mpn; // 仅关联符号时借用库中型号的符号
+  const parsed = symbolOverrideFor(symKey);
   if (parsed) return parsedSymbol(parsed);
   // ezPLM 实时物料：族/引脚名未知，按真实引脚数生成编号符号（不套内置模板）
   if (c.componentId.startsWith('ez_') && c.category !== 'passive') {
@@ -258,7 +259,7 @@ export function symbolFor(c: PlacedComponent): SymbolDef {
 /** 多单元符号拆分：LM358 等返回 [运放A, 运放B, 电源] 各自独立的 SymbolDef；普通器件返回单元素数组 */
 export function symbolUnitsFor(c: PlacedComponent): SymbolDef[] {
   if (!c.customSymbolSvg) {
-    const units = symbolUnitsOverrideFor(c.mpn);
+    const units = symbolUnitsOverrideFor(c.display?.symbolFromMpn ?? c.mpn);
     if (units && units.length > 1) return units.map(parsedSymbol);
   }
   return [symbolFor(c)];
