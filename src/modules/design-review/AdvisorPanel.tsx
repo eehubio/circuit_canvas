@@ -2,7 +2,7 @@
  * modules/design-review/AdvisorPanel.tsx
  * AI 顾问 —— 实时展示设计审查、子电路推荐、PCB规格。数据来自 store + ReferenceDesignProvider。
  */
-import { tr, useTranslated } from '../../shared/i18n';
+import { tr, useTranslated, useLangStore } from '../../shared/i18n';
 import { useEffect, useState } from 'react';
 import { useDesignStore } from '../../state/designStore';
 import { getProviders } from '../../providers/factory';
@@ -73,7 +73,7 @@ export function AdvisorPanel() {
     const all = doc.components.map((c) => ({ mpn: c.mpn, category: c.category, family: c.display?.family }));
     if (await geminiAvailable()) {
       try {
-        const prompt = `你是资深硬件工程师。当前 PCB 画布上已有器件：\n${all.map((c) => `- ${c.mpn}（${c.category}${c.family ? '/' + c.family : ''}）`).join('\n')}\n\n请分析构成完整可工作系统还缺哪些功能器件/子电路（晶振、复位、去耦、ESD、接口、供电等），按重要性给出至多8条。严格输出 JSON 数组，勿输出其它文字：\n[{"name":"器件/子电路名","reason":"必要性(30字内)"}]`;
+        const prompt = `你是资深硬件工程师。当前 PCB 画布上已有器件：\n${all.map((c) => `- ${c.mpn}（${c.category}${c.family ? '/' + c.family : ''}）`).join('\n')}\n\n请分析构成完整可工作系统还缺哪些功能器件/子电路（晶振、复位、去耦、ESD、接口、供电等），按重要性给出至多8条。${useLangStore.getState().lang === 'en' ? 'name 与 reason 用英文输出。' : ''}严格输出 JSON 数组，勿输出其它文字：\n[{"name":"器件/子电路名","reason":"必要性(30字内)"}]`;
         const text = await geminiComplete(prompt);
         const parsed = extractJson<{ name: string; reason: string }[]>(text);
         setSysSugs(parsed.slice(0, 8));
@@ -113,17 +113,17 @@ export function AdvisorPanel() {
   return (
     <div>
       {/* 系统补全建议（基于画布实际器件） */}
-      <Section title="🧠 系统补全建议" badge={sysSugs.length || undefined}>
-        {doc.components.length === 0 ? <Empty text="添加器件后，AI 分析系统还缺什么" /> : analyzing ? <Empty text="分析中..." /> : (
+      <Section title={"🧠 " + tr('系统补全建议')} badge={sysSugs.length || undefined}>
+        {doc.components.length === 0 ? <Empty text={tr('添加器件后，AI 分析系统还缺什么')} /> : analyzing ? <Empty text={tr('分析中...')} /> : (
           <>
-            <div style={{ fontSize: 9.5, color: '#94a3b8', marginBottom: 6 }}>{sysSource === 'gemini' ? '由 Gemini 基于画布器件实时生成' : '规则引擎基于画布器件动态生成（在 Vercel 配置 GEMINI_API_KEY 后由 Gemini 生成）'}</div>
-            {sysSugs.length === 0 ? <Empty text="当前构成已较完整 ✓" /> : sysSugs.map((g, i) => (
+            <div style={{ fontSize: 9.5, color: '#94a3b8', marginBottom: 6 }}>{sysSource === 'gemini' ? tr('由 Gemini 基于画布器件实时生成') : tr('规则引擎基于画布器件动态生成（在 Vercel 配置 GEMINI_API_KEY 后由 Gemini 生成）')}</div>
+            {sysSugs.length === 0 ? <Empty text={tr('当前构成已较完整 ✓')} /> : sysSugs.map((g, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '7px 9px', marginBottom: 5, borderRadius: 7, background: '#fff', border: '1px solid #f1f5f9' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 11.5, fontWeight: 700, color: '#334155' }}>{g.name}</div>
-                  <div style={{ fontSize: 10, color: '#64748b' }}>{g.reason}</div>
+                  <div style={{ fontSize: 11.5, fontWeight: 700, color: '#334155' }}><TrDyn text={g.name} /></div>
+                  <div style={{ fontSize: 10, color: '#64748b' }}><TrDyn text={g.reason} /></div>
                 </div>
-                {g.addId && <button onClick={() => quickAdd(g.addId!)} style={{ flexShrink: 0, padding: '3px 9px', borderRadius: 5, border: 'none', background: COLORS.green, color: '#fff', fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}>+ 添加</button>}
+                {g.addId && <button onClick={() => quickAdd(g.addId!)} style={{ flexShrink: 0, padding: '3px 9px', borderRadius: 5, border: 'none', background: COLORS.green, color: '#fff', fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}>+ {tr('添加')}</button>}
               </div>
             ))}
           </>
@@ -131,18 +131,18 @@ export function AdvisorPanel() {
       </Section>
 
       {/* 子电路推荐 */}
-      <Section title="🧩 子电路推荐" badge={cats.length || undefined}>
-        {doc.components.length === 0 ? <Empty text="添加器件后推荐配套子电路" /> :
+      <Section title={"🧩 " + tr('子电路推荐')} badge={cats.length || undefined}>
+        {doc.components.length === 0 ? <Empty text={tr('添加器件后推荐配套子电路')} /> :
           cats.map((cat) => (
             <div key={cat} style={{ marginTop: 8 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.green, marginBottom: 4 }}>{CATEGORY_DISPLAY[cat as ComponentCategory].name}</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.green, marginBottom: 4 }}>{tr(CATEGORY_DISPLAY[cat as ComponentCategory].name)}</div>
               {(subs[cat] ?? []).map((r, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '5px 8px', marginBottom: 3, borderRadius: 6, background: '#f8fafc' }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 10.5, fontWeight: 700, color: '#334155' }}>{r.name}</div>
-                    <div style={{ fontSize: 9.5, color: '#64748b' }}>{r.parts}</div>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, color: '#334155' }}><TrDyn text={r.name} /></div>
+                    <div style={{ fontSize: 9.5, color: '#64748b' }}><TrDyn text={r.parts} /></div>
                   </div>
-                  {r.quickAddComponentId && <button onClick={() => quickAdd(r.quickAddComponentId!)} style={miniBtn}>+ 上板</button>}
+                  {r.quickAddComponentId && <button onClick={() => quickAdd(r.quickAddComponentId!)} style={miniBtn}>+ {tr('上板')}</button>}
                 </div>
               ))}
             </div>
@@ -150,15 +150,15 @@ export function AdvisorPanel() {
       </Section>
 
       {/* PCB规格 */}
-      <Section title="📋 PCB设计规格">
+      <Section title={"📋 " + tr('PCB设计规格')}>
         <table style={{ width: '100%', fontSize: 10, borderCollapse: 'collapse', marginTop: 6 }}>
           <tbody>
             {[
-              ['层数', `${layers}层`, layers === 4 ? '密度高,建议4层' : '2层可满足'],
-              ['板厚', '1.6mm', '标准'],
-              ['铜厚', '1oz', '大电流局部2oz'],
-              ['线宽/距', '6/6mil', '标准工艺'],
-              ['板框', `${doc.board.widthMm}×${doc.board.heightMm}mm`, doc.board.shape === 'lshape' ? '异形(费用+)' : '常规'],
+              [tr('层数'), `${layers}` + tr('层'), layers === 4 ? tr('密度高,建议4层') : tr('2层可满足')],
+              [tr('板厚'), '1.6mm', tr('标准')],
+              [tr('铜厚'), '1oz', tr('大电流局部2oz')],
+              [tr('线宽/距'), '6/6mil', tr('标准工艺')],
+              [tr('板框'), `${doc.board.widthMm}×${doc.board.heightMm}mm`, doc.board.shape === 'lshape' ? tr('异形(费用+)') : tr('常规')],
             ].map(([k, v, n]) => (
               <tr key={k} style={{ borderBottom: '1px solid #f1f5f9' }}>
                 <td style={{ padding: '4px 6px', color: '#94a3b8' }}>{k}</td>
@@ -169,12 +169,12 @@ export function AdvisorPanel() {
           </tbody>
         </table>
         <div style={{ fontSize: 9.5, color: '#64748b', marginTop: 6, lineHeight: 1.6 }}>
-          <b>{tr('布局要点')}</b>：晶振贴MCU包地 · 去耦电容贴引脚 · USB差分等长(90Ω) · 电源回路最小化 · 连接器靠板边
+          <b>{tr('布局要点')}</b>：{tr('晶振贴MCU包地 · 去耦电容贴引脚 · USB差分等长(90Ω) · 电源回路最小化 · 连接器靠板边')}
         </div>
       </Section>
 
       {/* 风险 */}
-      <Section title="⚠️ 设计风险" badge={highCount ? `${highCount}高` : undefined} badgeColor="#dc2626">
+      <Section title={"⚠️ " + tr('设计风险')} badge={highCount ? `${highCount}` + tr('高') : undefined} badgeColor="#dc2626">
         {doc.reviewResults.map((r) => {
           const st = LEVEL[r.level];
           return (

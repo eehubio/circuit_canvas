@@ -695,7 +695,7 @@ function CustomLibPanel({ onOpenWizard, wizardTick }: { onOpenWizard: () => void
   return (
     <div>
       <button onClick={onOpenWizard} style={{ width: '100%', padding: '10px 0', borderRadius: 8, border: 'none', background: COLORS.green, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginBottom: 10 }}>
-        ＋ 新建定制器件（AI 提取 / 手工向导）
+        {tr('＋ 新建定制器件（AI 提取 / 手工向导）')}
       </button>
       {parts.length === 0 && <div style={{ textAlign: 'center', padding: 30, color: '#94a3b8', fontSize: 11.5 }}>{tr('还没有定制器件')}<br />{tr('上传 Datasheet 或手工填写管脚即可构建')}</div>}
       {parts.map((p: CustomPart) => (

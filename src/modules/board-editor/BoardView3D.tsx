@@ -3,6 +3,7 @@
  * 真 3D 板视图 —— Three.js WebGL 渲染。
  * 真实 PCB 板 + 参数化 3D 封装，鼠标拖拽旋转、滚轮缩放。仅查看。
  */
+import { tr } from '../../shared/i18n';
 import { useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useDesignStore } from '../../state/designStore';
@@ -149,15 +150,15 @@ export function BoardView3D() {
       })()}
       <div ref={mountRef} style={{ width: '100%', height: '100%', cursor: 'grab' }} />
       <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', padding: '5px 14px', borderRadius: 16, background: 'rgba(255,255,255,.08)', border: '1px solid rgba(134,239,172,.25)', color: '#86efac', fontSize: 11, fontWeight: 600, pointerEvents: 'none' }}>
-        🖱 拖拽旋转 · 滚轮缩放 · 真实 3D 封装
+        🖱 {tr('拖拽旋转 · 滚轮缩放 · 真实 3D 封装')}
       </div>
       <div style={{ position: 'absolute', bottom: 12, right: 12, display: 'flex', gap: 6 }}>
         <button onClick={() => { const st = stateRef.current; st.rotX = -1.35; st.rotY = 0; st.dist = 200; st.updateCamera?.(); }}
-          style={vbtn}>⬆ 顶视Top</button>
+          style={vbtn}>⬆ {tr('顶视Top')}</button>
         <button onClick={() => { const st = stateRef.current; st.rotX = 1.35; st.rotY = 0; st.dist = 200; st.updateCamera?.(); }}
-          style={vbtn}>⬇ 看Bottom</button>
+          style={vbtn}>⬇ {tr('看Bottom')}</button>
         <button onClick={() => { const st = stateRef.current; st.rotX = -0.9; st.rotY = 0.3; st.dist = 220; st.updateCamera?.(); }}
-          style={vbtn}>⟳ 复位视角</button>
+          style={vbtn}>⟳ {tr('复位视角')}</button>
       </div>
     </div>
   );
