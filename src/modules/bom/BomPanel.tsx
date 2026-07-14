@@ -11,7 +11,6 @@ import { fetchDigikeyOffer, type DigikeyOffer } from '../../providers/digikey';
 export function BomPanel({ isFullscreen, onToggleFullscreen }: { isFullscreen?: boolean; onToggleFullscreen?: () => void } = {}) {
   const bom = useDesignStore((s) => s.doc.bom);
   const components = useDesignStore((s) => s.doc.components);
-  const total = bom.reduce((sum, l) => sum + (dkOf(l.mpn)?.unitPrice ?? l.unitPrice?.amount ?? 0) * l.quantity, 0);
   const srcOf = (ref: string) => components.find((c) => c.reference === ref)?.source;
 
   // DigiKey 实时价格：逐型号查询（provider 内按 mpn 缓存，避免重复消耗配额）
@@ -30,6 +29,7 @@ export function BomPanel({ isFullscreen, onToggleFullscreen }: { isFullscreen?: 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bom]);
   const dkOf = (mpn: string): DigikeyOffer | undefined => dkPrices[mpn];
+  const total = bom.reduce((sum, l) => sum + (dkOf(l.mpn)?.unitPrice ?? l.unitPrice?.amount ?? 0) * l.quantity, 0);
 
   const exportCsv = () => {
     const header = '序号,位号,型号,厂商,封装,单价,数量';

@@ -3,7 +3,7 @@
  * 应用壳 —— 组装搜索面板 / 画布 / 右侧顾问 / 底部 BOM。
  * 所有数据流经 designStore 与 Provider，不再有硬编码逻辑。
  */
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useDesignStore } from './state/designStore';
 import { getProviders } from './providers/factory';
 import { appConfig } from './config';
@@ -87,6 +87,22 @@ export default function App() {
   const [linkRow, setLinkRow] = useState<string | null>(null);
   const [linkKw, setLinkKw] = useState('');
   const [linkResults, setLinkResults] = useState<Awaited<ReturnType<typeof searchEzplmParts>>['items']>([]);
+  const [linkBusy, setLinkBusy] = useState(false);
+  const linkSeq = useRef(0);
+  /** 关联搜索（防抖 250ms + 序号守卫，避免旧响应覆盖新结果） */
+  const searchLink = useCallback((kw: string) => {
+    const q = kw.trim();
+    const seq = ++linkSeq.current;
+    if (!q) { setLinkResults([]); setLinkBusy(false); return; }
+    setLinkBusy(true);
+    setTimeout(async () => {
+      if (seq !== linkSeq.current) return;
+      const r = await searchEzplmParts(q, 6).catch(() => ({ items: [] as typeof linkResults }));
+      if (seq !== linkSeq.current) return;
+      setLinkResults(r.items);
+      setLinkBusy(false);
+    }, 250);
+  }, []);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const selObj = doc.components.find((c) => c.instanceId === selectedId);
@@ -297,7 +313,7 @@ export default function App() {
             ))}
           </div>
           <div style={{ flex: 1, overflow: 'auto', padding: 12, background: '#f8fafc' }}>
-            {rightTab === 'advisor' ? <AdvisorPanel /> : selObj ? <CompDetail iid={selObj.instanceId} /> : <div style={{ textAlign: 'center', padding: 40, color: '#7F8C8D', fontSize: 12 }}>点击画布中的元件查看详情</div>}
+            {rightTab === 'advisor' ? <AdvisorPanel /> : selObj ? <CompDetail iid={selObj.instanceId} onBuild={(mpn) => setWizard({ open: true, mpn })} /> : <div style={{ textAlign: 'center', padding: 40, color: '#7F8C8D', fontSize: 12 }}>点击画布中的元件查看详情</div>}
           </div>
         </aside>
       </div>
@@ -361,7 +377,11 @@ export default function App() {
                     <span style={{ color: '#64748b' }}>{d.defaultFootprintName}</span>
                     <span style={{ color: '#059669', fontWeight: 600 }}>{fmtMoney(d.unitPrice?.amount)}</span>
                     {d.mapSource === '封装占位' && (
-                      <button onClick={() => setLinkRow(linkRow === d.componentId ? null : d.componentId)}
+                      <button onClick={() => {
+                        const open = linkRow === d.componentId;
+                        setLinkRow(open ? null : d.componentId);
+                        if (!open) { setLinkKw(d.mpn); setLinkResults([]); searchLink(d.mpn); }
+                      }}
                         title="在 ezPLM 库中搜索并关联到真实器件"
                         style={{ border: '1px solid #bae6fd', background: '#f0f9ff', color: '#0369a1', borderRadius: 5, padding: '2px 8px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>🔗 关联库器件</button>
                     )}
@@ -375,9 +395,11 @@ export default function App() {
                   <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2 }}>{d.description}</div>
                   {linkRow === d.componentId && (
                     <div style={{ marginTop: 6, padding: 8, borderRadius: 6, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                      <input autoFocus placeholder="搜索 ezPLM 型号替换该占位器件…" value={linkKw} onChange={(e) => setLinkKw(e.target.value)}
-                        onKeyDown={async (e) => { if (e.key === 'Enter') { const r = await searchEzplmParts(linkKw.trim(), 6); setLinkResults(r.items); } }}
+                      <input autoFocus placeholder="搜索 ezPLM 型号替换该占位器件…" value={linkKw}
+                        onChange={(e) => { setLinkKw(e.target.value); searchLink(e.target.value); }}
                         style={{ width: '100%', padding: '5px 8px', borderRadius: 5, border: '1px solid #e2e8f0', fontSize: 11, outline: 'none', boxSizing: 'border-box' }} />
+                      {linkBusy && <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>搜索中…</div>}
+                      {!linkBusy && linkKw.trim() && !linkResults.length && <div style={{ fontSize: 10, color: '#b45309', marginTop: 4 }}>ezPLM 库中无匹配 —— 可点「🛠 创建」自行构建该器件</div>}
                       {linkResults.map((r) => (
                         <div key={r.componentId} onClick={() => {
                           setAiProposal({ ...aiProposal, details: aiProposal.details.map((x) => x.componentId === d.componentId ? ({ ...r, mapSource: 'ezPLM云端' } as unknown as typeof x) : x) });
@@ -423,7 +445,7 @@ export default function App() {
   );
 }
 
-function CompDetail({ iid }: { iid: string }) {
+function CompDetail({ iid, onBuild }: { iid: string; onBuild?: (mpn: string) => void }) {
   const c = useDesignStore((s) => s.doc.components.find((x) => x.instanceId === iid));
   const [alts, setAlts] = useState<{ mpn: string; manufacturer: string; note: string; channel: string; footprint?: string; description?: string }[]>([]);
   const [offers, setOffers] = useState<{ vendor: string; price?: { amount: number; currency: string }; stock?: number; url: string }[]>([]);
@@ -468,9 +490,11 @@ function CompDetail({ iid }: { iid: string }) {
     if (!c) return;
     setRefDesigns([]);
     setDkOffer(null);
-    fetchDigikeyOffer(c.mpn).then((o) => { if (o?.found) setDkOffer(o); });
+    // 自建/占位器件的型号不是真实厂商料号，不查供应商（否则会匹配到无关器件的图片与价格）
+    const isSynthetic = c.componentId?.startsWith('custom_') || c.componentId?.startsWith('fp_');
+    if (!isSynthetic) fetchDigikeyOffer(c.mpn).then((o) => { if (o?.found) setDkOffer(o); });
     setSupOffers([]);
-    fetchSupplierOffers(c.mpn).then(setSupOffers);
+    if (!isSynthetic) fetchSupplierOffers(c.mpn).then(setSupOffers);
     providers.components.getAlternatives(c.componentId, ctx).then(setAlts);
     providers.components.getSupplierOffers(c.componentId, ctx).then(setOffers);
     providers.components.getComponentDetail(c.componentId, ctx).then(setDetail);
@@ -520,7 +544,7 @@ function CompDetail({ iid }: { iid: string }) {
       {c.display?.description && <div style={{ fontSize: 12, color: '#475569', marginTop: 10 }}>{c.display.description}</div>}
 
       {/* 封装占位器件：补型号 + 上传自定义原理图符号 */}
-      {c.display?.family === 'Footprint' && <FootprintPartEditor c={c} />}
+      {c.display?.family === 'Footprint' && <FootprintPartEditor c={c} onBuild={onBuild} />}
 
       <LibraryPreview c={c} />
 
@@ -681,7 +705,7 @@ function mockOffers(mpn: string, vendor: string): { price: number; stock: number
 }
 
 /** 封装占位器件编辑：补充型号 / 上传 SVG 原理图符号 */
-function FootprintPartEditor({ c }: { c: PlacedComponentT }) {
+function FootprintPartEditor({ c, onBuild }: { c: PlacedComponentT; onBuild?: (mpn: string) => void }) {
   const setMpn = useDesignStore((s) => s.setComponentMpn);
   const setSvg = useDesignStore((s) => s.setCustomSymbol);
   const [mpnText, setMpnText] = useState(c.mpn.startsWith('fp_') || c.display?.family === 'Footprint' ? '' : c.mpn);
@@ -702,11 +726,15 @@ function FootprintPartEditor({ c }: { c: PlacedComponentT }) {
           onKeyDown={(e) => { if (e.key === 'Enter' && mpnText.trim()) setMpn(c.instanceId, mpnText); }} />
         <button onClick={() => mpnText.trim() && setMpn(c.instanceId, mpnText)} style={{ padding: '6px 12px', borderRadius: 6, border: 'none', background: '#a21caf', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>设为型号</button>
       </div>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, color: '#86198f', cursor: 'pointer' }}>
-        <span style={{ padding: '5px 10px', borderRadius: 6, border: '1px dashed #d8b4fe', background: '#fff', fontWeight: 700 }}>⬆ 上传原理图符号 (SVG)</span>
-        {c.customSymbolSvg && <span style={{ color: '#16a34a', fontWeight: 700 }}>✓ 已上传</span>}
-        <input type="file" accept=".svg,image/svg+xml" onChange={onFile} style={{ display: 'none' }} />
-      </label>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        <button onClick={() => onBuild?.(mpnText.trim() || c.mpn)} title="打开构建向导：上传 PDF / 输入 URL 由 AI 提取管脚与封装，或手工填写"
+          style={{ padding: '5px 10px', borderRadius: 6, border: 'none', background: '#6d28d9', color: '#fff', fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}>🤖 从 URL / PDF 提取生成</button>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, color: '#86198f', cursor: 'pointer' }}>
+          <span style={{ padding: '5px 10px', borderRadius: 6, border: '1px dashed #d8b4fe', background: '#fff', fontWeight: 700 }}>⬆ 上传符号 (SVG)</span>
+          {c.customSymbolSvg && <span style={{ color: '#16a34a', fontWeight: 700 }}>✓ 已上传</span>}
+          <input type="file" accept=".svg,image/svg+xml" onChange={onFile} style={{ display: 'none' }} />
+        </label>
+      </div>
     </div>
   );
 }

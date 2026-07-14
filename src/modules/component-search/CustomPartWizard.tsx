@@ -10,8 +10,8 @@ import { COLORS } from '../../shared/theme';
 import { geminiAvailable, geminiComplete, extractJson } from '../../providers/gemini';
 import { padFootprintFor } from '../../design-core/geometry/footprint-pads';
 import {
-  KICAD_PIN_TYPES, type CustomPin, type CustomPkg, type CustomPart,
-  synthFootprintName, saveCustomPart,
+  KICAD_PIN_TYPES, type CustomPin, type CustomPkg, type CustomPart, type PinSide,
+  synthFootprintName, saveCustomPart, defaultSide, buildCustomFootprint, customFootprintName,
 } from '../../design-core/custom-lib';
 import type { ComponentCategory } from '../../design-core/document/types';
 
@@ -31,13 +31,14 @@ export function CustomPartWizard({ initialMpn, onSaved, onClose }: { initialMpn?
   const [aiBusy, setAiBusy] = useState(false);
   const [aiMsg, setAiMsg] = useState('');
 
-  const fpName = synthFootprintName(pkg, pins.length);
-  const fp = useMemo(() => padFootprintFor(fpName), [fpName]);
+  const fpName = customFootprintName({ mpn: mpn || 'X', pkg, pins });
+  const fp = useMemo(() => buildCustomFootprint(pkg, pins.length), [pkg, pins.length]);
 
   const EXTRACT_PROMPT = `请从以上器件资料中提取信息，严格输出 JSON（勿输出其它文字）：
 {"mpn":"型号","description":"30字内功能描述","category":"ic|mcu|power|connector|passive",
-"pins":[{"num":"1","name":"VCC","type":"power_in","desc":"电源"}],
-"package":{"family":"dual|quad|qfn|header|chip","bodyW":本体宽mm,"bodyH":本体长mm,"pitch":引脚间距mm}}
+"pins":[{"num":"1","name":"VCC","type":"power_in","desc":"电源","side":"top|bottom|left|right"}],
+"package":{"family":"dual|quad|qfn|header|chip","bodyW":本体宽mm,"bodyH":本体长mm,"pitch":引脚间距mm,"outlineW":模块整体轮廓宽mm(若焊盘只占模块一部分则填写否则省略),"outlineH":模块整体轮廓高mm}}
+side 规则：电源脚 top，地脚 bottom，输入类 left，输出类 right
 pin type 取值：${KICAD_PIN_TYPES.join('|')}`;
 
   const applyExtract = (j: { mpn?: string; description?: string; category?: string; pins?: CustomPin[]; package?: Partial<CustomPkg> }) => {
@@ -48,6 +49,7 @@ pin type 取值：${KICAD_PIN_TYPES.join('|')}`;
       setPins(j.pins.slice(0, 100).map((p, i) => ({
         num: String(p.num ?? i + 1), name: String(p.name ?? `P${i + 1}`),
         type: KICAD_PIN_TYPES.includes(p.type) ? p.type : 'passive', desc: p.desc,
+        side: (['left', 'right', 'top', 'bottom'] as const).includes(p.side as PinSide) ? p.side as PinSide : undefined,
       })));
     }
     const pk = j.package;
@@ -57,6 +59,9 @@ pin type 取值：${KICAD_PIN_TYPES.join('|')}`;
         bodyW: Number(pk.bodyW) || prev.bodyW,
         bodyH: Number(pk.bodyH) || prev.bodyH,
         pitch: Number(pk.pitch) || prev.pitch,
+        outlineW: Number(pk.outlineW) || prev.outlineW,
+        outlineH: Number(pk.outlineH) || prev.outlineH,
+        padsOffsetX: prev.padsOffsetX, padsOffsetY: prev.padsOffsetY,
       }));
     }
   };
@@ -142,8 +147,12 @@ pin type 取值：${KICAD_PIN_TYPES.join('|')}`;
             <div key={i} style={{ display: 'flex', gap: 6, padding: '4px 8px', borderBottom: '1px solid #f8fafc', alignItems: 'center' }}>
               <input value={p.num} onChange={(e) => setPins(pins.map((x, k) => k === i ? { ...x, num: e.target.value } : x))} style={{ ...inp, width: 40, textAlign: 'center' }} />
               <input value={p.name} onChange={(e) => setPins(pins.map((x, k) => k === i ? { ...x, name: e.target.value } : x))} placeholder="名称" style={{ ...inp, width: 90, fontFamily: 'monospace' }} />
-              <select value={p.type} onChange={(e) => setPins(pins.map((x, k) => k === i ? { ...x, type: e.target.value as CustomPin['type'] } : x))} style={{ ...inp, width: 118 }}>
+              <select value={p.type} onChange={(e) => setPins(pins.map((x, k) => k === i ? { ...x, type: e.target.value as CustomPin['type'] } : x))} style={{ ...inp, width: 104 }}>
                 {KICAD_PIN_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <select value={p.side ?? defaultSide(p)} onChange={(e) => setPins(pins.map((x, k) => k === i ? { ...x, side: e.target.value as PinSide } : x))}
+                title="管脚在原理图符号的哪一边（默认：电源上/地下/输入左/输出右）" style={{ ...inp, width: 62 }}>
+                <option value="left">◀ 左</option><option value="right">右 ▶</option><option value="top">▲ 上</option><option value="bottom">▼ 下</option>
               </select>
               <input value={p.desc ?? ''} onChange={(e) => setPins(pins.map((x, k) => k === i ? { ...x, desc: e.target.value } : x))} placeholder="描述" style={{ ...inp, flex: 1 }} />
               <button onClick={() => setPins(pins.filter((_, k) => k !== i))} style={{ border: 'none', background: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 13 }}>×</button>
@@ -169,17 +178,29 @@ pin type 取值：${KICAD_PIN_TYPES.join('|')}`;
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11, color: '#64748b' }}>
               间距 <input type="number" step={0.05} value={pkg.pitch} onChange={(e) => setPkg({ ...pkg, pitch: Number(e.target.value) })} style={{ ...inp, width: 58 }} /> mm
             </div>
+            <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px dashed #e2e8f0' }}>
+              <div style={{ fontSize: 10.5, fontWeight: 700, color: '#475569', marginBottom: 4 }}>模块轮廓（可选）</div>
+              <div style={{ fontSize: 9.5, color: '#94a3b8', marginBottom: 5 }}>焊盘可能只占模块的一部分（如排针在模组边缘），此处指定整体外形</div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11, color: '#64748b', marginBottom: 5 }}>
+                轮廓 <input type="number" step={0.5} placeholder="宽" value={pkg.outlineW ?? ''} onChange={(e) => setPkg({ ...pkg, outlineW: e.target.value ? Number(e.target.value) : undefined })} style={{ ...inp, width: 54 }} />
+                × <input type="number" step={0.5} placeholder="高" value={pkg.outlineH ?? ''} onChange={(e) => setPkg({ ...pkg, outlineH: e.target.value ? Number(e.target.value) : undefined })} style={{ ...inp, width: 54 }} /> mm
+              </div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11, color: '#64748b' }}>
+                焊盘偏移 <input type="number" step={0.5} value={pkg.padsOffsetX ?? 0} onChange={(e) => setPkg({ ...pkg, padsOffsetX: Number(e.target.value) })} style={{ ...inp, width: 50 }} />
+                , <input type="number" step={0.5} value={pkg.padsOffsetY ?? 0} onChange={(e) => setPkg({ ...pkg, padsOffsetY: Number(e.target.value) })} style={{ ...inp, width: 50 }} /> mm
+              </div>
+            </div>
             <div style={{ marginTop: 8, fontSize: 10, color: '#94a3b8', fontFamily: 'monospace' }}>{fpName}</div>
           </div>
           <div style={{ width: 200 }}>
             <div style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', marginBottom: 6 }}>封装预览（{fp?.pads.length ?? 0} 焊盘）</div>
             <div style={{ height: 130, background: '#f0f6f1', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {fp ? (() => {
-                const exW = Math.max(...fp.pads.map((pd) => Math.abs(pd.x) + pd.w / 2)) * 2 + 1;
-                const exH = Math.max(...fp.pads.map((pd) => Math.abs(pd.y) + pd.h / 2)) * 2 + 1;
+              {fp && fp.pads.length ? (() => {
+                const padExt = Math.max(...fp.pads.map((pd) => Math.max(Math.abs(pd.x) + pd.w / 2, Math.abs(pd.y) + pd.h / 2)));
+                const ext = Math.max(padExt, fp.bodyW / 2, fp.bodyH / 2) * 2 + 1;
                 return (
-                  <svg viewBox={`${-exW / 2} ${-exH / 2} ${exW} ${exH}`} style={{ width: '90%', height: '90%' }} preserveAspectRatio="xMidYMid meet">
-                    <rect x={-fp.bodyW / 2} y={-fp.bodyH / 2} width={fp.bodyW} height={fp.bodyH} fill="none" stroke="#1f5c3b" strokeWidth={exW * 0.008} />
+                  <svg viewBox={`${-ext / 2} ${-ext / 2} ${ext} ${ext}`} style={{ width: '90%', height: '90%' }} preserveAspectRatio="xMidYMid meet">
+                    <rect x={-fp.bodyW / 2} y={-fp.bodyH / 2} width={fp.bodyW} height={fp.bodyH} fill="none" stroke="#1f5c3b" strokeWidth={ext * 0.008} strokeDasharray={pkg.outlineW ? `${ext * 0.02} ${ext * 0.015}` : undefined} />
                     {fp.pads.map((pd, i) => pd.round
                       ? <circle key={i} cx={pd.x} cy={pd.y} r={pd.w / 2} fill="#c08a2d" />
                       : <rect key={i} x={pd.x - pd.w / 2} y={pd.y - pd.h / 2} width={pd.w} height={pd.h} rx={Math.min(pd.w, pd.h) * 0.2} fill="#c08a2d" />)}

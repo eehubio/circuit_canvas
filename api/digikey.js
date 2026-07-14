@@ -84,9 +84,13 @@ export default async function handler(req, res) {
     }
     const j = await r.json();
     const products = Array.isArray(j?.Products) ? j.Products : [];
-    // 优先精确匹配厂商料号
-    const exact = products.find((p) => String(p?.ManufacturerProductNumber ?? '').toUpperCase() === String(mpn).toUpperCase());
-    const out = mapProduct(exact ?? products[0]);
+    // 仅接受厂商料号精确匹配：关键词搜索会返回无关器件，其图片/价格若采用会张冠李戴
+    const norm = (v) => String(v ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const target = norm(mpn);
+    const exact = products.find((p) => norm(p?.ManufacturerProductNumber) === target)
+      // 允许厂商料号带包装后缀（如 -TR / -REEL）的情形
+      ?? products.find((p) => { const n = norm(p?.ManufacturerProductNumber); return n && (n.startsWith(target) || target.startsWith(n)) && Math.abs(n.length - target.length) <= 4; });
+    const out = exact ? mapProduct(exact) : { found: false };
     out.currency = currency;
     // 缓存 10 分钟（价格/库存时效性数据）
     res.setHeader('Cache-Control', 'public, max-age=600');
