@@ -78,15 +78,19 @@ pin type 取值：${KICAD_PIN_TYPES.join('|')}`;
   /** ds2kicad /api/extract 响应 → 填表（确定性解析器 + 置信度，管脚类型已是 KiCad 电气属性） */
   const applyDs2kicad = (j: {
     mock?: boolean;
-    part?: { mpn?: string; name?: string; description?: string };
+    part?: { mpn?: string; name?: string; title?: string; description_zh?: string; description?: string };
     pins?: { number: string; name: string; type?: string; description?: string }[];
+    pinsets?: { id: string; label?: string; pins: { number: string; name: string; type?: string; description?: string }[] }[];
     packages?: { type?: string; pitch?: number; bodyLength?: number; bodyWidth?: number }[];
     recommendedPackageIndex?: number;
   }) => {
     if (j.part?.mpn || j.part?.name) setMpn(j.part.mpn ?? j.part.name ?? '');
-    if (j.part?.description) setDesc(j.part.description.slice(0, 120));
-    if (Array.isArray(j.pins) && j.pins.length) {
-      setPins(j.pins.slice(0, 200).map((p) => ({
+    const dsDesc = j.part?.description_zh || j.part?.title || j.part?.description;
+    if (dsDesc) setDesc(dsDesc.slice(0, 120));
+    // v0.3 起管脚在 pinsets（多封装管脚定义集）；顶层 pins 为默认集，两者取其有
+    const dsPins = (Array.isArray(j.pins) && j.pins.length) ? j.pins : j.pinsets?.[0]?.pins;
+    if (Array.isArray(dsPins) && dsPins.length) {
+      setPins(dsPins.slice(0, 200).map((p) => ({
         num: String(p.number), name: p.name || 'NC',
         type: KICAD_PIN_TYPES.includes(p.type as never) ? (p.type as CustomPin['type']) : 'passive',
         desc: p.description,
@@ -109,9 +113,14 @@ pin type 取值：${KICAD_PIN_TYPES.join('|')}`;
     setAiBusy(true); setAiMsg('');
     try {
       // 优先 ds2kicad 引擎（确定性 PDF 解析 + 按需 AI）：适用于 PDF 上传与 PDF 链接
+      let usedEngine = '内置 Gemini';
       if (payload.fileBase64 || payload.url) {
         const st = await fetch('/api/ds2kicad').then((r) => r.json()).catch(() => ({ configured: false }));
+        if (!st.configured) {
+          setAiMsg('⚠ 未配置 DS2KICAD_URL（提取引擎），本次使用内置 Gemini——PDF 提取精度建议配置 ds2kicad');
+        }
         if (st.configured) {
+          usedEngine = 'ds2kicad';
           const body = payload.fileBase64
             ? { pdfBase64: payload.fileBase64, fileName: `${mpn || 'part'}.pdf` }
             : { pdfUrl: payload.url };
@@ -134,7 +143,7 @@ pin type 取值：${KICAD_PIN_TYPES.join('|')}`;
         text = String((await r.json()).text ?? '');
       }
       applyExtract(extractJson(text));
-      setAiMsg('✓ 已提取，请核对下方表单后保存');
+      setAiMsg(`✓ 已提取（${usedEngine}），请核对下方表单后保存`);
     } catch (e) {
       setAiMsg('提取失败：' + (e as Error).message);
     }

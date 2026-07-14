@@ -74,19 +74,31 @@ export default async function handler(req, res) {
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body ?? {});
     let prompt = String(body.prompt ?? '');
     if (!prompt) return res.status(400).send(JSON.stringify({ error: 'prompt required' }));
-    // URL 模式：服务端抓取网页文本（去标签、限 80KB）拼进提示词
+    // URL 模式：PDF 链接下载字节直喂模型（inline_data）；网页链接抓正文文本
+    let urlInline = null;
     if (body.url) {
       try {
         const page = await fetch(String(body.url), { headers: { 'User-Agent': 'Mozilla/5.0' } });
-        const html = await page.text();
-        const textOnly = html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 80000);
-        prompt = `以下是网页 ${body.url} 的正文内容：\n${textOnly}\n\n${prompt}`;
+        const ct = page.headers.get('content-type') ?? '';
+        const isPdf = /pdf/i.test(ct) || /\.pdf(\?|#|$)/i.test(String(body.url));
+        if (isPdf) {
+          const buf = Buffer.from(await page.arrayBuffer());
+          if (buf.length > 4 * 1024 * 1024) return res.status(413).send(JSON.stringify({ error: 'PDF 超过 4MB，请下载后裁剪关键页再上传' }));
+          if (buf.slice(0, 5).toString() !== '%PDF-') return res.status(422).send(JSON.stringify({ error: '链接内容不是 PDF' }));
+          urlInline = { mime_type: 'application/pdf', data: buf.toString('base64') };
+        } else {
+          const html = buf2text(await page.text());
+          prompt = `以下是网页 ${body.url} 的正文内容：\n${html}\n\n${prompt}`;
+        }
       } catch (e) {
         return res.status(400).send(JSON.stringify({ error: 'URL 抓取失败: ' + String(e).slice(0, 120) }));
       }
     }
+    function buf2text(html) {
+      return html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 80000);
+    }
 
-    const inline = body.fileBase64 ? { mime_type: String(body.mimeType ?? 'application/pdf'), data: String(body.fileBase64) } : null;
+    const inline = body.fileBase64 ? { mime_type: String(body.mimeType ?? 'application/pdf'), data: String(body.fileBase64) } : urlInline;
     const out = await callGemini(apiKey, prompt, 0.35, inline);
     return res.status(200).send(JSON.stringify({ text: out.text, model: out.model }));
   } catch (err) {
