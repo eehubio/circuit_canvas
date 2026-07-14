@@ -6,7 +6,7 @@
  */
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import type { CircuitCanvasDocument, PlacedComponent, BoardShapeKind } from '../design-core/document/types';
+import type { ComponentCategory, CircuitCanvasDocument, PlacedComponent, BoardShapeKind } from '../design-core/document/types';
 import { createDocument, touchDocument } from '../design-core/document/factory';
 import type { ComponentSearchResult } from '../providers/types';
 import { searchResultToPlaced, nextReference, buildBom, runDesignReview } from '../design-core/document/services';
@@ -55,6 +55,8 @@ interface DesignState {
   clearAll: () => void;
   placeScheme: (results: ComponentSearchResult[], intent?: { requirement: string; rationale: string }) => void;
   loadDocument: (doc: CircuitCanvasDocument) => void;
+  /** 导入 KiCad 板文件解析结果：按板框设尺寸、按位置摆放器件 */
+  importKicad: (data: import('../design-core/geometry/kicad-pcb-import').KicadImportResult) => void;
   undo: () => void;
   redo: () => void;
   recompute: () => void;
@@ -289,6 +291,39 @@ export const useDesignStore = create<DesignState>()(
         s.doc.components = placed;
         s.doc = touchDocument(refreshDerived(s.doc));
         s.overlaps = findOverlaps(s.doc.components);
+      }),
+
+    importKicad: (data) =>
+      set((s) => {
+        snapshot(s);
+        s.doc.components = data.comps.map((k) => {
+          const cat: ComponentCategory = /^U/.test(k.reference) ? 'ic' : /^(R|C|L|D|Y|FB)/.test(k.reference) ? 'passive' : /^(J|P|X|CN)/.test(k.reference) ? 'connector' : /^(VR|PS)/.test(k.reference) ? 'power' : 'ic';
+          const placed = searchResultToPlaced({
+            componentId: `kicad_${k.reference}`,
+            mpn: k.value,
+            manufacturer: '—',
+            category: cat,
+            defaultFootprintName: k.footprintName,
+            family: 'KiCad导入',
+            description: `KiCad 工程导入 · ${k.footprintName}`,
+            pins: 2,
+          } as ComponentSearchResult, k.reference);
+          placed.placement = {
+            ...placed.placement,
+            xMm: k.xMm,
+            yMm: k.yMm,
+            rotation: k.rotation === 90 || k.rotation === 180 || k.rotation === 270 ? k.rotation : 0,
+            side: k.layer === 'bottom' ? 'BOTTOM' : 'TOP',
+          };
+          return placed;
+        });
+        s.doc.board.widthMm = data.widthMm;
+        s.doc.board.heightMm = data.heightMm;
+        s.doc.board.shape = 'rect';
+        s.doc.board.mountingHolesEnabled = data.hasMountingHoles;
+        s.selectedId = null;
+        s.multiSel = [];
+        s.doc = touchDocument(refreshDerived(s.doc));
       }),
 
     loadDocument: (doc) =>

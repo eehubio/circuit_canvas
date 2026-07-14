@@ -1,6 +1,8 @@
 /**
  * modules/board-editor/pcbExport.ts
- * PCB 布局导出 —— 生成真实 KiCad 板文件（.kicad_pcb，KiCad 7 格式）。
+ * PCB 布局导出 —— 生成真实 KiCad 板文件（.kicad_pcb）。
+ * 格式版本 20250114（KiCad 9 稳定格式）：KiCad 10 原生读取无迁移提示；
+ * 声明高于实际内容的格式日期会被 KiCad 拒收，故不虚标 v10 专有常量。
  *
  * 坐标约定：KiCad 板文件 Y 轴向下，与本工具的 mm 坐标一致，位置直接映射；
  * 旋转：KiCad 正角为逆时针（屏幕视角），本工具 SVG 正角为顺时针 → kicadRot = (360 - rot) % 360。
@@ -113,7 +115,7 @@ function holeBlock(x: number, y: number, idx: number): string {
 /** 生成完整 .kicad_pcb 文本 */
 export function buildKicadPcb(doc: CircuitCanvasDocument): string {
   const L: string[] = [];
-  L.push(`(kicad_pcb (version 20221018) (generator circuit_canvas)`);
+  L.push(`(kicad_pcb (version 20250114) (generator "circuit_canvas") (generator_version "1.0")`);
   L.push(``);
   L.push(`  (general (thickness 1.6))`);
   L.push(`  (paper "A4")`);

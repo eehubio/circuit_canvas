@@ -66,10 +66,62 @@ pin type 取值：${KICAD_PIN_TYPES.join('|')}`;
     }
   };
 
+  /** ds2kicad 封装类型 → 向导封装族 */
+  const mapDsFamily = (type: string): CustomPkg['family'] => {
+    const t = (type ?? '').toUpperCase();
+    if (/QFN|DFN|WQFN|VQFN/.test(t)) return 'qfn';
+    if (/QFP|LQFP|TQFP/.test(t)) return 'quad';
+    if (/DIP|HEADER/.test(t)) return 'header';
+    return 'dual'; // SOIC/SOP/TSSOP/MSOP/SSOP/SOT…
+  };
+
+  /** ds2kicad /api/extract 响应 → 填表（确定性解析器 + 置信度，管脚类型已是 KiCad 电气属性） */
+  const applyDs2kicad = (j: {
+    mock?: boolean;
+    part?: { mpn?: string; name?: string; description?: string };
+    pins?: { number: string; name: string; type?: string; description?: string }[];
+    packages?: { type?: string; pitch?: number; bodyLength?: number; bodyWidth?: number }[];
+    recommendedPackageIndex?: number;
+  }) => {
+    if (j.part?.mpn || j.part?.name) setMpn(j.part.mpn ?? j.part.name ?? '');
+    if (j.part?.description) setDesc(j.part.description.slice(0, 120));
+    if (Array.isArray(j.pins) && j.pins.length) {
+      setPins(j.pins.slice(0, 200).map((p) => ({
+        num: String(p.number), name: p.name || 'NC',
+        type: KICAD_PIN_TYPES.includes(p.type as never) ? (p.type as CustomPin['type']) : 'passive',
+        desc: p.description,
+      })));
+    }
+    const pk = j.packages?.[j.recommendedPackageIndex ?? 0];
+    if (pk) {
+      setPkg((prev) => ({
+        ...prev,
+        family: mapDsFamily(pk.type ?? ''),
+        bodyW: Number(pk.bodyWidth) || prev.bodyW,
+        bodyH: Number(pk.bodyLength) || prev.bodyH,
+        pitch: Number(pk.pitch) || prev.pitch,
+      }));
+    }
+    setAiMsg(j.mock ? '⚠ ds2kicad 处于演示模式（其 GEMINI_API_KEY 未配置），已填入示例数据' : '✓ ds2kicad 提取完成（确定性解析+AI），请核对后保存');
+  };
+
   const runAi = async (payload: { fileBase64?: string; mimeType?: string; url?: string; text?: string }) => {
     setAiBusy(true); setAiMsg('');
     try {
-      if (!(await geminiAvailable())) { setAiMsg('未配置 GEMINI_API_KEY'); setAiBusy(false); return; }
+      // 优先 ds2kicad 引擎（确定性 PDF 解析 + 按需 AI）：适用于 PDF 上传与 PDF 链接
+      if (payload.fileBase64 || payload.url) {
+        const st = await fetch('/api/ds2kicad').then((r) => r.json()).catch(() => ({ configured: false }));
+        if (st.configured) {
+          const body = payload.fileBase64
+            ? { pdfBase64: payload.fileBase64, fileName: `${mpn || 'part'}.pdf` }
+            : { pdfUrl: payload.url };
+          const r = await fetch('/api/ds2kicad', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+          if (r.ok) { applyDs2kicad(await r.json()); setAiBusy(false); return; }
+          const err = await r.json().catch(() => ({}));
+          setAiMsg(`ds2kicad 提取失败（${(err as { error?: string }).error ?? r.status}），回退内置 Gemini…`);
+        }
+      }
+      if (!(await geminiAvailable())) { setAiMsg('未配置 GEMINI_API_KEY（或配置 DS2KICAD_URL 使用提取引擎）'); setAiBusy(false); return; }
       let text: string;
       if (payload.text) {
         text = await geminiComplete(`以下是器件资料文本：\n${payload.text.slice(0, 60000)}\n\n${EXTRACT_PROMPT}`);

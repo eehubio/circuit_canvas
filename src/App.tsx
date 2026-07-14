@@ -162,10 +162,20 @@ export default function App() {
     setAiProposal(null);
   };
 
+  const importKicad = useDesignStore((s) => s.importKicad);
   const onImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    try { loadDocument(await importDocumentFromFile(f)); } catch (err) { alert('导入失败：' + (err as Error).message); }
+    try {
+      if (/\.kicad_pcb$/i.test(f.name)) {
+        const { parseKicadPcb } = await import('./design-core/geometry/kicad-pcb-import');
+        const data = parseKicadPcb(await f.text());
+        importKicad(data);
+        if (data.skipped.length) alert(`已导入 ${data.comps.length} 个器件；${data.skipped.length} 个封装缺少位置信息被跳过`);
+      } else {
+        loadDocument(await importDocumentFromFile(f));
+      }
+    } catch (err) { alert('导入失败：' + (err as Error).message); }
     e.target.value = '';
   };
 
@@ -183,7 +193,7 @@ export default function App() {
           <button onClick={() => exportMarkdownReport(doc)} style={hbtn}>📄 方案报告</button>
           <button onClick={() => exportDocument(doc)} style={hbtn}>⬇ 导出设计</button>
           <button onClick={() => fileRef.current?.click()} style={hbtn}>⬆ 导入设计</button>
-          <input ref={fileRef} type="file" accept=".json" style={{ display: 'none' }} onChange={onImport} />
+          <input ref={fileRef} type="file" accept=".json,.kicad_pcb" style={{ display: 'none' }} onChange={onImport} />
         </div>
       </header>
 
