@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { getProviders } from '../../providers/factory';
 import { searchEzplmParts, ezplmLiveAvailable } from '../../providers/ezplm-live';
 import { useDesignStore } from '../../state/designStore';
+import { useT, useTranslated } from '../../shared/i18n';
 import { CATEGORY_DISPLAY, CATEGORY_LIST, COLORS, fmtMoney } from '../../shared/theme';
 import type { ComponentSearchResult } from '../../providers/types';
 import type { ComponentCategory } from '../../design-core/document/types';
@@ -14,6 +15,7 @@ const providers = getProviders();
 const ctx = { userId: 'demo-user', organizationId: 'org-demo' };
 
 export function ComponentSearchPanel() {
+  const t = useT();
   const [keyword, setKeyword] = useState('');
   const [category, setCategory] = useState<ComponentCategory | null>(null);
   const [orgOnly, setOrgOnly] = useState(false);
@@ -57,7 +59,7 @@ export function ComponentSearchPanel() {
     <div>
       {liveStatus !== 'unknown' && (
         <div style={{ fontSize: 10, marginBottom: 8, padding: '4px 8px', borderRadius: 6, background: liveStatus === 'live' ? '#f0fdf4' : '#f8fafc', border: `1px solid ${liveStatus === 'live' ? '#bbf7d0' : '#e2e8f0'}`, color: liveStatus === 'live' ? '#16a34a' : '#94a3b8', fontWeight: 600 }}>
-          {liveStatus === 'live' ? '✓ 已连接 ezPLM 元器件库（实时检索）' : '内置演示数据 · 在 Vercel 配置 EZPLM_API_KEY 后接入实时库'}
+          {liveStatus === 'live' ? '✓ ' + t('已连接 ezPLM 元器件库（实时检索）') : '内置演示数据 · 在 Vercel 配置 EZPLM_API_KEY 后接入实时库'}
         </div>
       )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
@@ -70,11 +72,11 @@ export function ComponentSearchPanel() {
       </div>
       <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, fontSize: 12, color: '#475569', cursor: 'pointer' }}>
         <input type="checkbox" checked={orgOnly} onChange={(e) => setOrgOnly(e.target.checked)} style={{ accentColor: COLORS.green }} />
-        仅显示本组织物料
+        {t('仅显示本组织物料')}
       </label>
-      <input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="搜索型号、封装、关键词..."
+      <input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder={t('搜索型号、封装、关键词...')}
         style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid #dbe6dd', fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 10 }} />
-      <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 8 }}>找到 {results.length} 个结果</div>
+      <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 8 }}>{t('找到')} {results.length} {t('个结果')}</div>
       {results.map((r) => (
         <ResultCard key={r.componentId} r={r} expanded={expanded === r.componentId}
           onToggle={() => setExpanded(expanded === r.componentId ? null : r.componentId)}
@@ -101,7 +103,7 @@ function ResultCard({ r, expanded, onToggle, onAdd, placed }: {
             <span style={{ fontFamily: 'monospace' }}>{r.defaultFootprintName}</span><span>·</span><span>{r.manufacturer}</span>
             {r.unitPrice != null && <><span>·</span><span style={{ color: '#059669', fontWeight: 600 }}>{fmtMoney(r.unitPrice.amount)}</span></>}
           </div>
-          {r.description && <div style={{ marginTop: 2, fontSize: 10.5, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.description}</div>}
+          {r.description && <TrText text={r.description} style={{ marginTop: 2, fontSize: 10.5, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} />}
         </div>
         {!placed && <button onClick={(e) => { e.stopPropagation(); onAdd(); }} style={addBtn}>+</button>}
         <span style={{ fontSize: 10, color: '#64748b' }}>{expanded ? '▲' : '▼'}</span>
@@ -127,3 +129,9 @@ const chip = (active: boolean): React.CSSProperties => ({
   border: `1px solid ${active ? COLORS.green : '#dbe6dd'}`, background: active ? COLORS.greenBg : '#fff', color: active ? COLORS.green : '#64748b',
 });
 const addBtn: React.CSSProperties = { width: 28, height: 28, borderRadius: 6, border: 'none', background: COLORS.green, color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' };
+
+/** 动态文本（ezPLM 中文数据）：英文模式下自动翻译并缓存 */
+function TrText({ text, style }: { text: string; style?: React.CSSProperties }) {
+  const tr = useTranslated(text);
+  return <div style={style}>{tr}</div>;
+}

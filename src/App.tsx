@@ -22,6 +22,7 @@ import { ensureStepBytes } from './modules/board-editor/step-loader';
 import { CustomPartWizard } from './modules/component-search/CustomPartWizard';
 import { loadCustomParts, deleteCustomPart, customPartToResult, bootCustomLib, type CustomPart } from './design-core/custom-lib';
 import { parseKicadPcb } from './design-core/geometry/kicad-pcb-import';
+import { useT, useLangStore, useTranslated } from './shared/i18n';
 import { registerFootprintOverride } from './design-core/geometry/lib-file-registry';
 import type { PlacedComponent as PlacedComponentT } from './design-core/document/types';
 import { BoardCanvas2D } from './modules/board-editor/BoardCanvas2D';
@@ -106,6 +107,10 @@ export default function App() {
     }, 250);
   }, []);
   const fileRef = useRef<HTMLInputElement>(null);
+  const t = useT();
+  const lang = useLangStore((st) => st.lang);
+  const toggleLang = useLangStore((st) => st.toggle);
+  useEffect(() => { document.title = lang === 'en' ? 'Tindie Proto' : '硬件原型工坊'; }, [lang]);
 
   const selObj = doc.components.find((c) => c.instanceId === selectedId);
 
@@ -188,14 +193,17 @@ export default function App() {
       <header style={{ height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', background: '#fff', borderBottom: `2px solid ${COLORS.green}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 24 }}>⚡</span>
-          <span style={{ fontSize: 18, fontWeight: 700, color: COLORS.green }}>元器件查一查、摆一摆</span>
+          <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
+            <span style={{ fontSize: 18, fontWeight: 700, color: COLORS.green }}>{t('硬件原型工坊')}</span>
+            <span style={{ fontSize: 10, color: '#94a3b8' }}>{t('AI 方案生成、器件选型与 PCB 预布局')}</span>
+          </div>
           <span style={{ fontSize: 10, color: '#94a3b8', background: '#f1f5f9', padding: '2px 8px', borderRadius: 10 }}>v3 · {appConfig.mode}</span>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => setPcbExportOpen(true)} style={hbtn}>🏭 导出PCB</button>
-          <button onClick={() => exportMarkdownReport(doc)} style={hbtn}>📄 方案报告</button>
-          <button onClick={() => exportDocument(doc)} style={hbtn}>⬇ 导出设计</button>
-          <button onClick={() => fileRef.current?.click()} style={hbtn}>⬆ 导入设计</button>
+          <button onClick={() => setPcbExportOpen(true)} style={hbtn}>🏭 {t('导出PCB')}</button>
+          <button onClick={() => exportMarkdownReport(doc)} style={hbtn}>📄 {t('方案报告')}</button>
+          <button onClick={() => exportDocument(doc)} style={hbtn}>⬇ {t('导出设计')}</button>
+          <button onClick={() => fileRef.current?.click()} style={hbtn}>⬆ {t('导入设计')}</button>
           <input ref={fileRef} type="file" accept=".json,.kicad_pcb" style={{ display: 'none' }} onChange={onImport} />
         </div>
       </header>
@@ -206,16 +214,16 @@ export default function App() {
           <div style={{ padding: 12, overflow: 'auto', flex: 1 }}>
             {/* AI scheme */}
             <div style={{ marginBottom: 12, padding: 10, borderRadius: 10, border: '1px solid #c6e2d0', background: '#f7fcf9' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: COLORS.green, marginBottom: 6 }}>🤖 AI 生成方案</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: COLORS.green, marginBottom: 6 }}>🤖 {t('AI 生成方案')}</div>
               <textarea value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)} rows={2}
-                placeholder="如：USB转串口调试器 / WiFi物联网节点 / 12V车载CAN控制器"
+                placeholder={t('如：USB转串口调试器 / WiFi物联网节点 / 12V车载CAN控制器')}
                 style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #dbe6dd', fontSize: 13, outline: 'none', resize: 'none', boxSizing: 'border-box', marginBottom: 6 }} />
               <button onClick={genScheme} disabled={aiBusy} style={{ width: '100%', padding: '9px 0', borderRadius: 8, border: 'none', background: `linear-gradient(135deg,#245b3a,${COLORS.green})`, color: '#fff', fontSize: 13, fontWeight: 700, cursor: aiBusy ? 'wait' : 'pointer' }}>
-                {aiBusy ? '⟳ 生成中...' : '生成方案上画布'}
+                {aiBusy ? '⟳ ' + t('生成中…') : t('生成方案上画布')}
               </button>
             </div>
             <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
-              {([['model', '🔍 型号搜索'], ['footprint', '📦 封装库'], ['custom', '🛠 定制模块']] as const).map(([id, label]) => (
+              {([['model', '🔍 ' + t('型号搜索')], ['footprint', '📦 ' + t('封装库')], ['custom', '🛠 ' + t('定制模块')]] as const).map(([id, label]) => (
                 <button key={id} onClick={() => setLeftTab(id)} style={{ flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 700, cursor: 'pointer', border: `1px solid ${leftTab === id ? COLORS.green : '#dbe6dd'}`, borderRadius: 8, background: leftTab === id ? COLORS.greenBg : '#fff', color: leftTab === id ? COLORS.green : '#64748b' }}>{label}</button>
               ))}
             </div>
@@ -305,7 +313,7 @@ export default function App() {
               )}
             </div>
             <div style={{ flex: 1 }} />
-            {([['bom', '🧾 BOM清单'], ['block', '📊 系统框图'], ['schematic', '⚡ 原理图']] as const).map(([id, label]) => (
+            {([['bom', '🧾 ' + t('BOM清单')], ['block', '📊 ' + t('系统框图')], ['schematic', '⚡ ' + t('原理图')]] as const).map(([id, label]) => (
               <button key={id} onClick={() => setBottom(bottom === id ? null : id)} style={{ padding: '8px 16px', border: 'none', background: bottom === id ? COLORS.greenBg : '#fff', color: bottom === id ? COLORS.green : '#2C3E50', fontSize: 13, fontWeight: 500, cursor: 'pointer', borderTop: bottom === id ? `2px solid ${COLORS.green}` : '2px solid transparent' }}>{label}</button>
             ))}
           </div>
@@ -321,7 +329,7 @@ export default function App() {
         {/* Right */}
         <aside style={{ width: 320, flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#fff', borderLeft: '1px solid #e2e8f0' }}>
           <div style={{ background: COLORS.green, padding: '6px 8px 0', display: 'flex', gap: 4 }}>
-            {([['comp', '🔧 当前元件'], ['advisor', '🤖 AI顾问']] as const).map(([id, label]) => (
+            {([['comp', '🔧 ' + t('当前元件')], ['advisor', '🤖 ' + t('AI顾问')]] as const).map(([id, label]) => (
               <button key={id} onClick={() => setRightTab(id)} style={{ flex: 1, padding: '9px 0', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', border: 'none', borderRadius: '6px 6px 0 0', background: rightTab === id ? '#fff' : 'rgba(255,255,255,.12)', color: rightTab === id ? COLORS.green : 'rgba(255,255,255,.85)' }}>{label}</button>
             ))}
           </div>
@@ -429,8 +437,8 @@ export default function App() {
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
               <button onClick={() => setAiProposal({ ...aiProposal, details: aiProposal.details.filter((x) => x.category !== 'passive') })}
                 title="移除电阻/电容/电感等无源器件，只保留核心器件"
-                style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #fde68a', background: '#fffbeb', color: '#b45309', fontSize: 12, fontWeight: 700, cursor: 'pointer', marginRight: 'auto' }}>仅加载核心器件</button>
-              <button onClick={() => setAiProposal(null)} style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, cursor: 'pointer' }}>取消</button>
+                style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #fde68a', background: '#fffbeb', color: '#b45309', fontSize: 12, fontWeight: 700, cursor: 'pointer', marginRight: 'auto' }}>{t('仅加载核心器件')}</button>
+              <button onClick={() => setAiProposal(null)} style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, cursor: 'pointer' }}>{t('取消')}</button>
               <button onClick={confirmScheme} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: COLORS.green, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>确认上画布 ({aiProposal.details.length}个器件)</button>
             </div>
           </div>
@@ -459,6 +467,7 @@ export default function App() {
 }
 
 function CompDetail({ iid, onBuild }: { iid: string; onBuild?: (mpn: string) => void }) {
+  const t = useT();
   const c = useDesignStore((s) => s.doc.components.find((x) => x.instanceId === iid));
   const [alts, setAlts] = useState<{ mpn: string; manufacturer: string; note: string; channel: string; footprint?: string; description?: string }[]>([]);
   const [offers, setOffers] = useState<{ vendor: string; price?: { amount: number; currency: string }; stock?: number; url: string }[]>([]);
@@ -525,7 +534,7 @@ function CompDetail({ iid, onBuild }: { iid: string; onBuild?: (mpn: string) => 
           <div style={{ fontSize: 16, fontWeight: 700 }}>{c.reference}</div>
           <div style={{ fontSize: 14, fontFamily: 'monospace', color: COLORS.green, fontWeight: 600, wordBreak: 'break-all' }}>{c.mpn}</div>
           <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{c.display?.classification ?? disp.name} · {c.manufacturer} · {c.footprint.name}</div>
-          {c.display?.classification && <span style={{ display: 'inline-block', marginTop: 4, fontSize: 9.5, padding: '1px 7px', borderRadius: 4, background: '#f1f5f9', color: '#475569', fontWeight: 600 }}>分类：{c.display.classification}</span>}
+          {c.display?.classification && <span style={{ display: 'inline-block', marginTop: 4, fontSize: 9.5, padding: '1px 7px', borderRadius: 4, background: '#f1f5f9', color: '#475569', fontWeight: 600 }}>{t('分类：')}<TrSpan text={c.display.classification} /></span>}
         </div>
         <ComponentImage c={c} imageUrl={detail?.imageUrl ?? c.display?.imageUrl ?? dkOffer?.photoUrl} />
       </div>
@@ -543,7 +552,7 @@ function CompDetail({ iid, onBuild }: { iid: string; onBuild?: (mpn: string) => 
       {/* 核心参数 */}
       {paramEntries.length > 0 && (
         <div style={{ marginTop: 12 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.green, marginBottom: 6 }}>⚙️ 核心参数</div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.green, marginBottom: 6 }}>⚙️ {t('核心参数')}</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
             {paramEntries.map(([k, v]) => (
               <div key={k} style={{ padding: '4px 8px', borderRadius: 6, background: '#f8fafc', border: '1px solid #f1f5f9', fontSize: 10.5 }}>
@@ -554,7 +563,7 @@ function CompDetail({ iid, onBuild }: { iid: string; onBuild?: (mpn: string) => 
         </div>
       )}
 
-      {c.display?.description && <div style={{ fontSize: 12, color: '#475569', marginTop: 10 }}>{c.display.description}</div>}
+      {c.display?.description && <div style={{ fontSize: 12, color: '#475569', marginTop: 10 }}><TrSpan text={c.display.description} /></div>}
 
       {/* 封装占位器件：补型号 + 上传自定义原理图符号 */}
       {c.display?.family === 'Footprint' && <FootprintPartEditor c={c} onBuild={onBuild} />}
@@ -576,7 +585,7 @@ function CompDetail({ iid, onBuild }: { iid: string; onBuild?: (mpn: string) => 
 
       {/* 采购渠道：DigiKey 真实 API；Mouser/CECPORT 暂为演示数据（接入 API 后替换） */}
       <div style={{ marginTop: 12, padding: 10, borderRadius: 8, background: '#f0f9ff', border: '1px solid #bae6fd' }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#0369a1', marginBottom: 6 }}>🛒 采购渠道</div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#0369a1', marginBottom: 6 }}>🛒 {t('采购渠道')}</div>
         {dkOffer?.found ? (
           <a href={dkOffer.productUrl} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', marginBottom: 4, borderRadius: 6, background: '#fff', border: '1px solid #e0f2fe', textDecoration: 'none' }}>
             <span style={{ fontSize: 11.5, fontWeight: 700, color: '#be123c', width: 66 }}>DigiKey</span>
@@ -817,6 +826,12 @@ function FootprintPartEditor({ c, onBuild }: { c: PlacedComponentT; onBuild?: (m
       )}
     </div>
   );
+}
+
+/** 动态文本（ezPLM 中文数据）：英文模式下自动翻译并缓存 */
+function TrSpan({ text }: { text: string }) {
+  const tr = useTranslated(text);
+  return <>{tr}</>;
 }
 
 /** 器件图片：ezPLM 提供 imageUrl 时显示实拍图，否则用封装缩略图兜底 */
