@@ -197,9 +197,10 @@ export default function App() {
             <span style={{ fontSize: 18, fontWeight: 700, color: COLORS.green }}>{t('硬件原型工坊')}</span>
             <span style={{ fontSize: 10, color: '#94a3b8' }}>{t('AI 方案生成、器件选型与 PCB 预布局')}</span>
           </div>
-          <span style={{ fontSize: 10, color: '#94a3b8', background: '#f1f5f9', padding: '2px 8px', borderRadius: 10 }}>v3 · {appConfig.mode}</span>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={toggleLang} title={lang === 'zh' ? 'Switch to English' : '切换为中文'}
+            style={{ ...hbtn, fontWeight: 800 }}>{lang === 'zh' ? '中 | EN' : 'EN | 中'}</button>
           <button onClick={() => setPcbExportOpen(true)} style={hbtn}>🏭 {t('导出PCB')}</button>
           <button onClick={() => exportMarkdownReport(doc)} style={hbtn}>📄 {t('方案报告')}</button>
           <button onClick={() => exportDocument(doc)} style={hbtn}>⬇ {t('导出设计')}</button>
