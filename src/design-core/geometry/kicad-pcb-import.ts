@@ -5,7 +5,8 @@
  *   板框（Edge.Cuts 图元包围盒 → 板尺寸，坐标归一化到左上原点）
  *   定位孔（MountingHole 封装 → 开启四角定位孔，不作为器件导入）
  */
-import { parseSExpr, type SExpr } from './kicad-file-parser';
+import { parseSExpr, parseFootprintNode, type SExpr } from './kicad-file-parser';
+import type { PadFootprint } from './footprint-pads';
 
 const isList = (x: SExpr): x is SExpr[] => Array.isArray(x);
 const head = (x: SExpr[]): string => String(x[0] ?? '');
@@ -35,6 +36,8 @@ export interface KicadImportResult {
   comps: KicadImportedComp[];
   hasMountingHoles: boolean;
   skipped: string[];
+  /** PCB 文件内嵌的完整封装定义（KiCad 文件自包含）：注册为覆盖后所有导入器件焊盘精确 */
+  footprintDefs: Record<string, PadFootprint>;
 }
 
 /** 读取 footprint 的文本属性：v7+ (property "Reference" "U1") / v6 (fp_text reference U1 …) */
@@ -83,11 +86,17 @@ export function parseKicadPcb(text: string): KicadImportResult {
   const fps = [...findAll(pcb, 'footprint'), ...findAll(pcb, 'module')];
   const comps: KicadImportedComp[] = [];
   const skipped: string[] = [];
+  const footprintDefs: Record<string, PadFootprint> = {};
   let hasMountingHoles = false;
   for (const fp of fps) {
     const lib = String(fp[1] ?? '');
     const fpName = lib.includes(':') ? lib.split(':').pop()! : lib;
     if (/mountinghole/i.test(fpName)) { hasMountingHoles = true; continue; }
+    // 提取内嵌焊盘定义（首次出现为准；同名封装在 KiCad 内定义一致）
+    if (!footprintDefs[fpName]) {
+      const def = parseFootprintNode(fp);
+      if (def && def.pads.length) footprintDefs[fpName] = def;
+    }
     const at = find(fp, 'at');
     const layerRaw = String(find(fp, 'layer')?.[1] ?? 'F.Cu');
     const reference = fpProperty(fp, 'Reference');
@@ -115,5 +124,5 @@ export function parseKicadPcb(text: string): KicadImportResult {
   const widthMm = Math.max(20, Math.ceil((maxX - ox + pad)));
   const heightMm = Math.max(20, Math.ceil((maxY - oy + pad)));
 
-  return { widthMm, heightMm, comps, hasMountingHoles, skipped };
+  return { widthMm, heightMm, comps, hasMountingHoles, skipped, footprintDefs };
 }

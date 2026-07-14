@@ -58,6 +58,15 @@ export function parseKicadMod(text: string): PadFootprint | null {
     const roots = parseSExpr(text);
     const fp = roots.find((r): r is SExpr[] => isList(r) && (head(r) === 'footprint' || head(r) === 'module'));
     if (!fp) return null;
+    return parseFootprintNode(fp);
+  } catch {
+    return null;
+  }
+}
+
+/** 解析单个 footprint/module 节点（.kicad_mod 根节点，或 .kicad_pcb 内嵌节点——PCB 文件自包含完整焊盘定义） */
+export function parseFootprintNode(fp: SExpr[]): PadFootprint | null {
+  try {
 
     const pads: Pad[] = [];
     let autoNum = 0;

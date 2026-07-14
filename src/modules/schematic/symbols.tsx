@@ -25,6 +25,30 @@ export interface SymbolDef {
 }
 
 /** 电阻：KiCad 锯齿符号 */
+/** 二极管：三角+竖线；LED 追加两支出射箭头 */
+function diode(isLed = false): SymbolDef {
+  const w = 60, h = 20;
+  return {
+    w, h, ports: [{ x: 0, y: 10 }, { x: 60, y: 10 }], stubLen: 0,
+    render: (ref, label) => (
+      <g>
+        <line x1={0} y1={10} x2={24} y2={10} stroke={STROKE} strokeWidth={1.5} />
+        <path d="M24,2 L36,10 L24,18 Z" fill="none" stroke={STROKE} strokeWidth={1.8} strokeLinejoin="round" />
+        <line x1={36} y1={2} x2={36} y2={18} stroke={STROKE} strokeWidth={2.2} />
+        <line x1={36} y1={10} x2={60} y2={10} stroke={STROKE} strokeWidth={1.5} />
+        {isLed && (
+          <g stroke={STROKE} strokeWidth={1.2}>
+            <path d="M30,-1 L36,-7 M36,-7 L32.5,-6 M36,-7 L35,-3.5" fill="none" />
+            <path d="M36,1 L42,-5 M42,-5 L38.5,-4 M42,-5 L41,-1.5" fill="none" />
+          </g>
+        )}
+        <text x={w / 2} y={isLed ? -12 : -4} textAnchor="middle" fontSize={9} fontWeight={700} fill="#0e7490" fontFamily="monospace">{ref}</text>
+        <text x={w / 2} y={h + 10} textAnchor="middle" fontSize={8} fill="#334155" fontFamily="monospace">{label}</text>
+      </g>
+    ),
+  };
+}
+
 function resistor(): SymbolDef {
   const w = 60, h = 20;
   const zig = 'M0,10 L8,10 L12,3 L20,17 L28,3 L36,17 L44,3 L48,10 L60,10';
@@ -221,6 +245,8 @@ export function symbolFor(c: PlacedComponent): SymbolDef {
   if (c.category === 'passive') {
     if (fam === 'MLCC' || fam.includes('Cap')) return capacitor();
     if (fam.includes('Induct')) return inductor();
+    if (fam === 'LED') return diode(true);
+    if (fam === 'Diode') return diode();
     return resistor();
   }
   if (c.category === 'power') {

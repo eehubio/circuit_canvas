@@ -298,13 +298,20 @@ export const useDesignStore = create<DesignState>()(
         snapshot(s);
         s.doc.components = data.comps.map((k) => {
           const cat: ComponentCategory = /^U/.test(k.reference) ? 'ic' : /^(R|C|L|D|Y|FB)/.test(k.reference) ? 'passive' : /^(J|P|X|CN)/.test(k.reference) ? 'connector' : /^(VR|PS)/.test(k.reference) ? 'power' : 'ic';
+          // 符号家族：位号/封装名推断（C→电容 R→电阻 L→电感 LED→LED D→二极管），原理图符号随之正确
+          const family = /^C\d/.test(k.reference) ? 'MLCC'
+            : /^R\d/.test(k.reference) ? 'Resistor'
+            : /^L\d/.test(k.reference) ? 'Inductor'
+            : /LED/i.test(k.footprintName) ? 'LED'
+            : /^D\d/.test(k.reference) ? 'Diode'
+            : 'KiCad导入';
           const placed = searchResultToPlaced({
             componentId: `kicad_${k.reference}`,
             mpn: k.value,
             manufacturer: '—',
             category: cat,
             defaultFootprintName: k.footprintName,
-            family: 'KiCad导入',
+            family,
             description: `KiCad 工程导入 · ${k.footprintName}`,
             pins: 2,
           } as ComponentSearchResult, k.reference);

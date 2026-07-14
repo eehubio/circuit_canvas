@@ -169,7 +169,10 @@ export default function App() {
     try {
       if (/\.kicad_pcb$/i.test(f.name)) {
         const { parseKicadPcb } = await import('./design-core/geometry/kicad-pcb-import');
+        const { registerFootprintOverride } = await import('./design-core/geometry/lib-file-registry');
         const data = parseKicadPcb(await f.text());
+        // 注册 PCB 内嵌封装定义 → 导入器件焊盘精确、3D 按真实焊盘构建
+        for (const [name, def] of Object.entries(data.footprintDefs)) registerFootprintOverride(name, def);
         importKicad(data);
         if (data.skipped.length) alert(`已导入 ${data.comps.length} 个器件；${data.skipped.length} 个封装缺少位置信息被跳过`);
       } else {
