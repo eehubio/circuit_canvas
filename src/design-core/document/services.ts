@@ -12,7 +12,7 @@ import { geometryFor } from '../../providers/mock/data';
 import { padFootprintFor } from '../geometry/footprint-pads';
 import { findOverlaps } from '../collision';
 
-const REF_PREFIX: Record<ComponentCategory, string> = { mcu: 'U', power: 'U', passive: 'C', connector: 'J', ic: 'U' };
+const REF_PREFIX: Record<ComponentCategory, string> = { mcu: 'U', power: 'U', passive: 'C', connector: 'J', ic: 'U', electromech: 'K', sensor: 'U', rf: 'U' };
 
 /** 为某类别生成下一个位号。 */
 export function nextReference(category: ComponentCategory, existing: PlacedComponent[]): string {

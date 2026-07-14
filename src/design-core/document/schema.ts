@@ -28,7 +28,7 @@ const placedComponentSchema = z.object({
   componentId: z.string(),
   mpn: z.string(),
   reference: z.string(),
-  category: z.enum(['mcu', 'power', 'passive', 'connector', 'ic']),
+  category: z.enum(['mcu', 'power', 'passive', 'connector', 'ic', 'electromech', 'sensor', 'rf']),
   manufacturer: z.string(),
   footprint: z.object({
     footprintId: z.string(),
@@ -79,7 +79,7 @@ const boardSchema = z.object({
     z.object({
       id: z.string(),
       label: z.string(),
-      category: z.enum(['mcu', 'power', 'passive', 'connector', 'ic']).optional(),
+      category: z.enum(['mcu', 'power', 'passive', 'connector', 'ic', 'electromech', 'sensor', 'rf']).optional(),
       normRect: z.tuple([z.number(), z.number(), z.number(), z.number()]),
     })
   ),

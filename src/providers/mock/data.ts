@@ -149,4 +149,7 @@ export const SUBCIRCUITS: Record<ComponentCategory, PeripheralCircuitRecommendat
     { name: 'SPI上拉', parts: 'CS引脚10KΩ上拉 (Flash类)', why: '防止总线悬空', quickAddComponentId: 'res10k' },
   ],
   passive: [],
+  electromech: [],
+  sensor: [],
+  rf: [],
 };

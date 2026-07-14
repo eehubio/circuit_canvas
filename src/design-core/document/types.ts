@@ -8,7 +8,7 @@ import type { FootprintGeometry, BoardSide, Polygon, Point } from '../geometry/t
 export const SCHEMA_VERSION = '3.0.0';
 
 export type RunMode = 'demo' | 'standalone' | 'integrated';
-export type ComponentCategory = 'mcu' | 'power' | 'passive' | 'connector' | 'ic';
+export type ComponentCategory = 'mcu' | 'power' | 'passive' | 'connector' | 'ic' | 'electromech' | 'sensor' | 'rf';
 export type ComponentSource = 'EZPLM' | 'LOCAL' | 'CUSTOM' | 'MOCK';
 
 export interface Money {

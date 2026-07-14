@@ -103,6 +103,9 @@ function pickAttrs(v: unknown): Record<string, string> {
 /** 类别推断：手册未提供 category 字段，按型号/描述/参数关键词判断 */
 function inferCategory(text: string): ComponentCategory {
   const t = text.toUpperCase();
+  if (/(继电器|RELAY|蜂鸣|BUZZER|开关|SWITCH|按键|BUTTON|TACTILE)/.test(t)) return 'electromech';
+  if (/(传感|SENSOR|温湿度|加速度|陀螺|气压|光敏)/.test(t)) return 'sensor';
+  if (/(射频|无线|WIFI|BLE|蓝牙|LORA|天线|ANTENNA|2\.4G)/.test(t)) return 'rf';
   if (/(STM32|GD32|ESP32|CH32|APM32|RP2\d{3}|MCU|单片机|微控制)/.test(t)) return 'mcu';
   if (/(LDO|DC-?DC|BUCK|BOOST|稳压|电源管理|REGULATOR|TPS\d|MP\d{4}|AMS1117|LM1117)/.test(t)) return 'power';
   if (/(连接器|CONNECTOR|USB|排针|HEADER|TYPE-?C|插座)/.test(t)) return 'connector';

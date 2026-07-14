@@ -17,8 +17,9 @@ import type { ComponentCategory } from '../../design-core/document/types';
 
 const FAMILIES: [CustomPkg['family'], string][] = [
   ['dual', '双列贴片 (SOP/TSSOP)'], ['quad', '四边鸥翼 (QFP)'], ['qfn', '四边无脚 (QFN)'], ['header', '单排针 (2.54)'], ['chip', '两端贴片 (阻容)'],
+  ['manual', '异形·手动焊盘坐标（继电器/模块等）'],
 ];
-const CATS: [ComponentCategory, string][] = [['ic', '集成电路'], ['mcu', '微控制器'], ['power', '电源'], ['connector', '连接器'], ['passive', '无源']];
+const CATS: [ComponentCategory, string][] = [['ic', '集成电路'], ['mcu', '微控制器'], ['power', '电源'], ['connector', '连接器'], ['passive', '无源'], ['electromech', '机电(继电器/开关)'], ['sensor', '传感器'], ['rf', '射频无线']];
 
 export function CustomPartWizard({ initialMpn, onSaved, onClose }: { initialMpn?: string; onSaved: (p: CustomPart) => void; onClose: () => void }) {
   const [mpn, setMpn] = useState(initialMpn ?? '');
@@ -32,7 +33,7 @@ export function CustomPartWizard({ initialMpn, onSaved, onClose }: { initialMpn?
   const [aiMsg, setAiMsg] = useState('');
 
   const fpName = customFootprintName({ mpn: mpn || 'X', pkg, pins });
-  const fp = useMemo(() => buildCustomFootprint(pkg, pins.length), [pkg, pins.length]);
+  const fp = useMemo(() => buildCustomFootprint(pkg, pins.length), [pkg, pkg.manualPads, pins.length]);
 
   const EXTRACT_PROMPT = `请从以上器件资料中提取信息，严格输出 JSON（勿输出其它文字）：
 {"mpn":"型号","description":"30字内功能描述","category":"ic|mcu|power|connector|passive",
@@ -230,15 +231,43 @@ pin type 取值：${KICAD_PIN_TYPES.join('|')}`;
             <select value={pkg.family} onChange={(e) => setPkg({ ...pkg, family: e.target.value as CustomPkg['family'] })} style={{ ...inp, width: '100%', boxSizing: 'border-box', marginBottom: 6 }}>
               {FAMILIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
-            {pkg.family !== 'chip' && pkg.family !== 'header' && (
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11, color: '#64748b', marginBottom: 6 }}>
-                本体 <input type="number" step={0.1} value={pkg.bodyW} onChange={(e) => setPkg({ ...pkg, bodyW: Number(e.target.value) })} style={{ ...inp, width: 58 }} />
-                × <input type="number" step={0.1} value={pkg.bodyH} onChange={(e) => setPkg({ ...pkg, bodyH: Number(e.target.value) })} style={{ ...inp, width: 58 }} /> mm
+            {pkg.family === 'manual' ? (
+              <div>
+                <div style={{ fontSize: 9.5, color: '#94a3b8', marginBottom: 5 }}>逐焊盘坐标（相对封装中心，mm）·适合继电器等不规则孔位</div>
+                <div style={{ maxHeight: 150, overflow: 'auto', border: '1px solid #f1f5f9', borderRadius: 6, marginBottom: 5 }}>
+                  {(pkg.manualPads ?? []).map((mp, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 4, padding: '3px 5px', alignItems: 'center', borderBottom: '1px solid #f8fafc', fontSize: 10 }}>
+                      <input value={mp.num} onChange={(e) => setPkg({ ...pkg, manualPads: pkg.manualPads!.map((x, k) => k === i ? { ...x, num: e.target.value } : x) })} style={{ ...inp, width: 30, textAlign: 'center', padding: '3px 4px' }} />
+                      X<input type="number" step={0.1} value={mp.x} onChange={(e) => setPkg({ ...pkg, manualPads: pkg.manualPads!.map((x, k) => k === i ? { ...x, x: Number(e.target.value) } : x) })} style={{ ...inp, width: 50, padding: '3px 4px' }} />
+                      Y<input type="number" step={0.1} value={mp.y} onChange={(e) => setPkg({ ...pkg, manualPads: pkg.manualPads!.map((x, k) => k === i ? { ...x, y: Number(e.target.value) } : x) })} style={{ ...inp, width: 50, padding: '3px 4px' }} />
+                      <input type="number" step={0.1} value={mp.w} title="宽/直径" onChange={(e) => setPkg({ ...pkg, manualPads: pkg.manualPads!.map((x, k) => k === i ? { ...x, w: Number(e.target.value), h: x.round ? Number(e.target.value) : x.h } : x) })} style={{ ...inp, width: 44, padding: '3px 4px' }} />
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 2, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={!!mp.round} onChange={(e) => setPkg({ ...pkg, manualPads: pkg.manualPads!.map((x, k) => k === i ? { ...x, round: e.target.checked, h: e.target.checked ? x.w : x.h } : x) })} />圆
+                      </label>
+                      <button onClick={() => setPkg({ ...pkg, manualPads: pkg.manualPads!.filter((_, k) => k !== i) })} style={{ border: 'none', background: 'none', color: '#dc2626', cursor: 'pointer' }}>×</button>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button onClick={() => setPkg({ ...pkg, manualPads: [...(pkg.manualPads ?? []), { num: String((pkg.manualPads?.length ?? 0) + 1), x: 0, y: 0, w: 1.8, h: 1.8, round: true }] })}
+                    style={{ padding: '4px 10px', borderRadius: 5, border: '1px dashed #cbd5e1', background: '#fff', fontSize: 10, cursor: 'pointer' }}>＋焊盘</button>
+                  <button onClick={() => setPkg({ ...pkg, manualPads: pins.map((p, i) => pkg.manualPads?.[i] ?? ({ num: p.num, x: 0, y: i * 2.54, w: 1.8, h: 1.8, round: true })) })}
+                    title="按管脚表生成同数量的焊盘行" style={{ padding: '4px 10px', borderRadius: 5, border: '1px dashed #cbd5e1', background: '#fff', fontSize: 10, cursor: 'pointer' }}>按管脚生成 {pins.length} 行</button>
+                </div>
               </div>
+            ) : (
+              <>
+                {pkg.family !== 'chip' && pkg.family !== 'header' && (
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11, color: '#64748b', marginBottom: 6 }}>
+                    本体 <input type="number" step={0.1} value={pkg.bodyW} onChange={(e) => setPkg({ ...pkg, bodyW: Number(e.target.value) })} style={{ ...inp, width: 58 }} />
+                    × <input type="number" step={0.1} value={pkg.bodyH} onChange={(e) => setPkg({ ...pkg, bodyH: Number(e.target.value) })} style={{ ...inp, width: 58 }} /> mm
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11, color: '#64748b' }}>
+                  间距 <input type="number" step={0.05} value={pkg.pitch} onChange={(e) => setPkg({ ...pkg, pitch: Number(e.target.value) })} style={{ ...inp, width: 58 }} /> mm
+                </div>
+              </>
             )}
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11, color: '#64748b' }}>
-              间距 <input type="number" step={0.05} value={pkg.pitch} onChange={(e) => setPkg({ ...pkg, pitch: Number(e.target.value) })} style={{ ...inp, width: 58 }} /> mm
-            </div>
             <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px dashed #e2e8f0' }}>
               <div style={{ fontSize: 10.5, fontWeight: 700, color: '#475569', marginBottom: 4 }}>模块轮廓（可选）</div>
               <div style={{ fontSize: 9.5, color: '#94a3b8', marginBottom: 5 }}>焊盘可能只占模块的一部分（如排针在模组边缘），此处指定整体外形</div>

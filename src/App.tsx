@@ -21,6 +21,8 @@ import { searchEzplmParts } from './providers/ezplm-live';
 import { ensureStepBytes } from './modules/board-editor/step-loader';
 import { CustomPartWizard } from './modules/component-search/CustomPartWizard';
 import { loadCustomParts, deleteCustomPart, customPartToResult, bootCustomLib, type CustomPart } from './design-core/custom-lib';
+import { parseKicadPcb } from './design-core/geometry/kicad-pcb-import';
+import { registerFootprintOverride } from './design-core/geometry/lib-file-registry';
 import type { PlacedComponent as PlacedComponentT } from './design-core/document/types';
 import { BoardCanvas2D } from './modules/board-editor/BoardCanvas2D';
 import { BoardView3D } from './modules/board-editor/BoardView3D';
@@ -168,8 +170,6 @@ export default function App() {
     if (!f) return;
     try {
       if (/\.kicad_pcb$/i.test(f.name)) {
-        const { parseKicadPcb } = await import('./design-core/geometry/kicad-pcb-import');
-        const { registerFootprintOverride } = await import('./design-core/geometry/lib-file-registry');
         const data = parseKicadPcb(await f.text());
         // 注册 PCB 内嵌封装定义 → 导入器件焊盘精确、3D 按真实焊盘构建
         for (const [name, def] of Object.entries(data.footprintDefs)) registerFootprintOverride(name, def);
