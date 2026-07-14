@@ -5,12 +5,31 @@
 import { useDesignStore } from '../../state/designStore';
 import { bomTotal } from '../../design-core/document/services';
 import { fmtMoney, COLORS } from '../../shared/theme';
+import { useEffect, useState } from 'react';
+import { fetchDigikeyOffer, type DigikeyOffer } from '../../providers/digikey';
 
 export function BomPanel({ isFullscreen, onToggleFullscreen }: { isFullscreen?: boolean; onToggleFullscreen?: () => void } = {}) {
   const bom = useDesignStore((s) => s.doc.bom);
   const components = useDesignStore((s) => s.doc.components);
-  const total = bomTotal(bom);
+  const total = bom.reduce((sum, l) => sum + (dkOf(l.mpn)?.unitPrice ?? l.unitPrice?.amount ?? 0) * l.quantity, 0);
   const srcOf = (ref: string) => components.find((c) => c.reference === ref)?.source;
+
+  // DigiKey 实时价格：逐型号查询（provider 内按 mpn 缓存，避免重复消耗配额）
+  const [dkPrices, setDkPrices] = useState<Record<string, DigikeyOffer>>({});
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      for (const l of bom) {
+        if (dkPrices[l.mpn]) continue;
+        const o = await fetchDigikeyOffer(l.mpn);
+        if (!alive) return;
+        if (o?.found && o.unitPrice != null) setDkPrices((prev) => ({ ...prev, [l.mpn]: o }));
+      }
+    })();
+    return () => { alive = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bom]);
+  const dkOf = (mpn: string): DigikeyOffer | undefined => dkPrices[mpn];
 
   const exportCsv = () => {
     const header = '序号,位号,型号,厂商,封装,单价,数量';
@@ -49,13 +68,17 @@ export function BomPanel({ isFullscreen, onToggleFullscreen }: { isFullscreen?: 
                     ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: '#e0f2fe', color: '#0369a1', fontWeight: 700 }}>ezPLM</span>
                     : <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: '#fef3c7', color: '#92400e', fontWeight: 600 }}>演示·网络估价</span>}
                 </td>
-                <td style={{ padding: '7px 10px', textAlign: 'right', color: '#059669', fontWeight: 600 }}>{fmtMoney(l.unitPrice?.amount)}</td>
+                <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 600 }}>
+                  {dkOf(l.mpn)
+                    ? <span title={`DigiKey 实时 · 库存 ${dkOf(l.mpn)!.stock?.toLocaleString() ?? '—'}`} style={{ color: '#0369a1' }}>¥{dkOf(l.mpn)!.unitPrice!.toFixed(2)} <span style={{ fontSize: 8.5, padding: '0 4px', borderRadius: 3, background: '#e0f2fe', fontWeight: 700 }}>DK</span></span>
+                    : <span style={{ color: '#059669' }}>{fmtMoney(l.unitPrice?.amount)}</span>}
+                </td>
                 <td style={{ padding: '7px 10px', textAlign: 'right' }}>{l.quantity}</td>
               </tr>
             ))}
           </tbody>
           <tfoot><tr>
-            <td colSpan={6} style={{ padding: 10, textAlign: 'right', fontWeight: 700, borderTop: '2px solid #e2e8f0' }}>BOM 估算总价</td>
+            <td colSpan={6} style={{ padding: 10, textAlign: 'right', fontWeight: 700, borderTop: '2px solid #e2e8f0' }}>BOM 总价（DigiKey 实时价优先）</td>
             <td style={{ padding: 10, textAlign: 'right', fontWeight: 700, color: '#dc2626', fontSize: 14, borderTop: '2px solid #e2e8f0' }}>{fmtMoney(total)}</td>
             <td style={{ borderTop: '2px solid #e2e8f0' }} />
           </tr></tfoot>

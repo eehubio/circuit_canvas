@@ -6,7 +6,7 @@
  */
 import type { PlacedComponent } from '../../design-core/document/types';
 import { padFootprintFor as padFootprintForSym } from '../../design-core/geometry/footprint-pads';
-import { symbolOverrideFor, type ParsedSymbol } from '../../design-core/geometry/lib-file-registry';
+import { symbolOverrideFor, symbolUnitsOverrideFor, type ParsedSymbol } from '../../design-core/geometry/lib-file-registry';
 
 const STROKE = '#334155';
 const PIN = '#7c2d12';
@@ -253,4 +253,13 @@ export function symbolFor(c: PlacedComponent): SymbolDef {
   const right = Array.from({ length: per }, (_, i) => (i < rightN ? String(pinCount - i) : ''));
   if (pinCount > 24) { left[per - 1] = '…'; right[per - 1] = right[per - 1] ? '…' : ''; }
   return ic(per, { left, right });
+}
+
+/** 多单元符号拆分：LM358 等返回 [运放A, 运放B, 电源] 各自独立的 SymbolDef；普通器件返回单元素数组 */
+export function symbolUnitsFor(c: PlacedComponent): SymbolDef[] {
+  if (!c.customSymbolSvg) {
+    const units = symbolUnitsOverrideFor(c.mpn);
+    if (units && units.length > 1) return units.map(parsedSymbol);
+  }
+  return [symbolFor(c)];
 }

@@ -13,7 +13,7 @@ function modelUrl(model) {
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 }
 
-async function callGemini(apiKey, prompt, temperature = 0.35) {
+async function callGemini(apiKey, prompt, temperature = 0.35, inline = null) {
   // GEMINI_MODEL 指定的模型排最前，但失败后仍自动降级到候选列表（配置笔误不至于全盘失效）
   const forced = (process.env.GEMINI_MODEL ?? '').trim();
   const base = workingModel ? [workingModel, ...MODEL_CANDIDATES.filter((m) => m !== workingModel)] : MODEL_CANDIDATES;
@@ -26,7 +26,7 @@ async function callGemini(apiKey, prompt, temperature = 0.35) {
     const r = await fetch(`${modelUrl(model)}?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig }),
+      body: JSON.stringify({ contents: [{ parts: inline ? [{ inline_data: inline }, { text: prompt }] : [{ text: prompt }] }], generationConfig }),
     });
     if (r.ok) {
       const j = await r.json();
@@ -72,10 +72,22 @@ export default async function handler(req, res) {
 
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body ?? {});
-    const prompt = String(body.prompt ?? '');
+    let prompt = String(body.prompt ?? '');
     if (!prompt) return res.status(400).send(JSON.stringify({ error: 'prompt required' }));
+    // URL 模式：服务端抓取网页文本（去标签、限 80KB）拼进提示词
+    if (body.url) {
+      try {
+        const page = await fetch(String(body.url), { headers: { 'User-Agent': 'Mozilla/5.0' } });
+        const html = await page.text();
+        const textOnly = html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 80000);
+        prompt = `以下是网页 ${body.url} 的正文内容：\n${textOnly}\n\n${prompt}`;
+      } catch (e) {
+        return res.status(400).send(JSON.stringify({ error: 'URL 抓取失败: ' + String(e).slice(0, 120) }));
+      }
+    }
 
-    const out = await callGemini(apiKey, prompt);
+    const inline = body.fileBase64 ? { mime_type: String(body.mimeType ?? 'application/pdf'), data: String(body.fileBase64) } : null;
+    const out = await callGemini(apiKey, prompt, 0.35, inline);
     return res.status(200).send(JSON.stringify({ text: out.text, model: out.model }));
   } catch (err) {
     return res.status(502).send(JSON.stringify({ error: 'gemini request failed', detail: String(err).slice(0, 300) }));

@@ -6,7 +6,8 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useDesignStore } from '../../state/designStore';
 import { useSchematicStore, type SchNet } from './schematicStore';
-import { symbolFor } from './symbols';
+import { symbolFor, symbolUnitsFor } from './symbols';
+import { useLibFileStore } from '../../design-core/geometry/lib-file-registry';
 import type { PlacedComponent } from '../../design-core/document/types';
 
 let netCounter = 0;
@@ -34,14 +35,27 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
   const netDragRef = useRef({ active: false, id: '', sx: 0, dx: 0 });
   const panRef = useRef({ active: false, sx: 0, sy: 0, px: 0, py: 0, moved: false });
 
+  const libVersion = useLibFileStore((st) => st.version);
+  /** 多单元展开：LM358 → [U4A 运放, U4B 运放, U4C 电源]，各自独立摆放/移动 */
+  const unitEntries = useMemo(() => items.flatMap((c) => {
+    const units = symbolUnitsFor(c);
+    return units.map((sym, k) => ({
+      key: k === 0 ? c.instanceId : `${c.instanceId}#u${k + 1}`,
+      c, sym,
+      suffix: units.length > 1 ? String.fromCharCode(65 + k) : '',
+    }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [items, libVersion]);
+  const entryOf = useCallback((key: string) => unitEntries.find((e) => e.key === key), [unitEntries]);
+
   const autoLayout = useMemo(() => {
     const out: Record<string, { x: number; y: number }> = {};
-    const cats: Record<string, PlacedComponent[]> = {};
-    items.forEach((i) => { (cats[i.category] = cats[i.category] || []).push(i); });
+    const cats: Record<string, typeof unitEntries> = {};
+    unitEntries.forEach((e) => { (cats[e.c.category] = cats[e.c.category] || []).push(e); });
     const colX: Record<string, number> = { connector: 40, power: 240, mcu: 440, ic: 680, passive: 440 };
-    Object.entries(cats).forEach(([cat, list]) => list.forEach((c, i) => { out[c.instanceId] = { x: colX[cat] ?? 430, y: cat === 'passive' ? 260 + i * 60 : 40 + i * 110 }; }));
+    Object.entries(cats).forEach(([cat, list]) => list.forEach((e, i) => { out[e.key] = { x: colX[cat] ?? 430, y: cat === 'passive' ? 260 + i * 60 : 40 + i * 110 }; }));
     return out;
-  }, [items]);
+  }, [unitEntries]);
 
   const P = useCallback((iid: string) => {
     const st = pos[iid];
@@ -55,9 +69,9 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
 
   /** 符号端口的世界坐标（含旋转）；返回 [引脚桩末端点, 端口点] */
   const worldPorts = useCallback((iid: string) => {
-    const c = items.find((i) => i.instanceId === iid);
-    if (!c) return [];
-    const sym = symbolFor(c);
+    const e = entryOf(iid);
+    if (!e) return [];
+    const sym = e.sym;
     const p = P(iid);
     const cx = sym.w / 2, cy = sym.h / 2;
     const th = ((p.rotation % 360) + 360) % 360;
@@ -73,7 +87,7 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
       const tip = rot(pt.x + nx * stub, pt.y + ny * stub);
       return { tip: { x: p.x + tip.x, y: p.y + tip.y }, port: { x: p.x + port.x, y: p.y + port.y } };
     });
-  }, [items, P]);
+  }, [entryOf, P]);
 
   const genNets = useCallback((): SchNet[] => {
     const out: SchNet[] = [];
@@ -189,8 +203,8 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
     URL.revokeObjectURL(a.href);
   };
 
-  const maxY = Math.max(...items.map((c) => P(c.instanceId).y), 300);
-  const maxX = Math.max(...items.map((c) => P(c.instanceId).x), 700);
+  const maxY = Math.max(...unitEntries.map((e) => P(e.key).y), 300);
+  const maxX = Math.max(...unitEntries.map((e) => P(e.key).x), 700);
   const W = Math.max(900, maxX + 240), H = Math.max(420, maxY + 160);
 
   return (
@@ -205,8 +219,8 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
           <>
             <div style={{ width: 1, height: 14, background: '#E8F3EE' }} />
             <button onClick={() => { const cur = P(selSym).rotation; setPos(selSym, { rotation: (cur + 90) % 360 }); }} style={{ ...tb, borderColor: '#93c5fd', color: '#2563eb' }}>⟳ 旋转(R)</button>
-            <button onClick={() => { const c = items.find((i) => i.instanceId === selSym); if (c) setEdit({ type: 'refdes', id: selSym, text: refOf(c) }); }} style={{ ...tb, borderColor: '#93c5fd', color: '#2563eb' }}>✎ 位号</button>
-            <button onClick={() => { const c = items.find((i) => i.instanceId === selSym); if (c) setEdit({ type: 'value', id: selSym, text: valOf(c) }); }} style={{ ...tb, borderColor: '#93c5fd', color: '#2563eb' }}>✎ 值</button>
+            <button onClick={() => { const e = entryOf(selSym); if (e) setEdit({ type: 'refdes', id: selSym, text: refOf(e.c) + e.suffix }); }} style={{ ...tb, borderColor: '#93c5fd', color: '#2563eb' }}>✎ 位号</button>
+            <button onClick={() => { const e = entryOf(selSym); if (e) setEdit({ type: 'value', id: selSym, text: valOf(e.c) }); }} style={{ ...tb, borderColor: '#93c5fd', color: '#2563eb' }}>✎ 值</button>
           </>
         )}
         <span style={{ fontSize: 10, color: '#94a3b8' }}>拖动符号 · R旋转 · 双击位号/型号编辑 · 滚轮缩放</span>
@@ -224,10 +238,10 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
           {(() => {
             // 先计算所有连线几何，再统一渲染 + 求 T 型交汇点
             const geoms = (nets || []).map((n) => {
-              const fc = items.find((i) => i.instanceId === n.from), tc = items.find((i) => i.instanceId === n.to);
-              if (!fc || !tc) return null;
+              const fe = entryOf(n.from), te = entryOf(n.to);
+              if (!fe || !te) return null;
               const f = P(n.from), t = P(n.to);
-              const fSym = symbolFor(fc), tSym = symbolFor(tc);
+              const fSym = fe.sym, tSym = te.sym;
               const fPorts = worldPorts(n.from), tPorts = worldPorts(n.to);
               if (!fPorts.length || !tPorts.length) return null;
               const fCenter = { x: f.x + fSym.w / 2, y: f.y + fSym.h / 2 };
@@ -295,22 +309,21 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
             {junctions.map((j, i) => <circle key={'jct' + i} cx={j.x} cy={j.y} r={3} fill="#334155" style={{ pointerEvents: 'none' }} />)}
             </>);
           })()}
-          {items.map((c) => {
-            const p = P(c.instanceId);
-            const sym = symbolFor(c);
-            const isSelS = selSym === c.instanceId;
+          {unitEntries.map(({ key, c, sym, suffix }) => {
+            const p = P(key);
+            const isSelS = selSym === key;
             return (
-              <g key={c.instanceId} transform={`translate(${p.x},${p.y}) rotate(${p.rotation} ${sym.w / 2} ${sym.h / 2})`}
-                onMouseDown={(e) => onSymDown(e, c.instanceId)} onClick={(e) => e.stopPropagation()}
+              <g key={key} transform={`translate(${p.x},${p.y}) rotate(${p.rotation} ${sym.w / 2} ${sym.h / 2})`}
+                onMouseDown={(e) => onSymDown(e, key)} onClick={(e) => e.stopPropagation()}
                 style={{ cursor: linking ? 'pointer' : 'grab' }}>
                 <rect x={-12} y={-12} width={sym.w + 24} height={sym.h + 24} fill="transparent" stroke={isSelS ? '#2563eb' : 'none'} strokeWidth={1.2} strokeDasharray="4 3" rx={4} />
-                {sym.render(refOf(c), valOf(c))}
+                {sym.render(refOf(c) + suffix, suffix && suffix !== 'A' ? '' : valOf(c))}
                 {/* 双击热点：位号 / 值 */}
                 <rect x={sym.w / 2 - 30} y={-16} width={60} height={14} fill="transparent" style={{ cursor: 'text' }}
-                  onDoubleClick={(e) => { e.stopPropagation(); setEdit({ type: 'refdes', id: c.instanceId, text: refOf(c) }); }} />
+                  onDoubleClick={(e) => { e.stopPropagation(); setEdit({ type: 'refdes', id: key, text: refOf(c) + suffix }); }} />
                 <rect x={sym.w / 2 - 45} y={sym.h / 2 - 6} width={90} height={14} fill="transparent" style={{ cursor: 'text' }}
-                  onDoubleClick={(e) => { e.stopPropagation(); setEdit({ type: 'value', id: c.instanceId, text: valOf(c) }); }} />
-                {edit && (edit.type === 'refdes' || edit.type === 'value') && edit.id === c.instanceId && (
+                  onDoubleClick={(e) => { e.stopPropagation(); setEdit({ type: 'value', id: key, text: valOf(c) }); }} />
+                {edit && (edit.type === 'refdes' || edit.type === 'value') && edit.id === key && (
                   <foreignObject x={sym.w / 2 - 50} y={edit.type === 'refdes' ? -20 : sym.h / 2 - 9} width={100} height={22}>
                     <input autoFocus value={edit.text} onChange={(e) => setEdit({ ...edit, text: e.target.value })} onBlur={finishEdit} onKeyDown={(e) => { if (e.key === 'Enter') finishEdit(); e.stopPropagation(); }} style={{ width: '100%', fontSize: 9, textAlign: 'center', border: '1px solid #93c5fd', borderRadius: 3, outline: 'none' }} />
                   </foreignObject>
@@ -325,14 +338,13 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
               <g>
                 <line x1={20} y1={railY} x2={W - 20} y2={railY} stroke="#334155" strokeWidth={2.5} />
                 <text x={26} y={railY - 6} fontSize={9} fontWeight={700} fill="#334155" fontFamily="monospace">GND</text>
-                {items.filter((c) => c.category !== 'passive').map((c) => {
-                  const sym = symbolFor(c);
-                  const p = P(c.instanceId);
+                {unitEntries.filter((e) => e.c.category !== 'passive').map(({ key, sym }) => {
+                  const p = P(key);
                   const rot90 = ((p.rotation % 180) + 180) % 180 === 90;
                   const gx = p.x + sym.w / 2;
                   const bottomY = p.y + sym.h / 2 + (rot90 ? sym.w / 2 : sym.h / 2);
                   return (
-                    <g key={'gnd-' + c.instanceId}>
+                    <g key={'gnd-' + key}>
                       <line x1={gx} y1={bottomY} x2={gx} y2={railY} stroke="#64748b" strokeWidth={1.2} strokeDasharray="3 2" />
                       <circle cx={gx} cy={railY} r={2.5} fill="#334155" />
                     </g>

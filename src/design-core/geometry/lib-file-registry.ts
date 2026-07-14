@@ -17,14 +17,30 @@ export interface ParsedSymbol {
   polys: string[];
   circles: { x: number; y: number; r: number }[];
   pins: { tipX: number; tipY: number; endX: number; endY: number; name: string; number: string; nameX: number; nameY: number; numX: number; numY: number }[];
+  /** 多单元符号（双运放等）：各单元独立几何，原理图可分开摆放 */
+  units?: ParsedSymbol[];
 }
-const symbolOverrides = new Map<string, ParsedSymbol>(); // key: mpn
+const symbolOverrides = new Map<string, ParsedSymbol>(); // key: mpn（拼合版，详情预览用）
+const symbolUnitsOverrides = new Map<string, ParsedSymbol[]>(); // key: mpn（分单元，原理图独立摆放用）
 
 export function footprintOverrideFor(name: string): PadFootprint | undefined {
   return footprintOverrides.get(name);
 }
 export function symbolOverrideFor(mpn: string): ParsedSymbol | undefined {
   return symbolOverrides.get(mpn);
+}
+export function symbolUnitsOverrideFor(mpn: string): ParsedSymbol[] | undefined {
+  return symbolUnitsOverrides.get(mpn);
+}
+
+/** 定制器件库等外部来源注册符号/封装覆盖 */
+export function registerSymbolOverride(mpn: string, ps: ParsedSymbol) {
+  symbolOverrides.set(mpn, ps);
+  useLibFileStore.getState().bump();
+}
+export function registerFootprintOverride(name: string, fp: PadFootprint) {
+  footprintOverrides.set(name, fp);
+  useLibFileStore.getState().bump();
 }
 
 /* ---------- 拉取状态与版本 ---------- */
@@ -178,8 +194,10 @@ export function parseKicadSym(text: string): ParsedSymbol | null {
     }).filter((x): x is NonNullable<typeof x> => !!x);
     if (!parsedUnits.length || !parsedUnits.some((u) => u.pins.length)) return null;
 
-    // 单元水平排布：每单元独立归一化（原点对齐 2.54 栅格保证端口在 10px 栅格），x 偏移取 10px 倍数
-    const out: ParsedSymbol = { w: 0, h: 0, rects: [], polys: [], circles: [], pins: [] };
+    // 每单元先各自归一化为独立 ParsedSymbol（原理图可分开摆放）
+    const unitSymbols: ParsedSymbol[] = [];
+    // 单元水平排布拼合版（详情预览用）：x 偏移取 10px 倍数
+    const out: ParsedSymbol = { w: 0, h: 0, rects: [], polys: [], circles: [], pins: [], units: unitSymbols };
     let xCursor = 0;
     for (const un of parsedUnits) {
       const ox = Math.floor(un.minX / g) * g;
@@ -207,6 +225,19 @@ export function parseKicadSym(text: string): ParsedSymbol | null {
           numX: (tip.x + end.x) / 2, numY: (tip.y + end.y) / 2 - 2,
         });
       }
+      // 独立单元版本（局部坐标从 0 开始）
+      const toPx0 = (x: number, y: number) => ({ x: (x - ox) * S2, y: (oyTop - y) * S2 });
+      unitSymbols.push({
+        w: wh.w, h: wh.h,
+        rects: un.rects.map((r) => { const a = toPx0(Math.min(r.x1, r.x2), Math.max(r.y1, r.y2)); return { x: a.x, y: a.y, w: Math.abs(r.x2 - r.x1) * S2, h: Math.abs(r.y2 - r.y1) * S2 }; }),
+        polys: un.polys.map((pl) => pl.map((q, i) => { const a = toPx0(q.x, q.y); return `${i === 0 ? 'M' : 'L'}${a.x.toFixed(1)},${a.y.toFixed(1)}`; }).join(' ')),
+        circles: un.circles.map((ci) => { const a = toPx0(ci.cx, ci.cy); return { x: a.x, y: a.y, r: ci.r * S2 }; }),
+        pins: un.pins.map((pp) => {
+          const tip = toPx0(pp.x, pp.y), end = toPx0(pp.ex, pp.ey);
+          return { tipX: tip.x, tipY: tip.y, endX: end.x, endY: end.y, name: pp.name === '~' ? '' : pp.name, number: pp.number,
+            nameX: end.x + (end.x >= tip.x ? 3 : -3), nameY: end.y + 2.5, numX: (tip.x + end.x) / 2, numY: (tip.y + end.y) / 2 - 2 };
+        }),
+      });
       out.h = Math.max(out.h, wh.h);
       xCursor += Math.ceil((wh.w + 20) / 10) * 10; // 单元间隔，保持 10px 栅格
     }
@@ -226,6 +257,7 @@ export function ensureSymbolFile(mpn: string, url: string | undefined) {
     const parsed = text ? parseKicadSym(text) : null;
     if (parsed) {
       symbolOverrides.set(mpn, parsed);
+      if (parsed.units && parsed.units.length > 1) symbolUnitsOverrides.set(mpn, parsed.units);
       useLibFileStore.getState().bump();
     } else {
       failed.add(url);

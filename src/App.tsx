@@ -3,7 +3,7 @@
  * 应用壳 —— 组装搜索面板 / 画布 / 右侧顾问 / 底部 BOM。
  * 所有数据流经 designStore 与 Provider，不再有硬编码逻辑。
  */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useDesignStore } from './state/designStore';
 import { getProviders } from './providers/factory';
 import { appConfig } from './config';
@@ -19,6 +19,8 @@ import { geminiComplete, geminiAvailable, extractJson } from './providers/gemini
 import { fetchSupplierOffers, fmtOfferPrice, type SupplierOffer } from './providers/suppliers';
 import { searchEzplmParts } from './providers/ezplm-live';
 import { ensureStepBytes } from './modules/board-editor/step-loader';
+import { CustomPartWizard } from './modules/component-search/CustomPartWizard';
+import { loadCustomParts, deleteCustomPart, customPartToResult, bootCustomLib, type CustomPart } from './design-core/custom-lib';
 import type { PlacedComponent as PlacedComponentT } from './design-core/document/types';
 import { BoardCanvas2D } from './modules/board-editor/BoardCanvas2D';
 import { BoardView3D } from './modules/board-editor/BoardView3D';
@@ -76,9 +78,15 @@ export default function App() {
   const [view, setView] = useState<'2d' | '3d'>('2d');
   const [fullscreen, setFullscreen] = useState<'bom' | 'block' | 'schematic' | null>(null);
   const [aiPrompt, setAiPrompt] = useState('');
-  const [leftTab, setLeftTab] = useState<'model' | 'footprint'>('model');
+  const [leftTab, setLeftTab] = useState<'model' | 'footprint' | 'custom'>('model');
   const [pcbExportOpen, setPcbExportOpen] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
+  const [wizard, setWizard] = useState<{ open: boolean; mpn?: string } | null>(null);
+  const [wizardTick, setWizardTick] = useState(0);
+  useEffect(() => { bootCustomLib(); }, []);
+  const [linkRow, setLinkRow] = useState<string | null>(null);
+  const [linkKw, setLinkKw] = useState('');
+  const [linkResults, setLinkResults] = useState<Awaited<ReturnType<typeof searchEzplmParts>>['items']>([]);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const selObj = doc.components.find((c) => c.instanceId === selectedId);
@@ -178,11 +186,11 @@ export default function App() {
               </button>
             </div>
             <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
-              {([['model', '🔍 型号搜索'], ['footprint', '📦 封装库']] as const).map(([id, label]) => (
+              {([['model', '🔍 型号搜索'], ['footprint', '📦 封装库'], ['custom', '🛠 定制模块']] as const).map(([id, label]) => (
                 <button key={id} onClick={() => setLeftTab(id)} style={{ flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 700, cursor: 'pointer', border: `1px solid ${leftTab === id ? COLORS.green : '#dbe6dd'}`, borderRadius: 8, background: leftTab === id ? COLORS.greenBg : '#fff', color: leftTab === id ? COLORS.green : '#64748b' }}>{label}</button>
               ))}
             </div>
-            {leftTab === 'model' ? <ComponentSearchPanel /> : <FootprintLibraryPanel />}
+            {leftTab === 'model' ? <ComponentSearchPanel /> : leftTab === 'footprint' ? <FootprintLibraryPanel /> : <CustomLibPanel onOpenWizard={() => setWizard({ open: true })} wizardTick={wizardTick} />}
           </div>
         </aside>
 
@@ -352,19 +360,52 @@ export default function App() {
                     {d.mapSource && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 4, fontWeight: 700, background: d.mapSource === '本组织' ? '#dcfce7' : d.mapSource === 'ezPLM云端' ? '#e0f2fe' : '#fef3c7', color: d.mapSource === '本组织' ? '#166534' : d.mapSource === 'ezPLM云端' ? '#0369a1' : '#92400e' }}>{d.mapSource}</span>}
                     <span style={{ color: '#64748b' }}>{d.defaultFootprintName}</span>
                     <span style={{ color: '#059669', fontWeight: 600 }}>{fmtMoney(d.unitPrice?.amount)}</span>
+                    {d.mapSource === '封装占位' && (
+                      <button onClick={() => setLinkRow(linkRow === d.componentId ? null : d.componentId)}
+                        title="在 ezPLM 库中搜索并关联到真实器件"
+                        style={{ border: '1px solid #bae6fd', background: '#f0f9ff', color: '#0369a1', borderRadius: 5, padding: '2px 8px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>🔗 关联库器件</button>
+                    )}
+                    {d.mapSource === '封装占位' && (
+                      <button onClick={() => setWizard({ open: true, mpn: d.mpn })} title="用构建向导创建该器件（AI 提取或手工填写）"
+                        style={{ border: '1px solid #ddd6fe', background: '#f5f3ff', color: '#6d28d9', borderRadius: 5, padding: '2px 8px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>🛠 创建</button>
+                    )}
                     <button onClick={() => setAiProposal({ ...aiProposal, details: aiProposal.details.filter((x) => x.componentId !== d.componentId) })}
                       style={{ border: 'none', background: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 14 }}>×</button>
                   </div>
                   <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2 }}>{d.description}</div>
+                  {linkRow === d.componentId && (
+                    <div style={{ marginTop: 6, padding: 8, borderRadius: 6, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                      <input autoFocus placeholder="搜索 ezPLM 型号替换该占位器件…" value={linkKw} onChange={(e) => setLinkKw(e.target.value)}
+                        onKeyDown={async (e) => { if (e.key === 'Enter') { const r = await searchEzplmParts(linkKw.trim(), 6); setLinkResults(r.items); } }}
+                        style={{ width: '100%', padding: '5px 8px', borderRadius: 5, border: '1px solid #e2e8f0', fontSize: 11, outline: 'none', boxSizing: 'border-box' }} />
+                      {linkResults.map((r) => (
+                        <div key={r.componentId} onClick={() => {
+                          setAiProposal({ ...aiProposal, details: aiProposal.details.map((x) => x.componentId === d.componentId ? ({ ...r, mapSource: 'ezPLM云端' } as unknown as typeof x) : x) });
+                          setLinkRow(null); setLinkKw(''); setLinkResults([]);
+                        }} style={{ padding: '5px 8px', marginTop: 4, borderRadius: 5, background: '#fff', border: '1px solid #e0f2fe', cursor: 'pointer', fontSize: 11 }}>
+                          <b style={{ fontFamily: 'monospace' }}>{r.mpn}</b> <span style={{ color: '#94a3b8' }}>{r.manufacturer} · {r.defaultFootprintName}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+              <button onClick={() => setAiProposal({ ...aiProposal, details: aiProposal.details.filter((x) => x.category !== 'passive') })}
+                title="移除电阻/电容/电感等无源器件，只保留核心器件"
+                style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #fde68a', background: '#fffbeb', color: '#b45309', fontSize: 12, fontWeight: 700, cursor: 'pointer', marginRight: 'auto' }}>仅加载核心器件</button>
               <button onClick={() => setAiProposal(null)} style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, cursor: 'pointer' }}>取消</button>
               <button onClick={confirmScheme} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: COLORS.green, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>确认上画布 ({aiProposal.details.length}个器件)</button>
             </div>
           </div>
         </div>
+      )}
+
+      {wizard?.open && (
+        <CustomPartWizard initialMpn={wizard.mpn}
+          onSaved={() => { setWizard(null); setWizardTick((t) => t + 1); setLeftTab('custom'); }}
+          onClose={() => setWizard(null)} />
       )}
 
       {/* Fullscreen overlays */}
@@ -594,6 +635,33 @@ function CompDetail({ iid }: { iid: string }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+
+/** 定制模块库面板：已保存器件列表 + 新建入口 */
+function CustomLibPanel({ onOpenWizard, wizardTick }: { onOpenWizard: () => void; wizardTick: number }) {
+  const addComponent = useDesignStore((s) => s.addComponent);
+  const [, setRefresh] = useState(0);
+  const parts = useMemo(() => loadCustomParts(), [wizardTick]);
+  return (
+    <div>
+      <button onClick={onOpenWizard} style={{ width: '100%', padding: '10px 0', borderRadius: 8, border: 'none', background: COLORS.green, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginBottom: 10 }}>
+        ＋ 新建定制器件（AI 提取 / 手工向导）
+      </button>
+      {parts.length === 0 && <div style={{ textAlign: 'center', padding: 30, color: '#94a3b8', fontSize: 11.5 }}>还没有定制器件<br />上传 Datasheet 或手工填写管脚即可构建</div>}
+      {parts.map((p: CustomPart) => (
+        <div key={p.id} style={{ padding: '9px 10px', marginBottom: 6, borderRadius: 8, background: '#fff', border: '1px solid #eef2f0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 9, padding: '0 5px', borderRadius: 3, background: '#f5f3ff', color: '#6d28d9', fontWeight: 700 }}>自建</span>
+            <span style={{ fontFamily: 'monospace', fontSize: 12.5, fontWeight: 700, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.mpn}</span>
+            <button onClick={() => addComponent(customPartToResult(p))} style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: COLORS.green, color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>＋</button>
+            <button onClick={() => { deleteCustomPart(p.id); setRefresh((x) => x + 1); }} style={{ border: 'none', background: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 13 }}>×</button>
+          </div>
+          <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2 }}>{p.pins.length} 脚 · {p.footprintName}{p.description ? ' · ' + p.description : ''}</div>
+        </div>
+      ))}
     </div>
   );
 }
