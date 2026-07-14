@@ -30,6 +30,35 @@ export const useLangStore = create<LangState>((set) => ({
 
 /* ───────────── 固定文案词典（key = 中文原文） ───────────── */
 const DICT: Record<string, string> = {
+  '个封装 · 点击 + 直接放到画布': 'footprints · click + to place on canvas',
+  '取消连线': 'Cancel Wire',
+  '新模块': 'New Block',
+  '模块': 'Block',
+  '点击目标模块完成连线': 'click target block to finish',
+  '点击起点模块': 'click source block',
+  '脚': 'pin',
+  '连线': 'Wire',
+  // ── 补齐：向导/弹窗/详情/面板（代码已包裹的 key 全量收录） ──
+  '⬆ 上传符号 (SVG)': '⬆ Upload Symbol (SVG)',
+  '从文本提取': 'Extract from text', '共': 'Total', '项': 'items',
+  '功能描述': 'Description', '名称': 'Name', '描述': 'Desc', '型号 *': 'MPN *',
+  '布局要点': 'Layout Tips', '形状:': 'Shape:',
+  '当前浏览器不支持 WebGL，无法显示 3D 预览': 'WebGL not supported — 3D preview unavailable',
+  '或直接粘贴 datasheet 关键文本（管脚表/封装尺寸）…': 'or paste key datasheet text (pin table / dimensions)…',
+  '或粘贴器件页面 URL…': 'or paste part page URL…',
+  '提取': 'Extract', '提取中…': 'Extracting…',
+  '搜索 ezPLM 型号…': 'Search ezPLM MPN…', '无匹配结果': 'no match',
+  '本体': 'Body', '间距': 'Pitch', '轮廓': 'Outline', '焊盘偏移': 'Pads Offset',
+  '添加器件后自动生成原理图': 'Schematic auto-generates after adding parts',
+  '添加器件后自动生成框图，或点「+ 模块」手动创建': 'Block diagram auto-generates after adding parts, or click "+ Block"',
+  '演示·网络估价': 'demo estimate',
+  '🌐 官网': '🌐 Vendor', '🌐 官网检索': '🌐 Vendor Search',
+  '💡 替代料（AI × ezPLM）': '💡 Alternatives (AI × ezPLM)',
+  '📄 PDF下载': '📄 Datasheet', '📄 PDF检索': '📄 Find PDF',
+  '📐 仅符号': '📐 Symbol Only', '📐 参考设计（来自 ezPLM）': '📐 Reference Designs (ezPLM)',
+  '📦 匹配型号': '📦 Full Match', '📦 封装占位器件 · 补充信息': '📦 Placeholder Part · Complete Info',
+  '🔗 从 ezPLM 库关联': '🔗 Link from ezPLM', '🔲 仅封装': '🔲 Footprint Only',
+  '🤖 从 URL / PDF 提取生成': '🤖 Extract from URL / PDF',
   // 品牌
   '硬件原型工坊': 'Tindie Proto',
   'AI 方案生成、器件选型与 PCB 预布局': 'AI Hardware Planning, Parts Selection & PCB Pre-Layout',
@@ -97,6 +126,10 @@ const DICT: Record<string, string> = {
   '保存到定制库': 'Save to Library', '添加管脚': 'Add Pin', '管脚定义': 'Pin Definition',
   '封装参数': 'Package', '封装预览': 'Footprint Preview', '焊盘': 'pads', '模块轮廓（可选）': 'Module Outline (optional)',
 };
+
+/** 非 hook 版（深层组件直接调用；语言切换时 App 整树重渲染保证及时生效） */
+export const tr = (text: string): string =>
+  (useLangStore.getState().lang === 'en' ? DICT[text] ?? text : text);
 
 /** 固定文案翻译：zh 模式原样返回；en 模式查词典，未命中返回原文 */
 export function useT() {

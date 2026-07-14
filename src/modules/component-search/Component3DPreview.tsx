@@ -3,6 +3,7 @@
  * 详情面板内嵌 3D 预览 —— 显示当前器件的立体模型。
  * 真实 STEP（转换缓存就绪时）优先，否则参数化模型；拖拽旋转 · 滚轮缩放 · 自动慢转。
  */
+import { tr } from '../../shared/i18n';
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { PlacedComponent } from '../../design-core/document/types';
@@ -134,17 +135,17 @@ export function Component3DPreview({ c }: { c: PlacedComponent }) {
   }, [c.instanceId, c.footprint.name, version]);
 
   const st = stepStatusFor(c.display?.stepUrl);
-  const label = st === 'ready' ? ['ezPLM 真实 STEP 模型 ✓', '#166534', '#dcfce7']
-    : st === 'loading' ? ['STEP 转换中…（首次需下载 3D 引擎）· 暂为参数化', '#854d0e', '#fef9c3']
-    : st === 'failed' ? ['STEP 转换失败 · 参数化预览', '#991b1b', '#fee2e2']
-    : c.display?.stepUrl ? ['准备转换 STEP…', '#854d0e', '#fef9c3']
-    : ['参数化 3D 预览', '#64748b', '#f1f5f9'];
+  const label = st === 'ready' ? [tr('ezPLM 真实 STEP 模型 ✓'), '#166534', '#dcfce7']
+    : st === 'loading' ? [tr('STEP 转换中…（首次需下载 3D 引擎）· 暂为参数化'), '#854d0e', '#fef9c3']
+    : st === 'failed' ? [tr('STEP 转换失败 · 参数化预览'), '#991b1b', '#fee2e2']
+    : c.display?.stepUrl ? [tr('准备转换 STEP…'), '#854d0e', '#fef9c3']
+    : [tr('参数化 3D 预览'), '#64748b', '#f1f5f9'];
 
-  if (webglFail) return <div style={{ padding: 12, fontSize: 10.5, color: '#94a3b8' }}>当前浏览器不支持 WebGL，无法显示 3D 预览</div>;
+  if (webglFail) return <div style={{ padding: 12, fontSize: 10.5, color: '#94a3b8' }}>{tr('当前浏览器不支持 WebGL，无法显示 3D 预览')}</div>;
 
   return (
     <div>
-      <div ref={boxRef} title="拖拽旋转 · 滚轮缩放 · 双击复位" style={{ height: 190, borderRadius: 6, background: 'linear-gradient(180deg,#fdfdfe,#eaf0f6)', cursor: 'grab', overflow: 'hidden' }} />
+      <div ref={boxRef} title={tr('拖拽旋转 · 滚轮缩放 · 双击复位')} style={{ height: 190, borderRadius: 6, background: 'linear-gradient(180deg,#fdfdfe,#eaf0f6)', cursor: 'grab', overflow: 'hidden' }} />
       <div style={{ marginTop: 5 }}>
         <span style={{ fontSize: 9, padding: '1px 7px', borderRadius: 4, fontWeight: 700, color: label[1], background: label[2] }}>{label[0]}</span>
       </div>

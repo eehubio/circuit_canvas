@@ -2,6 +2,7 @@
  * modules/bom/BomPanel.tsx
  * BOM 清单 —— 从 store 的 doc.bom 渲染，支持 CSV 导出。
  */
+import { tr } from '../../shared/i18n';
 import { useDesignStore } from '../../state/designStore';
 import { bomTotal } from '../../design-core/document/services';
 import { fmtMoney, COLORS } from '../../shared/theme';
@@ -44,9 +45,9 @@ export function BomPanel({ isFullscreen, onToggleFullscreen }: { isFullscreen?: 
   return (
     <div style={{ padding: 16, height: '100%', overflow: 'auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <span style={{ fontSize: 15, fontWeight: 700 }}>🧾 BOM清单 <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 400 }}>共 {bom.length} 项</span></span>
+        <span style={{ fontSize: 15, fontWeight: 700 }}>🧾 {tr('BOM清单')} <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 400 }}>{tr('共')} {bom.length} {tr('项')}</span></span>
         <div style={{ display: 'flex', gap: 6 }}>
-          <button onClick={exportCsv} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid #c6e2d0', background: COLORS.greenBg, color: COLORS.green, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>导出 CSV</button>
+          <button onClick={exportCsv} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid #c6e2d0', background: COLORS.greenBg, color: COLORS.green, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{tr('导出 CSV')}</button>
           {onToggleFullscreen && <button onClick={onToggleFullscreen} style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#475569', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{isFullscreen ? '↙ 退出全屏' : '⛶ 全屏'}</button>}
         </div>
       </div>
@@ -66,7 +67,7 @@ export function BomPanel({ isFullscreen, onToggleFullscreen }: { isFullscreen?: 
                 <td style={{ padding: '7px 10px' }}>
                   {srcOf(l.reference) === 'EZPLM'
                     ? <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: '#e0f2fe', color: '#0369a1', fontWeight: 700 }}>ezPLM</span>
-                    : <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: '#fef3c7', color: '#92400e', fontWeight: 600 }}>演示·网络估价</span>}
+                    : <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: '#fef3c7', color: '#92400e', fontWeight: 600 }}>{tr(tr('演示·网络估价'))}</span>}
                 </td>
                 <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 600 }}>
                   {dkOf(l.mpn)
@@ -78,7 +79,7 @@ export function BomPanel({ isFullscreen, onToggleFullscreen }: { isFullscreen?: 
             ))}
           </tbody>
           <tfoot><tr>
-            <td colSpan={6} style={{ padding: 10, textAlign: 'right', fontWeight: 700, borderTop: '2px solid #e2e8f0' }}>BOM 总价（DigiKey 实时价优先）</td>
+            <td colSpan={6} style={{ padding: 10, textAlign: 'right', fontWeight: 700, borderTop: '2px solid #e2e8f0' }}>{tr('BOM 总价（DigiKey 实时价优先）')}</td>
             <td style={{ padding: 10, textAlign: 'right', fontWeight: 700, color: '#dc2626', fontSize: 14, borderTop: '2px solid #e2e8f0' }}>{fmtMoney(total)}</td>
             <td style={{ borderTop: '2px solid #e2e8f0' }} />
           </tr></tfoot>

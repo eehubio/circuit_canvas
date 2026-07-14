@@ -5,6 +5,7 @@
  *   路径B（手工）：KiCad 式向导 —— 管脚表（编号/名称/电气属性/描述）+ 封装参数（族/外形/间距）
  * 表单统一可编辑；保存 → 定制库（localStorage）+ 符号覆盖注册，封装经合成 KiCad 名走既有解析器。
  */
+import { tr } from '../../shared/i18n';
 import { useMemo, useState } from 'react';
 import { COLORS } from '../../shared/theme';
 import { geminiAvailable, geminiComplete, extractJson } from '../../providers/gemini';
@@ -175,7 +176,7 @@ pin type 取值：${KICAD_PIN_TYPES.join('|')}`;
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(0,0,0,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={onClose}>
       <div style={{ width: '100%', maxWidth: 760, maxHeight: '92vh', overflow: 'auto', background: '#fff', borderRadius: 14, padding: 20 }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ fontSize: 15, fontWeight: 800, color: '#1a4a2e', marginBottom: 12 }}>🛠 定制器件构建向导</div>
+        <div style={{ fontSize: 15, fontWeight: 800, color: '#1a4a2e', marginBottom: 12 }}>🛠 {tr('定制器件构建向导')}</div>
 
         {/* 路径A：AI 提取 */}
         <div style={{ padding: 12, borderRadius: 10, background: '#f5f3ff', border: '1px solid #ddd6fe', marginBottom: 14 }}>
@@ -184,31 +185,31 @@ pin type 取值：${KICAD_PIN_TYPES.join('|')}`;
             <label style={{ padding: '6px 12px', borderRadius: 6, border: '1px dashed #c4b5fd', background: '#fff', fontSize: 11, fontWeight: 700, color: '#6d28d9', cursor: 'pointer' }}>
               📄 上传 PDF<input type="file" accept="application/pdf" onChange={onPdf} style={{ display: 'none' }} />
             </label>
-            <input value={aiUrl} onChange={(e) => setAiUrl(e.target.value)} placeholder="或粘贴器件页面 URL…" style={{ ...inp, flex: 1, minWidth: 200 }} />
-            <button disabled={aiBusy || !aiUrl.trim()} onClick={() => runAi({ url: aiUrl.trim() })} style={{ padding: '6px 12px', borderRadius: 6, border: 'none', background: '#6d28d9', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer', opacity: aiBusy || !aiUrl.trim() ? 0.5 : 1 }}>提取</button>
+            <input value={aiUrl} onChange={(e) => setAiUrl(e.target.value)} placeholder={tr('或粘贴器件页面 URL…')} style={{ ...inp, flex: 1, minWidth: 200 }} />
+            <button disabled={aiBusy || !aiUrl.trim()} onClick={() => runAi({ url: aiUrl.trim() })} style={{ padding: '6px 12px', borderRadius: 6, border: 'none', background: '#6d28d9', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer', opacity: aiBusy || !aiUrl.trim() ? 0.5 : 1 }}>{tr('提取')}</button>
           </div>
-          <textarea value={aiText} onChange={(e) => setAiText(e.target.value)} placeholder="或直接粘贴 datasheet 关键文本（管脚表/封装尺寸）…" rows={2}
+          <textarea value={aiText} onChange={(e) => setAiText(e.target.value)} placeholder={tr('或直接粘贴 datasheet 关键文本（管脚表/封装尺寸）…')} rows={2}
             style={{ ...inp, width: '100%', marginTop: 8, boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }} />
-          {aiText.trim() && <button disabled={aiBusy} onClick={() => runAi({ text: aiText })} style={{ marginTop: 6, padding: '5px 12px', borderRadius: 6, border: 'none', background: '#6d28d9', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>{aiBusy ? '提取中…' : '从文本提取'}</button>}
+          {aiText.trim() && <button disabled={aiBusy} onClick={() => runAi({ text: aiText })} style={{ marginTop: 6, padding: '5px 12px', borderRadius: 6, border: 'none', background: '#6d28d9', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>{aiBusy ? tr('提取中…') : tr('从文本提取')}</button>}
           {aiMsg && <div style={{ marginTop: 6, fontSize: 10.5, color: aiMsg.startsWith('✓') ? '#16a34a' : '#b91c1c' }}>{aiMsg}</div>}
         </div>
 
         {/* 基本信息 */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-          <input value={mpn} onChange={(e) => setMpn(e.target.value)} placeholder="型号 *" style={{ ...inp, flex: 1, fontFamily: 'monospace', fontWeight: 700 }} />
+          <input value={mpn} onChange={(e) => setMpn(e.target.value)} placeholder={tr('型号 *')} style={{ ...inp, flex: 1, fontFamily: 'monospace', fontWeight: 700 }} />
           <select value={cat} onChange={(e) => setCat(e.target.value as ComponentCategory)} style={inp}>
-            {CATS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            {CATS.map(([v, l]) => <option key={v} value={v}>{tr(l)}</option>)}
           </select>
         </div>
-        <input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="功能描述" style={{ ...inp, width: '100%', boxSizing: 'border-box', marginBottom: 12 }} />
+        <input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder={tr('功能描述')} style={{ ...inp, width: '100%', boxSizing: 'border-box', marginBottom: 12 }} />
 
         {/* 管脚表 */}
-        <div style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', marginBottom: 6 }}>管脚定义（{pins.length} 个）</div>
+        <div style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', marginBottom: 6 }}>{tr('管脚定义')}（{pins.length}）</div>
         <div style={{ maxHeight: 200, overflow: 'auto', border: '1px solid #f1f5f9', borderRadius: 8, marginBottom: 8 }}>
           {pins.map((p, i) => (
             <div key={i} style={{ display: 'flex', gap: 6, padding: '4px 8px', borderBottom: '1px solid #f8fafc', alignItems: 'center' }}>
               <input value={p.num} onChange={(e) => setPins(pins.map((x, k) => k === i ? { ...x, num: e.target.value } : x))} style={{ ...inp, width: 40, textAlign: 'center' }} />
-              <input value={p.name} onChange={(e) => setPins(pins.map((x, k) => k === i ? { ...x, name: e.target.value } : x))} placeholder="名称" style={{ ...inp, width: 90, fontFamily: 'monospace' }} />
+              <input value={p.name} onChange={(e) => setPins(pins.map((x, k) => k === i ? { ...x, name: e.target.value } : x))} placeholder={tr('名称')} style={{ ...inp, width: 90, fontFamily: 'monospace' }} />
               <select value={p.type} onChange={(e) => setPins(pins.map((x, k) => k === i ? { ...x, type: e.target.value as CustomPin['type'] } : x))} style={{ ...inp, width: 104 }}>
                 {KICAD_PIN_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
@@ -216,20 +217,20 @@ pin type 取值：${KICAD_PIN_TYPES.join('|')}`;
                 title="管脚在原理图符号的哪一边（默认：电源上/地下/输入左/输出右）" style={{ ...inp, width: 62 }}>
                 <option value="left">◀ 左</option><option value="right">右 ▶</option><option value="top">▲ 上</option><option value="bottom">▼ 下</option>
               </select>
-              <input value={p.desc ?? ''} onChange={(e) => setPins(pins.map((x, k) => k === i ? { ...x, desc: e.target.value } : x))} placeholder="描述" style={{ ...inp, flex: 1 }} />
+              <input value={p.desc ?? ''} onChange={(e) => setPins(pins.map((x, k) => k === i ? { ...x, desc: e.target.value } : x))} placeholder={tr('描述')} style={{ ...inp, flex: 1 }} />
               <button onClick={() => setPins(pins.filter((_, k) => k !== i))} style={{ border: 'none', background: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 13 }}>×</button>
             </div>
           ))}
         </div>
         <button onClick={() => setPins([...pins, { num: String(pins.length + 1), name: `P${pins.length + 1}`, type: 'passive' }])}
-          style={{ padding: '5px 12px', borderRadius: 6, border: '1px dashed #cbd5e1', background: '#fff', fontSize: 11, color: '#475569', cursor: 'pointer', marginBottom: 14 }}>＋ 添加管脚</button>
+          style={{ padding: '5px 12px', borderRadius: 6, border: '1px dashed #cbd5e1', background: '#fff', fontSize: 11, color: '#475569', cursor: 'pointer', marginBottom: 14 }}>＋ {tr('添加管脚')}</button>
 
         {/* 封装参数 + 预览 */}
         <div style={{ display: 'flex', gap: 14 }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', marginBottom: 6 }}>封装参数</div>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', marginBottom: 6 }}>{tr('封装参数')}</div>
             <select value={pkg.family} onChange={(e) => setPkg({ ...pkg, family: e.target.value as CustomPkg['family'] })} style={{ ...inp, width: '100%', boxSizing: 'border-box', marginBottom: 6 }}>
-              {FAMILIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              {FAMILIES.map(([v, l]) => <option key={v} value={v}>{tr(l)}</option>)}
             </select>
             {pkg.family === 'manual' ? (
               <div>
@@ -259,31 +260,31 @@ pin type 取值：${KICAD_PIN_TYPES.join('|')}`;
               <>
                 {pkg.family !== 'chip' && pkg.family !== 'header' && (
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11, color: '#64748b', marginBottom: 6 }}>
-                    本体 <input type="number" step={0.1} value={pkg.bodyW} onChange={(e) => setPkg({ ...pkg, bodyW: Number(e.target.value) })} style={{ ...inp, width: 58 }} />
+                    {tr('本体')} <input type="number" step={0.1} value={pkg.bodyW} onChange={(e) => setPkg({ ...pkg, bodyW: Number(e.target.value) })} style={{ ...inp, width: 58 }} />
                     × <input type="number" step={0.1} value={pkg.bodyH} onChange={(e) => setPkg({ ...pkg, bodyH: Number(e.target.value) })} style={{ ...inp, width: 58 }} /> mm
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11, color: '#64748b' }}>
-                  间距 <input type="number" step={0.05} value={pkg.pitch} onChange={(e) => setPkg({ ...pkg, pitch: Number(e.target.value) })} style={{ ...inp, width: 58 }} /> mm
+                  {tr('间距')} <input type="number" step={0.05} value={pkg.pitch} onChange={(e) => setPkg({ ...pkg, pitch: Number(e.target.value) })} style={{ ...inp, width: 58 }} /> mm
                 </div>
               </>
             )}
             <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px dashed #e2e8f0' }}>
-              <div style={{ fontSize: 10.5, fontWeight: 700, color: '#475569', marginBottom: 4 }}>模块轮廓（可选）</div>
+              <div style={{ fontSize: 10.5, fontWeight: 700, color: '#475569', marginBottom: 4 }}>{tr('模块轮廓（可选）')}</div>
               <div style={{ fontSize: 9.5, color: '#94a3b8', marginBottom: 5 }}>焊盘可能只占模块的一部分（如排针在模组边缘），此处指定整体外形</div>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11, color: '#64748b', marginBottom: 5 }}>
-                轮廓 <input type="number" step={0.5} placeholder="宽" value={pkg.outlineW ?? ''} onChange={(e) => setPkg({ ...pkg, outlineW: e.target.value ? Number(e.target.value) : undefined })} style={{ ...inp, width: 54 }} />
+                {tr('轮廓')} <input type="number" step={0.5} placeholder="宽" value={pkg.outlineW ?? ''} onChange={(e) => setPkg({ ...pkg, outlineW: e.target.value ? Number(e.target.value) : undefined })} style={{ ...inp, width: 54 }} />
                 × <input type="number" step={0.5} placeholder="高" value={pkg.outlineH ?? ''} onChange={(e) => setPkg({ ...pkg, outlineH: e.target.value ? Number(e.target.value) : undefined })} style={{ ...inp, width: 54 }} /> mm
               </div>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11, color: '#64748b' }}>
-                焊盘偏移 <input type="number" step={0.5} value={pkg.padsOffsetX ?? 0} onChange={(e) => setPkg({ ...pkg, padsOffsetX: Number(e.target.value) })} style={{ ...inp, width: 50 }} />
+                {tr('焊盘偏移')} <input type="number" step={0.5} value={pkg.padsOffsetX ?? 0} onChange={(e) => setPkg({ ...pkg, padsOffsetX: Number(e.target.value) })} style={{ ...inp, width: 50 }} />
                 , <input type="number" step={0.5} value={pkg.padsOffsetY ?? 0} onChange={(e) => setPkg({ ...pkg, padsOffsetY: Number(e.target.value) })} style={{ ...inp, width: 50 }} /> mm
               </div>
             </div>
             <div style={{ marginTop: 8, fontSize: 10, color: '#94a3b8', fontFamily: 'monospace' }}>{fpName}</div>
           </div>
           <div style={{ width: 200 }}>
-            <div style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', marginBottom: 6 }}>封装预览（{fp?.pads.length ?? 0} 焊盘）</div>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', marginBottom: 6 }}>{tr('封装预览')}（{fp?.pads.length ?? 0}）</div>
             <div style={{ height: 130, background: '#f0f6f1', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {fp && fp.pads.length ? (() => {
                 const padExt = Math.max(...fp.pads.map((pd) => Math.max(Math.abs(pd.x) + pd.w / 2, Math.abs(pd.y) + pd.h / 2)));
@@ -302,8 +303,8 @@ pin type 取值：${KICAD_PIN_TYPES.join('|')}`;
         </div>
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
-          <button onClick={onClose} style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, cursor: 'pointer' }}>取消</button>
-          <button onClick={save} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: COLORS.green, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>保存到定制库</button>
+          <button onClick={onClose} style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, cursor: 'pointer' }}>{tr('取消')}</button>
+          <button onClick={save} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: COLORS.green, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>{tr('保存到定制库')}</button>
         </div>
       </div>
     </div>

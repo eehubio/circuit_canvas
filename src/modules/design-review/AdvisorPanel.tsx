@@ -2,6 +2,7 @@
  * modules/design-review/AdvisorPanel.tsx
  * AI 顾问 —— 实时展示设计审查、子电路推荐、PCB规格。数据来自 store + ReferenceDesignProvider。
  */
+import { tr, useTranslated } from '../../shared/i18n';
 import { useEffect, useState } from 'react';
 import { useDesignStore } from '../../state/designStore';
 import { getProviders } from '../../providers/factory';
@@ -168,7 +169,7 @@ export function AdvisorPanel() {
           </tbody>
         </table>
         <div style={{ fontSize: 9.5, color: '#64748b', marginTop: 6, lineHeight: 1.6 }}>
-          <b>布局要点</b>：晶振贴MCU包地 · 去耦电容贴引脚 · USB差分等长(90Ω) · 电源回路最小化 · 连接器靠板边
+          <b>{tr('布局要点')}</b>：晶振贴MCU包地 · 去耦电容贴引脚 · USB差分等长(90Ω) · 电源回路最小化 · 连接器靠板边
         </div>
       </Section>
 
@@ -179,7 +180,7 @@ export function AdvisorPanel() {
           return (
             <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', marginBottom: 3, borderRadius: 5, background: st.bg }}>
               <span style={{ fontSize: 9, fontWeight: 700, color: st.color, width: 14, textAlign: 'center' }}>{st.label}</span>
-              <span style={{ fontSize: 10.5, color: '#334155' }}>{r.title}{r.detail ? ` — ${r.detail}` : ''}</span>
+              <span style={{ fontSize: 10.5, color: '#334155' }}><TrDyn text={r.title + (r.detail ? ` — ${r.detail}` : '')} /></span>
             </div>
           );
         })}
@@ -203,3 +204,9 @@ function Section({ title, badge, badgeColor, children }: { title: string; badge?
 }
 const Empty = ({ text }: { text: string }) => <div style={{ fontSize: 11, color: '#94a3b8', paddingTop: 6 }}>{text}</div>;
 const miniBtn: React.CSSProperties = { fontSize: 9, padding: '2px 7px', borderRadius: 4, border: '1px solid #c6e2d0', background: '#fff', color: COLORS.green, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' };
+
+/** 动态内容（规则条目/中文数据）：英文模式经 Gemini 翻译并缓存 */
+function TrDyn({ text }: { text: string }) {
+  const t = useTranslated(text);
+  return <>{t}</>;
+}

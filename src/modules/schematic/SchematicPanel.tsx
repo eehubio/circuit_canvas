@@ -3,6 +3,7 @@
  * 原理图 —— 自动生成 + 可编辑。状态存于 schematicStore（全屏/非全屏共享，不丢失）。
  * 交互：拖符号移动 · R 旋转 · D/Delete 删除选中连线 · 双击位号/值编辑 · 滚轮缩放 · 导出SVG。
  */
+import { tr } from '../../shared/i18n';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useDesignStore } from '../../state/designStore';
 import { useSchematicStore, type SchNet } from './schematicStore';
@@ -211,7 +212,7 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
     <div style={{ padding: 12, height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 14, fontWeight: 700 }}>⚡ 原理图</span>
-        <button onClick={() => setLinking(linking ? null : '__pick__')} style={{ ...tb, ...(linking ? { background: '#f0fdf4', color: '#16a34a', borderColor: '#22c55e' } : {}) }}>{linking ? '✕ 取消' : '+ 连线'}</button>
+        <button onClick={() => setLinking(linking ? null : '__pick__')} style={{ ...tb, ...(linking ? { background: '#f0fdf4', color: '#16a34a', borderColor: '#22c55e' } : {}) }}>{linking ? '✕ ' + tr('取消') : '+ ' + tr('连线')}</button>
         <button onClick={() => { if (sel) { setNets((nets || []).filter((n) => n.id !== sel)); setSel(null); } }} disabled={!sel} style={{ ...tb, opacity: sel ? 1 : 0.5 }}>🗑 删除连线(D)</button>
         <button onClick={() => { setNets(genNets()); resetSch(); setSel(null); }} style={tb}>🔄 重新生成</button>
         <button onClick={exportSvg} style={tb}>⬇ 导出SVG</button>
@@ -234,7 +235,7 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
           <defs><pattern id="schg" x="-5" y="-5" width="10" height="10" patternUnits="userSpaceOnUse"><circle cx="5" cy="5" r="0.6" fill="#d9d2b8" /></pattern></defs>
           <g transform={`translate(${pan.x},${pan.y}) scale(${zoom})`}>
           <rect x={-2000} y={-2000} width={W + 4000} height={H + 4000} fill="url(#schg)" />
-          {items.length === 0 && <text x={W / 2} y={H / 2} textAnchor="middle" fontSize={13} fill="#94a3b8">添加器件后自动生成原理图</text>}
+          {items.length === 0 && <text x={W / 2} y={H / 2} textAnchor="middle" fontSize={13} fill="#94a3b8">{tr('添加器件后自动生成原理图')}</text>}
           {(() => {
             // 先计算所有连线几何，再统一渲染 + 求 T 型交汇点
             const geoms = (nets || []).map((n) => {

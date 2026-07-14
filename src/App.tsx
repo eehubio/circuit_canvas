@@ -22,7 +22,7 @@ import { ensureStepBytes } from './modules/board-editor/step-loader';
 import { CustomPartWizard } from './modules/component-search/CustomPartWizard';
 import { loadCustomParts, deleteCustomPart, customPartToResult, bootCustomLib, type CustomPart } from './design-core/custom-lib';
 import { parseKicadPcb } from './design-core/geometry/kicad-pcb-import';
-import { useT, useLangStore, useTranslated } from './shared/i18n';
+import { useT, useLangStore, useTranslated, tr } from './shared/i18n';
 import { registerFootprintOverride } from './design-core/geometry/lib-file-registry';
 import type { PlacedComponent as PlacedComponentT } from './design-core/document/types';
 import { BoardCanvas2D } from './modules/board-editor/BoardCanvas2D';
@@ -384,18 +384,18 @@ export default function App() {
         <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(0,0,0,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={() => setAiProposal(null)}>
           <div style={{ width: '100%', maxWidth: 520, background: '#fff', borderRadius: 14, padding: 20, boxShadow: '0 24px 80px rgba(0,0,0,.25)' }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <span style={{ fontSize: 15, fontWeight: 700, color: COLORS.green }}>🤖 AI 方案建议 · 请确认</span>
+              <span style={{ fontSize: 15, fontWeight: 700, color: COLORS.green }}>🤖 {tr('AI 方案建议 · 请确认')}</span>
               {aiProposal.source === 'gemini'
-                ? <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 5, background: '#dcfce7', color: '#166534', fontWeight: 700 }}>✓ Gemini 生成</span>
+                ? <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 5, background: '#dcfce7', color: '#166534', fontWeight: 700 }}>{tr('✓ Gemini 生成')}</span>
                 : <span title={aiProposal.fallbackReason} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 5, background: '#fef3c7', color: '#92400e', fontWeight: 700 }}>演示引擎{aiProposal.fallbackReason ? ` · ${aiProposal.fallbackReason.slice(0, 46)}` : ''}</span>}
             </div>
-            <div style={{ fontSize: 12, color: '#475569', padding: '8px 10px', background: '#f7fcf9', borderRadius: 8, marginBottom: 10 }}>{aiProposal.rationale}</div>
+            <div style={{ fontSize: 12, color: '#475569', padding: '8px 10px', background: '#f7fcf9', borderRadius: 8, marginBottom: 10 }}><TrSpan text={aiProposal.rationale} /></div>
             <div style={{ maxHeight: 260, overflow: 'auto', marginBottom: 12 }}>
               {aiProposal.details.map((d) => (
                 <div key={d.componentId} style={{ padding: '7px 10px', borderBottom: '1px solid #f1f5f9', fontSize: 12 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontFamily: 'monospace', fontWeight: 700, flex: 1 }}>{d.mpn}</span>
-                    {d.mapSource && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 4, fontWeight: 700, background: d.mapSource === '本组织' ? '#dcfce7' : d.mapSource === 'ezPLM云端' ? '#e0f2fe' : '#fef3c7', color: d.mapSource === '本组织' ? '#166534' : d.mapSource === 'ezPLM云端' ? '#0369a1' : '#92400e' }}>{d.mapSource}</span>}
+                    {d.mapSource && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 4, fontWeight: 700, background: d.mapSource === '本组织' ? '#dcfce7' : d.mapSource === 'ezPLM云端' ? '#e0f2fe' : '#fef3c7', color: d.mapSource === '本组织' ? '#166534' : d.mapSource === 'ezPLM云端' ? '#0369a1' : '#92400e' }}>{tr(d.mapSource ?? '')}</span>}
                     <span style={{ color: '#64748b' }}>{d.defaultFootprintName}</span>
                     <span style={{ color: '#059669', fontWeight: 600 }}>{fmtMoney(d.unitPrice?.amount)}</span>
                     {d.mapSource === '封装占位' && (
@@ -405,22 +405,22 @@ export default function App() {
                         if (!open) { setLinkKw(d.mpn); setLinkResults([]); searchLink(d.mpn); }
                       }}
                         title="在 ezPLM 库中搜索并关联到真实器件"
-                        style={{ border: '1px solid #bae6fd', background: '#f0f9ff', color: '#0369a1', borderRadius: 5, padding: '2px 8px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>🔗 关联库器件</button>
+                        style={{ border: '1px solid #bae6fd', background: '#f0f9ff', color: '#0369a1', borderRadius: 5, padding: '2px 8px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>🔗 {tr('关联库器件')}</button>
                     )}
                     {d.mapSource === '封装占位' && (
                       <button onClick={() => setWizard({ open: true, mpn: d.mpn })} title="用构建向导创建该器件（AI 提取或手工填写）"
-                        style={{ border: '1px solid #ddd6fe', background: '#f5f3ff', color: '#6d28d9', borderRadius: 5, padding: '2px 8px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>🛠 创建</button>
+                        style={{ border: '1px solid #ddd6fe', background: '#f5f3ff', color: '#6d28d9', borderRadius: 5, padding: '2px 8px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>🛠 {tr('创建')}</button>
                     )}
                     <button onClick={() => setAiProposal({ ...aiProposal, details: aiProposal.details.filter((x) => x.componentId !== d.componentId) })}
                       style={{ border: 'none', background: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 14 }}>×</button>
                   </div>
-                  <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2 }}>{d.description}</div>
+                  <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2 }}><TrSpan text={d.description ?? ''} /></div>
                   {linkRow === d.componentId && (
                     <div style={{ marginTop: 6, padding: 8, borderRadius: 6, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                      <input autoFocus placeholder="搜索 ezPLM 型号替换该占位器件…" value={linkKw}
+                      <input autoFocus placeholder={tr('搜索 ezPLM 型号…')} value={linkKw}
                         onChange={(e) => { setLinkKw(e.target.value); searchLink(e.target.value); }}
                         style={{ width: '100%', padding: '5px 8px', borderRadius: 5, border: '1px solid #e2e8f0', fontSize: 11, outline: 'none', boxSizing: 'border-box' }} />
-                      {linkBusy && <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>搜索中…</div>}
+                      {linkBusy && <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>{tr('搜索中…')}</div>}
                       {!linkBusy && linkKw.trim() && !linkResults.length && <div style={{ fontSize: 10, color: '#b45309', marginTop: 4 }}>ezPLM 库中无匹配 —— 可点「🛠 创建」自行构建该器件</div>}
                       {linkResults.map((r) => (
                         <div key={r.componentId} onClick={() => {
@@ -440,7 +440,7 @@ export default function App() {
                 title="移除电阻/电容/电感等无源器件，只保留核心器件"
                 style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #fde68a', background: '#fffbeb', color: '#b45309', fontSize: 12, fontWeight: 700, cursor: 'pointer', marginRight: 'auto' }}>{t('仅加载核心器件')}</button>
               <button onClick={() => setAiProposal(null)} style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, cursor: 'pointer' }}>{t('取消')}</button>
-              <button onClick={confirmScheme} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: COLORS.green, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>确认上画布 ({aiProposal.details.length}个器件)</button>
+              <button onClick={confirmScheme} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: COLORS.green, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>{tr('确认上画布')} ({aiProposal.details.length})</button>
             </div>
           </div>
         </div>
@@ -543,11 +543,11 @@ function CompDetail({ iid, onBuild }: { iid: string; onBuild?: (mpn: string) => 
       {/* 官网 + PDF */}
       <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
         {(detail?.productUrl ?? c.display?.officialUrl)
-          ? <a href={detail?.productUrl ?? c.display?.officialUrl} target="_blank" rel="noreferrer" style={linkBtn}>🌐 官网</a>
-          : <a href={`https://www.google.com/search?q=${encodeURIComponent(c.manufacturer + ' ' + c.mpn)}`} target="_blank" rel="noreferrer" style={linkBtn}>🌐 官网检索</a>}
+          ? <a href={detail?.productUrl ?? c.display?.officialUrl} target="_blank" rel="noreferrer" style={linkBtn}>{tr('🌐 官网')}</a>
+          : <a href={`https://www.google.com/search?q=${encodeURIComponent(c.manufacturer + ' ' + c.mpn)}`} target="_blank" rel="noreferrer" style={linkBtn}>{tr('🌐 官网检索')}</a>}
         {(detail?.datasheetUrl ?? c.display?.datasheetUrl)
-          ? <a href={detail?.datasheetUrl ?? c.display?.datasheetUrl} target="_blank" rel="noreferrer" style={{ ...linkBtn, borderColor: '#fecaca', background: '#fef2f2', color: '#dc2626' }}>📄 PDF下载</a>
-          : <a href={`https://www.google.com/search?q=${encodeURIComponent(c.mpn + ' datasheet pdf')}`} target="_blank" rel="noreferrer" style={{ ...linkBtn, borderColor: '#fecaca', background: '#fef2f2', color: '#dc2626' }}>📄 PDF检索</a>}
+          ? <a href={detail?.datasheetUrl ?? c.display?.datasheetUrl} target="_blank" rel="noreferrer" style={{ ...linkBtn, borderColor: '#fecaca', background: '#fef2f2', color: '#dc2626' }}>{tr('📄 PDF下载')}</a>
+          : <a href={`https://www.google.com/search?q=${encodeURIComponent(c.mpn + ' datasheet pdf')}`} target="_blank" rel="noreferrer" style={{ ...linkBtn, borderColor: '#fecaca', background: '#fef2f2', color: '#dc2626' }}>{tr('📄 PDF检索')}</a>}
       </div>
 
       {/* 核心参数 */}
@@ -574,7 +574,7 @@ function CompDetail({ iid, onBuild }: { iid: string; onBuild?: (mpn: string) => 
       {/* 参考设计（ezPLM 实时） */}
       {refDesigns.length > 0 && (
         <div style={{ marginTop: 12, padding: 10, borderRadius: 8, background: '#f5f3ff', border: '1px solid #ddd6fe' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#6d28d9', marginBottom: 6 }}>📐 参考设计（来自 ezPLM）</div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#6d28d9', marginBottom: 6 }}>{tr('📐 参考设计（来自 ezPLM）')}</div>
           {refDesigns.map((rd, i) => (
             <a key={i} href={rd.link} target="_blank" rel="noreferrer" style={{ display: 'block', padding: '6px 8px', marginBottom: 4, borderRadius: 6, background: '#fff', border: '1px solid #ede9fe', textDecoration: 'none' }}>
               <div style={{ fontSize: 11.5, fontWeight: 700, color: '#4c1d95' }}>{rd.name} <span style={{ fontSize: 9, color: '#94a3b8' }}>↗</span></div>
@@ -590,11 +590,11 @@ function CompDetail({ iid, onBuild }: { iid: string; onBuild?: (mpn: string) => 
         {dkOffer?.found ? (
           <a href={dkOffer.productUrl} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', marginBottom: 4, borderRadius: 6, background: '#fff', border: '1px solid #e0f2fe', textDecoration: 'none' }}>
             <span style={{ fontSize: 11.5, fontWeight: 700, color: '#be123c', width: 66 }}>DigiKey</span>
-            <span style={{ fontSize: 9, padding: '0 5px', borderRadius: 3, background: '#dcfce7', color: '#166534', fontWeight: 700 }}>实时</span>
+            <span style={{ fontSize: 9, padding: '0 5px', borderRadius: 3, background: '#dcfce7', color: '#166534', fontWeight: 700 }}>{tr('实时')}</span>
             <span style={{ fontSize: 11, color: '#059669', fontWeight: 600 }}>{formatDkPrice(dkOffer)}</span>
-            <span style={{ fontSize: 10, color: '#64748b' }}>库存 {dkOffer.stock?.toLocaleString() ?? '—'}</span>
+            <span style={{ fontSize: 10, color: '#64748b' }}>{tr('库存')} {dkOffer.stock?.toLocaleString() ?? '—'}</span>
             <span style={{ flex: 1 }} />
-            <span style={{ fontSize: 10, color: '#94a3b8' }}>跳转 ↗</span>
+            <span style={{ fontSize: 10, color: '#94a3b8' }}>{tr('跳转 ↗')}</span>
           </a>
         ) : (
           <div style={{ fontSize: 10, color: '#94a3b8', padding: '4px 8px', marginBottom: 4 }}>DigiKey：{dkOffer === null ? '查询中… / 未配置' : '未收录该型号'}</div>
@@ -606,11 +606,11 @@ function CompDetail({ iid, onBuild }: { iid: string; onBuild?: (mpn: string) => 
             return (
               <a key={vendor} href={real.url} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', marginBottom: 4, borderRadius: 6, background: '#fff', border: '1px solid #e0f2fe', textDecoration: 'none' }}>
                 <span style={{ fontSize: 11.5, fontWeight: 700, color: '#0369a1', width: 66 }}>{vendor}</span>
-                <span style={{ fontSize: 9, padding: '0 5px', borderRadius: 3, background: '#dcfce7', color: '#166534', fontWeight: 700 }}>实时</span>
+                <span style={{ fontSize: 9, padding: '0 5px', borderRadius: 3, background: '#dcfce7', color: '#166534', fontWeight: 700 }}>{tr('实时')}</span>
                 <span style={{ fontSize: 11, color: '#059669', fontWeight: 600 }}>{fmtOfferPrice(real)}</span>
-                <span style={{ fontSize: 10, color: '#64748b' }}>库存 {real.stock?.toLocaleString() ?? '—'}</span>
+                <span style={{ fontSize: 10, color: '#64748b' }}>{tr('库存')} {real.stock?.toLocaleString() ?? '—'}</span>
                 <span style={{ flex: 1 }} />
-                <span style={{ fontSize: 10, color: '#94a3b8' }}>跳转 ↗</span>
+                <span style={{ fontSize: 10, color: '#94a3b8' }}>{tr('跳转 ↗')}</span>
               </a>
             );
           }
@@ -622,22 +622,22 @@ function CompDetail({ iid, onBuild }: { iid: string; onBuild?: (mpn: string) => 
             <a key={vendor} href={mock.url} target="_blank" rel="noreferrer" title={`配置 ${vendor === 'Mouser' ? 'MOUSER_API_KEY' : vendor === 'Arrow' ? 'ARROW_LOGIN + ARROW_API_KEY' : 'ELEMENT14_API_KEY'} 后显示实时数据`}
             style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', marginBottom: 4, borderRadius: 6, background: '#fff', border: '1px solid #e0f2fe', textDecoration: 'none', opacity: 0.8 }}>
               <span style={{ fontSize: 11.5, fontWeight: 700, color: '#0369a1', width: 66 }}>{vendor}</span>
-              <span style={{ fontSize: 9, padding: '0 5px', borderRadius: 3, background: '#fef3c7', color: '#92400e', fontWeight: 700 }}>演示</span>
+              <span style={{ fontSize: 9, padding: '0 5px', borderRadius: 3, background: '#fef3c7', color: '#92400e', fontWeight: 700 }}>{tr('演示')}</span>
               <span style={{ fontSize: 11, color: '#059669', fontWeight: 600 }}>¥{mock.price.toFixed(2)}</span>
-              <span style={{ fontSize: 10, color: '#64748b' }}>库存 {mock.stock.toLocaleString()}</span>
+              <span style={{ fontSize: 10, color: '#64748b' }}>{tr('库存')} {mock.stock.toLocaleString()}</span>
               <span style={{ flex: 1 }} />
-              <span style={{ fontSize: 10, color: '#94a3b8' }}>跳转 ↗</span>
+              <span style={{ fontSize: 10, color: '#94a3b8' }}>{tr('跳转 ↗')}</span>
             </a>
           );
         })}
         {(() => { const m = mockOffers(c.mpn, 'CECPORT'); return (
           <a href={m.url} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', marginBottom: 4, borderRadius: 6, background: '#fff', border: '1px solid #e0f2fe', textDecoration: 'none', opacity: 0.8 }}>
             <span style={{ fontSize: 11.5, fontWeight: 700, color: '#0369a1', width: 66 }}>CECPORT</span>
-            <span style={{ fontSize: 9, padding: '0 5px', borderRadius: 3, background: '#fef3c7', color: '#92400e', fontWeight: 700 }}>演示</span>
+            <span style={{ fontSize: 9, padding: '0 5px', borderRadius: 3, background: '#fef3c7', color: '#92400e', fontWeight: 700 }}>{tr('演示')}</span>
             <span style={{ fontSize: 11, color: '#059669', fontWeight: 600 }}>¥{m.price.toFixed(2)}</span>
-            <span style={{ fontSize: 10, color: '#64748b' }}>库存 {m.stock.toLocaleString()}</span>
+            <span style={{ fontSize: 10, color: '#64748b' }}>{tr('库存')} {m.stock.toLocaleString()}</span>
             <span style={{ flex: 1 }} />
-            <span style={{ fontSize: 10, color: '#94a3b8' }}>跳转 ↗</span>
+            <span style={{ fontSize: 10, color: '#94a3b8' }}>{tr('跳转 ↗')}</span>
           </a>
         ); })()}
       </div>
@@ -645,10 +645,10 @@ function CompDetail({ iid, onBuild }: { iid: string; onBuild?: (mpn: string) => 
       {/* AI 替代料：Gemini 找候选 → ezPLM API 验证映射 */}
       <div style={{ marginTop: 10, padding: 10, borderRadius: 8, background: '#fffbeb', border: '1px solid #fde68a' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: aiAlts?.length || aiAltMsg ? 6 : 0 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: '#b45309' }}>💡 替代料（AI × ezPLM）</span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#b45309' }}>{tr('💡 替代料（AI × ezPLM）')}</span>
           <span style={{ flex: 1 }} />
           <button onClick={searchAiAlts} disabled={aiAltBusy} style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: aiAltBusy ? '#d6d3d1' : '#b45309', color: '#fff', fontSize: 10.5, fontWeight: 700, cursor: aiAltBusy ? 'default' : 'pointer' }}>
-            {aiAltBusy ? '搜索中…' : '🤖 AI 搜索替代料'}
+            {aiAltBusy ? tr('搜索中…') : '🤖 ' + tr('AI 搜索替代料')}
           </button>
         </div>
         {aiAltMsg && <div style={{ fontSize: 10, color: '#92400e' }}>{aiAltMsg}</div>}
@@ -697,16 +697,16 @@ function CustomLibPanel({ onOpenWizard, wizardTick }: { onOpenWizard: () => void
       <button onClick={onOpenWizard} style={{ width: '100%', padding: '10px 0', borderRadius: 8, border: 'none', background: COLORS.green, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginBottom: 10 }}>
         ＋ 新建定制器件（AI 提取 / 手工向导）
       </button>
-      {parts.length === 0 && <div style={{ textAlign: 'center', padding: 30, color: '#94a3b8', fontSize: 11.5 }}>还没有定制器件<br />上传 Datasheet 或手工填写管脚即可构建</div>}
+      {parts.length === 0 && <div style={{ textAlign: 'center', padding: 30, color: '#94a3b8', fontSize: 11.5 }}>{tr('还没有定制器件')}<br />{tr('上传 Datasheet 或手工填写管脚即可构建')}</div>}
       {parts.map((p: CustomPart) => (
         <div key={p.id} style={{ padding: '9px 10px', marginBottom: 6, borderRadius: 8, background: '#fff', border: '1px solid #eef2f0' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 9, padding: '0 5px', borderRadius: 3, background: '#f5f3ff', color: '#6d28d9', fontWeight: 700 }}>自建</span>
+            <span style={{ fontSize: 9, padding: '0 5px', borderRadius: 3, background: '#f5f3ff', color: '#6d28d9', fontWeight: 700 }}>{tr('自建')}</span>
             <span style={{ fontFamily: 'monospace', fontSize: 12.5, fontWeight: 700, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.mpn}</span>
             <button onClick={() => addComponent(customPartToResult(p))} style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: COLORS.green, color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>＋</button>
             <button onClick={() => { deleteCustomPart(p.id); setRefresh((x) => x + 1); }} style={{ border: 'none', background: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 13 }}>×</button>
           </div>
-          <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2 }}>{p.pins.length} 脚 · {p.footprintName}{p.description ? ' · ' + p.description : ''}</div>
+          <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2 }}>{p.pins.length} {tr('脚')} · {p.footprintName}{p.description ? ' · ' + p.description : ''}</div>
         </div>
       ))}
     </div>
@@ -773,18 +773,18 @@ function FootprintPartEditor({ c, onBuild }: { c: PlacedComponentT; onBuild?: (m
   };
   return (
     <div style={{ marginTop: 10, padding: 10, borderRadius: 8, background: '#fdf4ff', border: '1px solid #f0abfc' }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: '#a21caf', marginBottom: 6 }}>📦 封装占位器件 · 补充信息</div>
+      <div style={{ fontSize: 11, fontWeight: 700, color: '#a21caf', marginBottom: 6 }}>{tr('📦 封装占位器件 · 补充信息')}</div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-        <input value={mpnText} onChange={(e) => setMpnText(e.target.value)} placeholder="输入器件型号，如 GD32F103C8T6"
+        <input value={mpnText} onChange={(e) => setMpnText(e.target.value)} placeholder={tr('输入器件型号，如 GD32F103C8T6')}
           style={{ flex: 1, padding: '6px 8px', borderRadius: 6, border: '1px solid #e9d5ff', fontSize: 11, outline: 'none' }}
           onKeyDown={(e) => { if (e.key === 'Enter' && mpnText.trim()) setMpn(c.instanceId, mpnText); }} />
-        <button onClick={() => mpnText.trim() && setMpn(c.instanceId, mpnText)} style={{ padding: '6px 12px', borderRadius: 6, border: 'none', background: '#a21caf', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>设为型号</button>
+        <button onClick={() => mpnText.trim() && setMpn(c.instanceId, mpnText)} style={{ padding: '6px 12px', borderRadius: 6, border: 'none', background: '#a21caf', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>{tr('设为型号')}</button>
       </div>
       {/* 从 ezPLM 库关联：整体 / 仅符号 / 仅封装 */}
       <div style={{ marginTop: 8, padding: 8, borderRadius: 6, background: '#fff', border: '1px solid #f0abfc' }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: '#86198f', marginBottom: 5 }}>🔗 从 ezPLM 库关联</div>
+        <div style={{ fontSize: 10, fontWeight: 700, color: '#86198f', marginBottom: 5 }}>{tr('🔗 从 ezPLM 库关联')}</div>
         <div style={{ display: 'flex', gap: 5 }}>
-          {([['full', '📦 匹配型号', '型号+符号+封装全部替换'], ['symbol', '📐 仅符号', '只借用该器件的原理图符号，型号与封装不变'], ['footprint', '🔲 仅封装', '只借用该器件的 PCB 封装与 3D，型号与符号不变']] as const).map(([m, label, tip]) => (
+          {([['full', tr('📦 匹配型号'), '型号+符号+封装全部替换'], ['symbol', tr('📐 仅符号'), '只借用该器件的原理图符号，型号与封装不变'], ['footprint', tr('🔲 仅封装'), '只借用该器件的 PCB 封装与 3D，型号与符号不变']] as const).map(([m, label, tip]) => (
             <button key={m} onClick={() => openMode(m)} title={tip}
               style={{ flex: 1, padding: '5px 4px', borderRadius: 5, fontSize: 10, fontWeight: 700, cursor: 'pointer',
                 border: `1px solid ${mode === m ? '#a21caf' : '#e9d5ff'}`, background: mode === m ? '#fae8ff' : '#fff', color: mode === m ? '#86198f' : '#a855f7' }}>{label}</button>
@@ -795,8 +795,8 @@ function FootprintPartEditor({ c, onBuild }: { c: PlacedComponentT; onBuild?: (m
             <input autoFocus value={kw} onChange={(e) => { setKw(e.target.value); doSearch(e.target.value); }}
               placeholder={mode === 'symbol' ? '搜索型号，借用其原理图符号…' : mode === 'footprint' ? '搜索型号，借用其封装…' : '搜索 ezPLM 型号…'}
               style={{ width: '100%', padding: '5px 8px', borderRadius: 5, border: '1px solid #e9d5ff', fontSize: 11, outline: 'none', boxSizing: 'border-box' }} />
-            {busy && <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>搜索中…</div>}
-            {!busy && kw.trim() && !results.length && <div style={{ fontSize: 10, color: '#b45309', marginTop: 4 }}>无匹配结果</div>}
+            {busy && <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>{tr('搜索中…')}</div>}
+            {!busy && kw.trim() && !results.length && <div style={{ fontSize: 10, color: '#b45309', marginTop: 4 }}>{tr('无匹配结果')}</div>}
             {results.map((r) => (
               <div key={r.componentId} onClick={() => applyPick(r)}
                 style={{ padding: '5px 8px', marginTop: 4, borderRadius: 5, background: '#fdf4ff', border: '1px solid #f0abfc', cursor: 'pointer', fontSize: 10.5 }}>
@@ -813,9 +813,9 @@ function FootprintPartEditor({ c, onBuild }: { c: PlacedComponentT; onBuild?: (m
 
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 8 }}>
         <button onClick={() => onBuild?.(mpnText.trim() || c.mpn)} title="打开构建向导：上传 PDF / 输入 URL 由 AI 提取管脚与封装，或手工填写"
-          style={{ padding: '5px 10px', borderRadius: 6, border: 'none', background: '#6d28d9', color: '#fff', fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}>🤖 从 URL / PDF 提取生成</button>
+          style={{ padding: '5px 10px', borderRadius: 6, border: 'none', background: '#6d28d9', color: '#fff', fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}>{tr('🤖 从 URL / PDF 提取生成')}</button>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, color: '#86198f', cursor: 'pointer' }}>
-          <span style={{ padding: '5px 10px', borderRadius: 6, border: '1px dashed #d8b4fe', background: '#fff', fontWeight: 700 }}>⬆ 上传符号 (SVG)</span>
+          <span style={{ padding: '5px 10px', borderRadius: 6, border: '1px dashed #d8b4fe', background: '#fff', fontWeight: 700 }}>{tr('⬆ 上传符号 (SVG)')}</span>
           {c.customSymbolSvg && <span style={{ color: '#16a34a', fontWeight: 700 }}>✓ 已上传</span>}
           <input type="file" accept=".svg,image/svg+xml" onChange={onFile} style={{ display: 'none' }} />
         </label>

@@ -3,6 +3,7 @@
  * 器件 PCB 设计库文件预览 —— 原理图符号 / PCB封装 / 3D模型，可预览可下载。
  * 符号与封装为 SVG（可下载）；3D 为参数化 Three.js 模型（截图下载在 3D 视图中进行）。
  */
+import { tr } from '../../shared/i18n';
 import { useMemo, useState, useRef, useEffect } from 'react';
 import type { PlacedComponent } from '../../design-core/document/types';
 import { symbolFor } from '../schematic/symbols';
@@ -68,10 +69,10 @@ function ZoomPanBox({ children, height = 150 }: { children: React.ReactNode; hei
 
 function StatusBadge({ st }: { st: LibFileStatus }) {
   const map: Record<LibFileStatus, [string, string, string]> = {
-    loaded: ['ezPLM 精确数据 ✓', '#dcfce7', '#166534'],
-    loading: ['拉取库文件中…（暂用名字解析）', '#fef9c3', '#854d0e'],
-    failed: ['文件解析失败 · 用名字解析兜底', '#fee2e2', '#991b1b'],
-    nourl: ['接口未提供文件链接 · 名字解析', '#f1f5f9', '#64748b'],
+    loaded: [tr('ezPLM 精确数据 ✓'), '#dcfce7', '#166534'],
+    loading: [tr('拉取库文件中…（暂用名字解析）'), '#fef9c3', '#854d0e'],
+    failed: [tr('文件解析失败 · 用名字解析兜底'), '#fee2e2', '#991b1b'],
+    nourl: [tr('接口未提供文件链接 · 名字解析'), '#f1f5f9', '#64748b'],
   };
   const [text, bg, fg] = map[st];
   return <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 4, background: bg, color: fg, fontWeight: 700 }}>{text}</span>;
@@ -121,7 +122,7 @@ export function LibraryPreview({ c }: { c: PlacedComponent }) {
       <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.green, marginBottom: 8 }}>📚 PCB 设计库文件</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={cell}>
-          <div style={{ ...cellTitle, display: 'flex', alignItems: 'center', gap: 6 }}>原理图符号 <StatusBadge st={symbolFileStatus(c.mpn, c.display?.symbolFileUrl)} /></div>
+          <div style={{ ...cellTitle, display: 'flex', alignItems: 'center', gap: 6 }}>{tr('原理图符号')} <StatusBadge st={symbolFileStatus(c.mpn, c.display?.symbolFileUrl)} /></div>
           <ZoomPanBox>{symSvg}</ZoomPanBox>
           <div style={{ display: 'flex', gap: 4 }}>
             <button onClick={() => downloadText(buildKicadSym(c), `${c.mpn}.kicad_sym`)} style={{ ...dlBtn, flex: 1 }}>⬇ .kicad_sym</button>
@@ -129,7 +130,7 @@ export function LibraryPreview({ c }: { c: PlacedComponent }) {
           </div>
         </div>
         <div style={cell}>
-          <div style={{ ...cellTitle, display: 'flex', alignItems: 'center', gap: 6 }}>PCB 封装 <StatusBadge st={footprintFileStatus(c.footprint.name, c.display?.footprintFileUrl)} /></div>
+          <div style={{ ...cellTitle, display: 'flex', alignItems: 'center', gap: 6 }}>{tr('PCB 封装')} <StatusBadge st={footprintFileStatus(c.footprint.name, c.display?.footprintFileUrl)} /></div>
           <ZoomPanBox>{fpSvg ?? <span style={{ fontSize: 10, color: '#94a3b8' }}>无焊盘数据</span>}</ZoomPanBox>
           <div style={{ display: 'flex', gap: 4 }}>
             <button onClick={() => { const m = buildKicadMod(c); if (m) downloadText(m, `${c.footprint.name}.kicad_mod`); }} disabled={!fpSvg} style={{ ...dlBtn, flex: 1, opacity: fpSvg ? 1 : 0.5 }}>⬇ .kicad_mod</button>
@@ -139,10 +140,10 @@ export function LibraryPreview({ c }: { c: PlacedComponent }) {
       </div>
       <div style={{ marginTop: 8, padding: '8px', borderRadius: 8, background: '#fff', border: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 6 }}>3D 模型</div>
+          <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 6 }}>{tr('3D 模型')}</div>
           <Component3DPreview c={c} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7 }}>
-            <span style={{ flex: 1, fontSize: 9.5, color: '#94a3b8' }}>{c.display?.stepUrl ? 'STEP 源文件（ezPLM）' : 'ezPLM 未提供该器件的 STEP 文件'}</span>
+            <span style={{ flex: 1, fontSize: 9.5, color: '#94a3b8' }}>{c.display?.stepUrl ? tr('STEP 源文件（ezPLM）') : tr('ezPLM 未提供该器件的 STEP 文件')}</span>
             {c.display?.stepUrl
               ? <a href={`/api/ezplm?path=file&url=${encodeURIComponent(c.display.stepUrl)}&dl=${encodeURIComponent(c.mpn + '.step')}`} style={{ ...dlBtn, padding: '4px 10px', textDecoration: 'none' }}>⬇ .step</a>
               : <button disabled style={{ ...dlBtn, opacity: 0.45, cursor: 'not-allowed', padding: '4px 10px' }}>⬇ .step</button>}
