@@ -269,6 +269,15 @@ export function ensureSymbolFile(mpn: string, url: string | undefined) {
 // ── KiCad 官方符号自愈：override 是内存态，刷新即失；symbolFromMpn 里的
 //    KICADSYM:lib:name 编码了完整来源，缺失时自动重拉注册（localStorage 加速） ──
 const ksymInflight = new Set<string>();
+const ksymStatus = new Map<string, string>();
+/** KICADSYM 自愈状态（供 UI 展示：拉取中/失败原因） */
+export function kicadSymbolStatus(key: string | undefined): string | undefined {
+  return key ? ksymStatus.get(key) : undefined;
+}
+function setKsymStatus(key: string, st: string) {
+  ksymStatus.set(key, st);
+  useLibFileStore.getState().bump();
+}
 export function ensureKicadSymbol(key: string | undefined): void {
   if (!key || !key.startsWith('KICADSYM:') || symbolOverrideFor(key) || ksymInflight.has(key)) return;
   const parts = key.split(':');
@@ -276,10 +285,12 @@ export function ensureKicadSymbol(key: string | undefined): void {
   const name = parts.slice(2).join(':');
   if (!lib || !name) return;
   ksymInflight.add(key);
+  setKsymStatus(key, '符号自动恢复中…');
   const cacheK = 'cc_ksym_' + key;
   const apply = (text: string): boolean => {
     const ps = parseKicadSym(text);
-    if (ps && ps.pins.length) { registerSymbolOverride(key, ps); return true; }
+    if (ps && ps.pins.length) { registerSymbolOverride(key, ps); setKsymStatus(key, '✓'); return true; }
+    setKsymStatus(key, `解析失败（${ps ? '0管脚' : '格式异常'}；开头：${text.slice(0, 40).replace(/\s+/g, ' ')}）`);
     return false;
   };
   try {
@@ -287,11 +298,19 @@ export function ensureKicadSymbol(key: string | undefined): void {
     if (cached && apply(cached)) { ksymInflight.delete(key); return; }
   } catch { /* localStorage 不可用则直接走网络 */ }
   fetch(`/api/kicadlib?path=sym&lib=${encodeURIComponent(lib)}&name=${encodeURIComponent(name)}`)
-    .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
+    .then(async (r) => {
+      if (r.ok) return r.text();
+      let d = '';
+      try { d = String((await r.json())?.error ?? ''); } catch { /* 非 JSON */ }
+      throw new Error(`HTTP ${r.status}${d ? ' · ' + d : ''}`);
+    })
     .then((text) => {
       try { localStorage.setItem(cacheK, text); } catch { /* 空间不足忽略 */ }
       apply(text);
     })
-    .catch(() => { /* 静默：下次渲染重试 */ ksymInflight.delete(key); })
+    .catch((e) => {
+      setKsymStatus(key, `拉取失败：${(e as Error).message}`);
+      console.warn('[ksym]', key, e);
+    })
     .then(() => ksymInflight.delete(key));
 }

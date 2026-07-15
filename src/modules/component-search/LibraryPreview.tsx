@@ -4,7 +4,7 @@
  * 符号与封装为 SVG（可下载）；3D 为参数化 Three.js 模型（截图下载在 3D 视图中进行）。
  */
 import { tr } from '../../shared/i18n';
-import { symbolOverrideFor, ensureKicadSymbol } from '../../design-core/geometry/lib-file-registry';
+import { symbolOverrideFor, ensureKicadSymbol, kicadSymbolStatus } from '../../design-core/geometry/lib-file-registry';
 import { useMemo, useState, useRef, useEffect } from 'react';
 import type { PlacedComponent } from '../../design-core/document/types';
 import { symbolFor } from '../schematic/symbols';
@@ -132,6 +132,9 @@ export function LibraryPreview({ c }: { c: PlacedComponent }) {
             <div style={{ padding: '18px 12px', textAlign: 'center', borderRadius: 8, background: '#f8fafc', border: '1px dashed #cbd5e1' }}>
               <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700 }}>{tr('尚未关联原理图符号')}</div>
               <div style={{ fontSize: 9.5, color: '#94a3b8', marginTop: 4 }}>{tr('用上方「从 ezPLM 库关联」/「KiCad 符号库」/「创建」赋予真实符号')}</div>
+              {kicadSymbolStatus(c.display?.symbolFromMpn) && (
+                <div style={{ fontSize: 9.5, color: '#b45309', marginTop: 6, wordBreak: 'break-all' }}>{kicadSymbolStatus(c.display?.symbolFromMpn)}</div>
+              )}
             </div>
           ) : (
             <>

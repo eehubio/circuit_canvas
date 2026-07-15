@@ -46,7 +46,10 @@ const SHAPES: { id: BoardShapeKind; icon: string; name: string }[] = [
   { id: 'lshape', icon: '⌐', name: 'L形' },
 ];
 
+declare const __BUILD_STAMP__: string;
+
 export default function App() {
+  useEffect(() => { console.info('%c硬件原型工坊 build ' + __BUILD_STAMP__, 'color:#1f5c3b;font-weight:bold'); }, []);
   const doc = useDesignStore((s) => s.doc);
   const selectedId = useDesignStore((s) => s.selectedId);
   const undo = useDesignStore((s) => s.undo);
