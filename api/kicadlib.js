@@ -165,22 +165,40 @@ export default async function handler(req, res) {
 
     if (path === 'symlibs') {
       let data = getCached('symlibs');
-      if (!data) {
-        // 符号库是根目录下的 *.kicad_sym 单文件
-        const out = [];
-        for (let page = 1; page <= 10; page++) {
-          const r = await fetch(`${GL_API}/${SYM_PROJECT}/repository/tree?per_page=100&page=${page}&ref=master`, { headers: { 'User-Agent': 'circuit-canvas' } });
-          if (!r.ok) throw new Error(`GitLab API ${r.status}`);
-          const items = await r.json();
-          out.push(...items);
-          if (items.length < 100) break;
+      let diag = '';
+      if (!data || !data.length) {
+        // 符号库为 *.kicad_sym 单文件；依次尝试 根目录 / symbols 子目录 / 默认分支（容忍上游布局变动）
+        const attempts = [
+          { path: '', ref: 'master' },
+          { path: 'symbols', ref: 'master' },
+          { path: '', ref: '' }, // 不带 ref = 默认分支
+        ];
+        let sample = [];
+        for (const a of attempts) {
+          const out = [];
+          for (let page = 1; page <= 10; page++) {
+            const qs = `per_page=100&page=${page}` + (a.path ? `&path=${encodeURIComponent(a.path)}` : '') + (a.ref ? `&ref=${a.ref}` : '');
+            const r = await fetch(`${GL_API}/${SYM_PROJECT}/repository/tree?${qs}`, { headers: { 'User-Agent': 'circuit-canvas' } });
+            if (!r.ok) { sample = [`HTTP ${r.status}`]; break; }
+            const items = await r.json();
+            if (!Array.isArray(items)) { sample = ['非数组响应']; break; }
+            out.push(...items);
+            if (items.length < 100) break;
+          }
+          const libs = out.filter((t) => t.type === 'blob' && String(t.name).endsWith('.kicad_sym')).map((t) => t.name.replace(/\.kicad_sym$/, ''));
+          if (libs.length) { data = libs; break; }
+          if (out.length && !sample.length) sample = out.slice(0, 5).map((t) => `${t.type}:${t.name}`);
         }
-        data = out.filter((t) => t.type === 'blob' && t.name.endsWith('.kicad_sym')).map((t) => t.name.replace(/\.kicad_sym$/, ''));
-        cache.set('symlibs', { at: Date.now(), data });
+        if (data && data.length) {
+          cache.set('symlibs', { at: Date.now(), data }); // 只缓存非空结果
+        } else {
+          diag = `GitLab 可达但未匹配到 .kicad_sym；样本：${sample.join(', ') || '（空树）'}`;
+        }
       }
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
-      res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
-      return res.status(200).send(JSON.stringify({ libs: data }));
+      // 空结果不进 CDN 缓存（避免瞬时故障被钉死一小时）
+      res.setHeader('Cache-Control', data && data.length ? 's-maxage=3600, stale-while-revalidate=86400' : 'no-store');
+      return res.status(200).send(JSON.stringify(data && data.length ? { libs: data } : { libs: [], error: diag }));
     }
 
     if (path === 'symlist') {
