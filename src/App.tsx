@@ -23,7 +23,7 @@ import { CustomPartWizard } from './modules/component-search/CustomPartWizard';
 import { loadCustomParts, deleteCustomPart, customPartToResult, bootCustomLib, type CustomPart } from './design-core/custom-lib';
 import { parseKicadPcb } from './design-core/geometry/kicad-pcb-import';
 import { useT, useLangStore, useTranslated, tr } from './shared/i18n';
-import { registerFootprintOverride, registerSymbolOverride } from './design-core/geometry/lib-file-registry';
+import { registerFootprintOverride, registerSymbolOverride, symbolOverrideFor } from './design-core/geometry/lib-file-registry';
 import { parseKicadSym } from './design-core/geometry/lib-file-registry';
 import type { PlacedComponent as PlacedComponentT } from './design-core/document/types';
 import { BoardCanvas2D } from './modules/board-editor/BoardCanvas2D';
@@ -836,6 +836,28 @@ function FootprintPartEditor({ c, onBuild }: { c: PlacedComponentT; onBuild?: (m
   };
   const ksFiltered = ksKw.trim() ? ksItems.filter((n) => n.toLowerCase().includes(ksKw.trim().toLowerCase())) : ksItems;
 
+  // 一键诊断：把 拉取→解析→注册→渲染 每一步实况打出来
+  const [ksDiag, setKsDiag] = useState('');
+  const runKsDiag = async () => {
+    const key = c.display?.symbolFromMpn ?? '';
+    const L: string[] = [`key=${key || '（未关联）'}`, `family=${c.display?.family}`];
+    try {
+      if (key.startsWith('KICADSYM:')) {
+        const parts = key.split(':');
+        const r = await fetch(`/api/kicadlib?path=sym&lib=${encodeURIComponent(parts[1])}&name=${encodeURIComponent(parts.slice(2).join(':'))}`);
+        const text = await r.text();
+        L.push(`拉取 HTTP ${r.status}，头部：${text.slice(0, 60).replace(/\s+/g, ' ')}`);
+        if (r.ok) {
+          const ps = parseKicadSym(text);
+          L.push(ps ? `解析 ✓ pins=${ps.pins.length}` : '解析 ✗ 返回 null');
+          if (ps && ps.pins.length) registerSymbolOverride(key, ps);
+        }
+      }
+      L.push(`override 在库=${symbolOverrideFor(key) ? '✓' : '✗'}`);
+    } catch (e) { L.push('异常：' + (e as Error).message); }
+    setKsDiag(L.join(' | '));
+  };
+
   const openMode = (m: 'full' | 'symbol' | 'footprint') => {
     const next = mode === m ? null : m;
     setMode(next);
@@ -918,6 +940,8 @@ function FootprintPartEditor({ c, onBuild }: { c: PlacedComponentT; onBuild?: (m
               ))}
             </div>
             {ksMsg && <div style={{ fontSize: 10, color: ksMsg.startsWith('✓') ? '#16a34a' : '#b91c1c', marginTop: 4 }}>{ksMsg}</div>}
+            <button onClick={runKsDiag} style={{ marginTop: 6, padding: '3px 10px', borderRadius: 5, border: '1px solid #cbd5e1', background: '#f8fafc', color: '#475569', fontSize: 10, cursor: 'pointer' }}>🔍 {tr('诊断符号链路')}</button>
+            {ksDiag && <div style={{ fontSize: 9.5, color: '#334155', marginTop: 4, wordBreak: 'break-all', background: '#f8fafc', padding: 6, borderRadius: 5, fontFamily: 'monospace' }}>{ksDiag}</div>}
           </div>
         )}
       </div>
