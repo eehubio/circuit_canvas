@@ -42,11 +42,25 @@ function extractSymbolBlock(text, name) {
   return null;
 }
 
+let symProj = null; // { id, branch } 模块级缓存
+async function resolveSymProject() {
+  if (symProj) return symProj;
+  const r = await fetch(`https://gitlab.com/api/v4/groups/${encodeURIComponent('kicad/libraries')}/projects?per_page=100`, { headers: { 'User-Agent': 'circuit-canvas' } });
+  if (!r.ok) throw new Error(`group api ${r.status}`);
+  const projects = await r.json();
+  const p = (Array.isArray(projects) ? projects : []).find((x) => x.path === 'kicad-symbols')
+    ?? (Array.isArray(projects) ? projects : []).find((x) => /symbol/i.test(String(x.path)));
+  if (!p) throw new Error('kicad/libraries 组中未找到符号项目：' + (Array.isArray(projects) ? projects.map((x) => x.path).slice(0, 8).join(',') : typeof projects));
+  symProj = { id: p.id, branch: p.default_branch || 'master' };
+  return symProj;
+}
+
 async function symLibText(lib) {
   const key = `symfile:${lib}`;
   let data = getCached(key);
   if (!data) {
-    const r = await fetch(`${SYM_RAW}/${lib}.kicad_sym`, { headers: { 'User-Agent': 'circuit-canvas' } });
+    const pj = await resolveSymProject();
+    const r = await fetch(`${GL_API}/${pj.id}/repository/files/${encodeURIComponent(lib + '.kicad_sym')}/raw?ref=${encodeURIComponent(pj.branch)}`, { headers: { 'User-Agent': 'circuit-canvas' } });
     if (!r.ok) throw new Error(`symbol lib ${r.status}`);
     data = await r.text();
     cache.set(key, { at: Date.now(), data });
@@ -167,36 +181,34 @@ export default async function handler(req, res) {
       let data = getCached('symlibs');
       let diag = '';
       if (!data || !data.length) {
-        // 符号库为 *.kicad_sym 单文件；依次尝试 根目录 / symbols 子目录 / 默认分支（容忍上游布局变动）
-        const attempts = [
-          { path: '', ref: 'master' },
-          { path: 'symbols', ref: 'master' },
-          { path: '', ref: '' }, // 不带 ref = 默认分支
-        ];
         let sample = [];
-        for (const a of attempts) {
-          const out = [];
-          for (let page = 1; page <= 10; page++) {
-            const qs = `per_page=100&page=${page}` + (a.path ? `&path=${encodeURIComponent(a.path)}` : '') + (a.ref ? `&ref=${a.ref}` : '');
-            const r = await fetch(`${GL_API}/${SYM_PROJECT}/repository/tree?${qs}`, { headers: { 'User-Agent': 'circuit-canvas' } });
-            if (!r.ok) { sample = [`HTTP ${r.status}`]; break; }
-            const items = await r.json();
-            if (!Array.isArray(items)) { sample = ['非数组响应']; break; }
-            out.push(...items);
-            if (items.length < 100) break;
+        try {
+          const pj = await resolveSymProject();
+          for (const sub of ['', 'symbols']) {
+            const out = [];
+            for (let page = 1; page <= 10; page++) {
+              const qs = `per_page=100&page=${page}&ref=${encodeURIComponent(pj.branch)}` + (sub ? `&path=${encodeURIComponent(sub)}` : '');
+              const r = await fetch(`${GL_API}/${pj.id}/repository/tree?${qs}`, { headers: { 'User-Agent': 'circuit-canvas' } });
+              if (!r.ok) { sample = [`HTTP ${r.status} (id=${pj.id} ref=${pj.branch})`]; break; }
+              const items = await r.json();
+              if (!Array.isArray(items)) { sample = ['非数组响应']; break; }
+              out.push(...items);
+              if (items.length < 100) break;
+            }
+            const libs = out.filter((t) => t.type === 'blob' && String(t.name).endsWith('.kicad_sym')).map((t) => t.name.replace(/\.kicad_sym$/, ''));
+            if (libs.length) { data = libs; break; }
+            if (out.length && !sample.length) sample = out.slice(0, 5).map((t) => `${t.type}:${t.name}`);
           }
-          const libs = out.filter((t) => t.type === 'blob' && String(t.name).endsWith('.kicad_sym')).map((t) => t.name.replace(/\.kicad_sym$/, ''));
-          if (libs.length) { data = libs; break; }
-          if (out.length && !sample.length) sample = out.slice(0, 5).map((t) => `${t.type}:${t.name}`);
+        } catch (e) {
+          sample = [String(e && e.message ? e.message : e).slice(0, 120)];
         }
         if (data && data.length) {
-          cache.set('symlibs', { at: Date.now(), data }); // 只缓存非空结果
+          cache.set('symlibs', { at: Date.now(), data }); // 只缓存非空
         } else {
-          diag = `GitLab 可达但未匹配到 .kicad_sym；样本：${sample.join(', ') || '（空树）'}`;
+          diag = `符号库定位失败；样本：${sample.join(', ') || '（空树）'}`;
         }
       }
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
-      // 空结果不进 CDN 缓存（避免瞬时故障被钉死一小时）
       res.setHeader('Cache-Control', data && data.length ? 's-maxage=3600, stale-while-revalidate=86400' : 'no-store');
       return res.status(200).send(JSON.stringify(data && data.length ? { libs: data } : { libs: [], error: diag }));
     }
