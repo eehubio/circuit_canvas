@@ -52,6 +52,13 @@ export function FootprintLibraryPanel() {
       const fp = parseKicadMod(text);
       if (!fp || !fp.pads.length) throw new Error(tr('封装解析失败'));
       registerFootprintOverride(name, fp); // 精确焊盘注册 → 2D/3D/导出全链路生效
+      // (model "…/X.3dshapes/Y.wrl") 是权威 3D 引用：解析目录与文件名，.wrl 换 .step（官方每个模型两种格式都有）
+      const modelRef = text.match(/\(model\s+"([^"]+)"/)?.[1];
+      let lib3d = klLib, name3d = name;
+      if (modelRef) {
+        const mm = modelRef.match(/([^/\\]+)\.3dshapes[/\\]([^/\\]+)\.(step|stp|wrl)$/i);
+        if (mm) { lib3d = mm[1]; name3d = mm[2]; }
+      }
       const cat2 = /Connector|Socket|Terminal/i.test(klLib) ? 'connector'
         : /Resistor|Capacitor|Inductor|LED|Diode|Crystal|Fuse/i.test(klLib) ? 'passive'
         : /Relay|Button|Switch|Buzzer|Motor/i.test(klLib) ? 'electromech'
@@ -62,7 +69,7 @@ export function FootprintLibraryPanel() {
         defaultFootprintName: name, family: 'Footprint',
         description: `KiCad 官方封装 · ${klLib}`,
         pins: fp.pads.length,
-        stepUrl: `/api/kicadlib?path=step&lib=${encodeURIComponent(klLib)}&name=${encodeURIComponent(name)}`,
+        stepUrl: `/api/kicadlib?path=step&lib=${encodeURIComponent(lib3d)}&name=${encodeURIComponent(name3d)}`,
       } as ComponentSearchResult);
     } catch (e) { setKlErr(tr('添加失败：') + (e as Error).message); }
     setKlBusy('');

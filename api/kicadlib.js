@@ -107,11 +107,32 @@ export default async function handler(req, res) {
     }
 
     if (path === 'step') {
+      // lib = 3dshapes 目录基名（来自 mod 内 (model) 引用），name = 模型文件基名
       if (!SAFE.test(String(lib)) || !SAFE.test(String(name))) return res.status(400).send(JSON.stringify({ error: 'bad params' }));
-      // 3D 库目录名与封装库同名（Package_SO.3dshapes/…）；.step 优先，.wrl 不支持
       const r = await fetch(`${P3D_RAW}/${lib}.3dshapes/${encodeURIComponent(String(name))}.step`, { headers: { 'User-Agent': 'circuit-canvas' } });
       if (!r.ok) return res.status(404).send(JSON.stringify({ error: 'no step model' }));
-      const buf = Buffer.from(await r.arrayBuffer());
+      let buf = Buffer.from(await r.arrayBuffer());
+      // kicad-packages3D 用 Git LFS：raw 端点返回的是指针文本，需经 LFS Batch API 换真实地址
+      const head = buf.slice(0, 200).toString('utf8');
+      if (head.startsWith('version https://git-lfs')) {
+        const oid = head.match(/oid sha256:([0-9a-f]{64})/)?.[1];
+        const size = Number(head.match(/size (\d+)/)?.[1] ?? 0);
+        if (!oid) return res.status(502).send(JSON.stringify({ error: 'bad lfs pointer' }));
+        if (size > 4 * 1024 * 1024) return res.status(413).send(JSON.stringify({ error: `step too large (${(size / 1048576).toFixed(1)}MB > 4MB)` }));
+        const batch = await fetch('https://gitlab.com/kicad/libraries/kicad-packages3D.git/info/lfs/objects/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/vnd.git-lfs+json', 'Accept': 'application/vnd.git-lfs+json', 'User-Agent': 'circuit-canvas' },
+          body: JSON.stringify({ operation: 'download', transfers: ['basic'], objects: [{ oid, size }] }),
+        });
+        if (!batch.ok) return res.status(502).send(JSON.stringify({ error: `lfs batch ${batch.status}` }));
+        const bj = await batch.json();
+        const href = bj?.objects?.[0]?.actions?.download?.href;
+        const hdrs = bj?.objects?.[0]?.actions?.download?.header ?? {};
+        if (!href) return res.status(502).send(JSON.stringify({ error: 'lfs no href' }));
+        const real = await fetch(href, { headers: { ...hdrs, 'User-Agent': 'circuit-canvas' } });
+        if (!real.ok) return res.status(502).send(JSON.stringify({ error: `lfs dl ${real.status}` }));
+        buf = Buffer.from(await real.arrayBuffer());
+      }
       if (buf.length > 4 * 1024 * 1024) return res.status(413).send(JSON.stringify({ error: 'step too large (>4MB)' }));
       res.setHeader('Content-Type', 'application/octet-stream');
       res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=604800');
