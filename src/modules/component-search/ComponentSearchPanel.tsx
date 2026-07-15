@@ -2,6 +2,7 @@
  * modules/component-search/ComponentSearchPanel.tsx
  * 元器件搜索面板 —— 通过 ComponentDataProvider 检索，结果加入画布。
  */
+import { MOCK_COMPONENTS } from '../../providers/mock/data';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { getProviders } from '../../providers/factory';
 import { searchEzplmParts, ezplmLiveAvailable } from '../../providers/ezplm-live';
@@ -56,8 +57,22 @@ export function ComponentSearchPanel() {
         return;
       }
     }
-    const res = await providers.components.searchComponents({ keyword, category: category ?? undefined, orgOnly }, ctx);
+    // 任何模式下（demo/standalone/integrated）默认目录都不允许为空：
+    // provider 失败或空关键词无结果时，回退内置常用件目录（阻容感/LED/排针等）
+    let res: { items: ComponentSearchResult[] };
+    try {
+      res = await providers.components.searchComponents({ keyword, category: category ?? undefined, orgOnly }, ctx);
+    } catch {
+      res = { items: [] };
+    }
     if (seq !== searchSeq.current) return;
+    if (!res.items.length && !orgOnly) {
+      const kw = keyword.trim().toLowerCase();
+      const fallback = MOCK_COMPONENTS.filter((c) =>
+        (!category || c.category === category) &&
+        (!kw || c.mpn.toLowerCase().includes(kw) || (c.description ?? '').toLowerCase().includes(kw)));
+      if (fallback.length) { setResults(fallback as unknown as ComponentSearchResult[]); return; }
+    }
     setResults(res.items);
   }, [keyword, category, orgOnly]);
 

@@ -30,6 +30,11 @@ export const useLangStore = create<LangState>((set) => ({
 
 /* ───────────── 固定文案词典（key = 中文原文） ───────────── */
 const DICT: Record<string, string> = {
+  'KiCad 官方封装库': 'KiCad Official Footprint Libraries',
+  '来源 gitlab.com/kicad/libraries · 按需拉取封装与 3D，不占本地空间': 'From gitlab.com/kicad/libraries · footprints & 3D fetched on demand',
+  '加载库列表…': 'Loading libraries…', '选择封装库…': 'Select a library…', '在库内筛选封装名…': 'Filter footprints in library…',
+  '加载封装列表…': 'Loading footprints…', '仅显示前 200 个，请用筛选缩小范围': 'Showing first 200 — filter to narrow down',
+  '网络错误，无法访问 KiCad 官方库': 'Network error — cannot reach KiCad libraries', '封装解析失败': 'footprint parse failed', '添加失败：': 'Add failed: ',
   '自动整理': 'Auto Arrange', '按电气规则重新自动布局全部器件（可撤销）': 'Re-layout all parts by electrical rules (undoable)',
   '已自动保存': 'Auto-saved', '设计已自动保存在本浏览器（localStorage），导出设计可得到可分享的 JSON 文件': 'Design auto-saves in this browser (localStorage); use Export for a shareable JSON file',
   '勾选后确认时跳过电阻/电容/电感等无源器件': 'When checked, passives (R/C/L) are skipped on confirm',

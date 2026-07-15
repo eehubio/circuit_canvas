@@ -59,7 +59,7 @@ export function stepStats() {
 /** 器件上画布时预取 STEP 文件字节（签名链接约半小时过期，趁新鲜先拿字节；转换仍懒执行） */
 export function ensureStepBytes(url: string | undefined) {
   if (!url || bytesCache.has(url) || modelCache.has(url) || inflight.has(url) || failed.has(url)) return;
-  fetch(`/api/ezplm?path=file&url=${encodeURIComponent(url)}`).then(async (r) => {
+  fetch(url.startsWith('/') ? url : `/api/ezplm?path=file&url=${encodeURIComponent(url)}`).then(async (r) => {
     if (!r.ok) return; // 预取失败不算失败，转换时会重试并报错
     const buf = new Uint8Array(await r.arrayBuffer());
     if (buf.length > 16 && buf[0] !== 0x7b) bytesCache.set(url, buf); // 0x7b='{' 代理 JSON 错误
@@ -81,7 +81,7 @@ export function ensureStepModel(url: string | undefined) {
     try {
       let buf = bytesCache.get(url);
       if (!buf) {
-        const resp = await fetch(`/api/ezplm?path=file&url=${encodeURIComponent(url)}`);
+        const resp = await fetch(url.startsWith('/') ? url : `/api/ezplm?path=file&url=${encodeURIComponent(url)}`);
         if (!resp.ok) throw new Error(`文件拉取失败 HTTP ${resp.status}（签名链接可能已过期，重新搜索该器件可刷新）`);
         buf = new Uint8Array(await resp.arrayBuffer());
         if (buf.length > 0 && buf[0] === 0x7b) throw new Error('代理返回错误: ' + new TextDecoder().decode(buf.slice(0, 120)));
