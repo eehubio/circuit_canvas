@@ -235,12 +235,17 @@ function ComponentGlyph({ comp, selected, multi, overlap, inactive, hideRefDes, 
     const copperStroke = isBottom ? '#1d4e8a' : '#8a6420';
     const bodyStroke = overlap ? '#ef4444' : selected ? '#2563eb' : isBottom ? '#3b82c4' : disp.color;
     const bcx = (pads.bodyCx ?? 0) * PX_PER_MM, bcy = (pads.bodyCy ?? 0) * PX_PER_MM;
-    const halfW = (Math.max(...pads.pads.map((p) => Math.abs(p.x) + p.w / 2), Math.abs(pads.bodyCx ?? 0) + pads.bodyW / 2)) * PX_PER_MM;
-    const halfH = (Math.max(...pads.pads.map((p) => Math.abs(p.y) + p.h / 2), Math.abs(pads.bodyCy ?? 0) + pads.bodyH / 2)) * PX_PER_MM;
+    // 真实非对称范围（偏心封装的选框贴合实体，不再对称膨胀）
+    const exMinX = Math.min(...pads.pads.map((p) => p.x - p.w / 2), (pads.bodyCx ?? 0) - pads.bodyW / 2) * PX_PER_MM;
+    const exMaxX = Math.max(...pads.pads.map((p) => p.x + p.w / 2), (pads.bodyCx ?? 0) + pads.bodyW / 2) * PX_PER_MM;
+    const exMinY = Math.min(...pads.pads.map((p) => p.y - p.h / 2), (pads.bodyCy ?? 0) - pads.bodyH / 2) * PX_PER_MM;
+    const exMaxY = Math.max(...pads.pads.map((p) => p.y + p.h / 2), (pads.bodyCy ?? 0) + pads.bodyH / 2) * PX_PER_MM;
+    const halfW = Math.max(Math.abs(exMinX), Math.abs(exMaxX));
+    const halfH = Math.max(Math.abs(exMinY), Math.abs(exMaxY));
     return (
       <g transform={`translate(${cx},${cy}) rotate(${rot})${isBottom ? ' scale(-1,1)' : ''}`} opacity={inactive ? 0.35 : 1}
         onMouseDown={onMouseDown} onClick={(e) => e.stopPropagation()} style={{ cursor: 'grab' }}>
-        {(selected || multi) && <rect x={-halfW - 4} y={-halfH - 4} width={halfW * 2 + 8} height={halfH * 2 + 8} rx={3} fill="none" stroke={multi ? '#f59e0b' : '#2563eb'} strokeWidth={1.5} strokeDasharray="5 3" />}
+        {(selected || multi) && <rect x={exMinX - 4} y={exMinY - 4} width={exMaxX - exMinX + 8} height={exMaxY - exMinY + 8} rx={3} fill="none" stroke={multi ? '#f59e0b' : '#2563eb'} strokeWidth={1.5} strokeDasharray="5 3" />}
         <rect x={bcx - pads.bodyW * PX_PER_MM / 2} y={bcy - pads.bodyH * PX_PER_MM / 2} width={pads.bodyW * PX_PER_MM} height={pads.bodyH * PX_PER_MM} rx={2}
           fill={overlap ? 'rgba(239,68,68,.06)' : 'rgba(148,163,184,.08)'} stroke={bodyStroke} strokeWidth={selected ? 1.4 : 0.9} />
         {pads.pads.map((p, i) => (
