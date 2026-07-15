@@ -255,8 +255,9 @@ export default function App() {
               <textarea value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)} rows={2}
                 placeholder={t('如：USB转串口调试器 / WiFi物联网节点 / 12V车载CAN控制器')}
                 style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #dbe6dd', fontSize: 13, outline: 'none', resize: 'none', boxSizing: 'border-box', marginBottom: 6 }} />
-              <button onClick={genScheme} disabled={aiBusy} style={{ width: '100%', padding: '9px 0', borderRadius: 8, border: 'none', background: `linear-gradient(135deg,#245b3a,${COLORS.green})`, color: '#fff', fontSize: 13, fontWeight: 700, cursor: aiBusy ? 'wait' : 'pointer' }}>
-                {aiBusy ? '⟳ ' + t('生成中…') : t('生成方案上画布')}
+              <button onClick={genScheme} disabled={aiBusy || !aiPrompt.trim()} title={!aiPrompt.trim() ? t('请先输入需求描述，如：USB转串口调试器') : undefined}
+                style={{ width: '100%', padding: '9px 0', borderRadius: 8, border: 'none', background: `linear-gradient(135deg,#245b3a,${COLORS.green})`, color: '#fff', fontSize: 13, fontWeight: 700, cursor: aiBusy ? 'wait' : !aiPrompt.trim() ? 'not-allowed' : 'pointer', opacity: !aiPrompt.trim() && !aiBusy ? 0.55 : 1 }}>
+                {aiBusy ? '⟳ ' + t('生成中…') : !aiPrompt.trim() ? t('输入需求后生成方案') : t('生成方案上画布')}
               </button>
             </div>
             <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
@@ -274,7 +275,10 @@ export default function App() {
           <div style={{ background: '#fff', borderBottom: '2px solid #E8F3EE', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
             <button onClick={undo} style={tbtn}>↩ {t('撤销')}</button>
             <button onClick={redo} style={tbtn}>↪ {t('重做')}</button>
-            <button onClick={clearAll} style={tbtn}>🧹 {t('清除')}</button>
+            <button onClick={clearAll} style={tbtn} onClickCapture={(e) => {
+              const cnt = useDesignStore.getState().doc.components.length;
+              if (cnt > 0 && !window.confirm(t('确定清空画布？将移除') + ` ${cnt} ` + t('个器件（可用「撤销」恢复）'))) e.stopPropagation();
+            }}>🧹 {t('清除')}</button>
             <button onClick={autoArrange} title={t('按电气规则重新自动布局全部器件（可撤销）')} style={tbtn}>✨ {t('自动整理')}</button>
             <div style={{ width: 1, height: 18, background: '#E8F3EE', margin: '0 4px' }} />
             <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #E8F3EE' }}>
@@ -296,7 +300,7 @@ export default function App() {
               </div>
             </div>
             <div style={{ flex: 1 }} />
-            <span style={{ fontSize: 11, color: '#94a3b8' }}>{view === '3d' ? t('拖拽旋转 · 滚轮缩放') : t('R 旋转 · L 换层 · Delete 删除 · 拖位号可移动')}</span>
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>{view === '3d' ? t('拖拽旋转 · 滚轮缩放') : t('R 旋转 · L 换层 · Delete 删除 · Shift+拖拽框选 · 拖位号可移动')}</span>
           </div>
 
           <div style={{ flex: 1, position: 'relative', minHeight: 0, display: 'flex' }}>
@@ -387,20 +391,10 @@ export default function App() {
             <div style={{ padding: 12, borderRadius: 10, border: '1.5px solid #c6e2d0', background: '#f7fcf9', marginBottom: 10 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700 }}>KiCad（.kicad_pcb）</div>
-                  <div style={{ fontSize: 11, color: '#64748b' }}>KiCad 7+ 直接打开，可继续布线、出 Gerber</div>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>KiCad（.kicad_pcb）· 兼容嘉立创EDA专业版</div>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>KiCad 7+ 直接打开；嘉立创EDA专业版「文件 → 导入 → KiCad」同一文件即可（两平台使用同一格式，无需分别下载）。注意：当前导出<b>不含电气网络</b>（焊盘无 net），布线需按原理图自行连接</div>
                 </div>
                 <button onClick={() => { downloadKicadPcb(doc); setPcbExportOpen(false); }} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: COLORS.green, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>⬇ 下载</button>
-              </div>
-            </div>
-
-            <div style={{ padding: 12, borderRadius: 10, border: '1px solid #bae6fd', background: '#f0f9ff', marginBottom: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700 }}>嘉立创EDA / JLCPCB</div>
-                  <div style={{ fontSize: 11, color: '#64748b' }}>嘉立创EDA<b>专业版</b>官方支持导入 KiCad：下载后在 嘉立创EDA 中「文件 → 导入 → KiCad」选择该文件即可；下单可在 KiCad 中出 Gerber 后上传 JLCPCB</div>
-                </div>
-                <button onClick={() => { downloadKicadPcb(doc); setPcbExportOpen(false); }} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#0369a1', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>⬇ 下载</button>
               </div>
             </div>
 

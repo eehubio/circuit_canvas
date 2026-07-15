@@ -32,10 +32,20 @@ export function BomPanel({ isFullscreen, onToggleFullscreen }: { isFullscreen?: 
   const dkOf = (mpn: string): DigikeyOffer | undefined => dkPrices[mpn];
   const total = bom.reduce((sum, l) => sum + (dkOf(l.mpn)?.unitPrice ?? l.unitPrice?.amount ?? 0) * l.quantity, 0);
 
+  /** RFC 4180：含逗号/双引号/换行的字段用双引号包裹，内部双引号写成两个 */
+  const csvField = (v: unknown): string => {
+    const t = String(v ?? '');
+    return /[",\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+  };
   const exportCsv = () => {
-    const header = '序号,位号,型号,厂商,封装,单价,数量';
-    const rows = bom.map((l, i) => `${i + 1},${l.reference},${l.mpn},${l.manufacturer},${l.footprint},${l.unitPrice?.amount ?? ''},${l.quantity}`);
-    const csv = '\uFEFF' + [header, ...rows].join('\n');
+    const header = '序号,位号,型号,厂商,封装,单价,价格来源,数量';
+    const rows = bom.map((l, i) => [
+      i + 1, l.reference, l.mpn, l.manufacturer, l.footprint,
+      dkOf(l.mpn)?.unitPrice ?? l.unitPrice?.amount ?? '',
+      dkOf(l.mpn) ? 'DigiKey实时' : '演示估价',
+      l.quantity,
+    ].map(csvField).join(','));
+    const csv = '\uFEFF' + [header, ...rows].join('\r\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     a.download = 'bom.csv';

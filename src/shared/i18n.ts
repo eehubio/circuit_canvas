@@ -30,6 +30,12 @@ export const useLangStore = create<LangState>((set) => ({
 
 /* ───────────── 固定文案词典（key = 中文原文） ───────────── */
 const DICT: Record<string, string> = {
+  '已选中': 'Selected', '拖动任一可整组移动 · Delete 删除': 'drag any to move group · Delete to remove',
+  'R 旋转 · L 换层 · Delete 删除 · Shift+拖拽框选 · 拖位号可移动': 'R rotate · L flip · Delete remove · Shift+drag to box-select · drag refdes to move',
+  '当前仅搜索：': 'Searching only: ', '一键搜索全部分类': 'Search all categories',
+  '确定清空画布？将移除': 'Clear the canvas? This removes', '个器件（可用「撤销」恢复）': 'component(s) (Undo can restore)',
+  '请先输入需求描述，如：USB转串口调试器': 'Describe your requirement first, e.g. USB-UART debugger',
+  '输入需求后生成方案': 'Enter a requirement to generate',
   '官方 3D 库未收录该封装 · 参数化预览': 'No official 3D model for this footprint · parametric preview',
   'STEP 失败': 'STEP failed', '参数化预览': 'parametric preview', 'STEP 源文件': 'STEP source file',
   'KiCad封装库': 'KiCad Footprints', '尚未关联原理图符号': 'No schematic symbol linked yet',

@@ -104,6 +104,11 @@ export function ComponentSearchPanel() {
         <div style={{ padding: '10px 12px', borderRadius: 8, background: searchErr === 'network' ? '#fef2f2' : '#fffbeb', border: `1px solid ${searchErr === 'network' ? '#fecaca' : '#fde68a'}`, fontSize: 11, color: searchErr === 'network' ? '#b91c1c' : '#92400e', marginBottom: 8 }}>
           {searchErr === 'network'
             ? t('网络或服务异常，请稍后重试；若持续失败请检查 Vercel 的 EZPLM_API_KEY 配置')
+            : category
+              ? <>
+                  {tr('当前仅搜索：')}<b>{tr(CATEGORY_DISPLAY[category].name)}</b>{' —— '}
+                  <button onClick={() => setCategory(null)} style={{ padding: '2px 8px', borderRadius: 5, border: '1px solid #d97706', background: '#fff', color: '#92400e', fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}>{tr('一键搜索全部分类')}</button>
+                </>
             : liveStatus === 'demo'
               ? t('演示目录未收录该型号 —— 配置 EZPLM_API_KEY 接入实时库，或用「定制模块」自行创建')
               : t('ezPLM 库未收录该型号 —— 可换关键词，或用「定制模块」上传 datasheet 创建')}

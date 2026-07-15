@@ -3,7 +3,7 @@
  * 2D 画布：渲染板框 + 器件（带丝印），支持拖拽/选中/缩放/平移。
  * 坐标系：板坐标(mm) → 像素用 PX_PER_MM。
  */
-import { useT } from '../../shared/i18n';
+import { useT, tr } from '../../shared/i18n';
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { useDesignStore } from '../../state/designStore';
 import { PX_PER_MM, footprintBodyRect } from '../../design-core/geometry';
@@ -151,13 +151,10 @@ export function BoardCanvas2D() {
   const onBgClick = () => { if (!panRef.current.moved) select(null); };
 
   return (
-    <div ref={containerRef} onContextMenu={(e) => e.preventDefault()} style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#F8F9FA' }}>
+    <div ref={containerRef} onContextMenu={(e) => e.preventDefault()}
+      data-canvas="pcb2d"
+ style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#F8F9FA' }}>
       <svg width="100%" height="100%" onMouseDown={onBgDown} onClick={onBgClick}>
-        {marquee && (
-          <rect x={Math.min(marquee.x0, marquee.x1)} y={Math.min(marquee.y0, marquee.y1)}
-            width={Math.abs(marquee.x1 - marquee.x0)} height={Math.abs(marquee.y1 - marquee.y0)}
-            fill="rgba(37,99,235,.08)" stroke="#2563eb" strokeWidth={1} strokeDasharray="5 3" />
-        )}
         <defs>
           <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M20 0L0 0 0 20" fill="none" stroke="#e5e7eb" strokeWidth=".5" /></pattern>
         </defs>
@@ -188,7 +185,17 @@ export function BoardCanvas2D() {
             <text x={ORIGIN.x + bw / 2} y={ORIGIN.y + bh / 2} textAnchor="middle" fontSize={12} fill="#94a3b8">{t('从左侧添加器件，自动按电气规则摆放')}</text>
           )}
         </g>
+        {marquee && (
+          <rect x={Math.min(marquee.x0, marquee.x1)} y={Math.min(marquee.y0, marquee.y1)}
+            width={Math.abs(marquee.x1 - marquee.x0)} height={Math.abs(marquee.y1 - marquee.y0)}
+            fill="rgba(37,99,235,.10)" stroke="#2563eb" strokeWidth={1.5} strokeDasharray="6 4" pointerEvents="none" />
+        )}
       </svg>
+      {multiSel.length > 0 && (
+        <div style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', padding: '4px 12px', borderRadius: 14, background: '#1e40af', color: '#fff', fontSize: 11, fontWeight: 700, pointerEvents: 'none' }}>
+          {tr('已选中')} {multiSel.length} {tr('个器件')} · {tr('拖动任一可整组移动 · Delete 删除')}
+        </div>
+      )}
       <div style={{ position: 'absolute', bottom: 12, right: 12, display: 'flex', gap: 4, alignItems: 'center', background: 'rgba(255,255,255,.92)', borderRadius: 8, padding: '4px 6px', border: '1px solid #e2e8f0', fontSize: 11 }}>
         <button onClick={() => setZoom((z) => Math.max(0.2, z * 0.8))} style={zbtn}>−</button>
         <span onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} style={{ minWidth: 42, textAlign: 'center', fontWeight: 600, cursor: 'pointer' }}>{Math.round(zoom * 100)}%</span>

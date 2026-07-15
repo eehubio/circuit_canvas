@@ -149,7 +149,7 @@ export function BoardView3D() {
         );
       })()}
       <div ref={mountRef} style={{ width: '100%', height: '100%', cursor: 'grab' }} />
-      <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', padding: '5px 14px', borderRadius: 16, background: 'rgba(255,255,255,.08)', border: '1px solid rgba(134,239,172,.25)', color: '#86efac', fontSize: 11, fontWeight: 600, pointerEvents: 'none' }}>
+      <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', padding: '5px 14px', borderRadius: 16, background: 'rgba(255,255,255,.92)', border: '1px solid #14532d', color: '#14532d', fontSize: 11, fontWeight: 700, pointerEvents: 'none' }}>
         🖱 {tr('拖拽旋转 · 滚轮缩放 · 真实 3D 封装')}
       </div>
       <div style={{ position: 'absolute', bottom: 12, right: 12, display: 'flex', gap: 6 }}>
@@ -165,7 +165,7 @@ export function BoardView3D() {
 }
 
 /** 重建板 + 器件。坐标：板中心为原点，x 右、z 下（对应 2D 的 y）、y 上。 */
-const vbtn: React.CSSProperties = { padding: '6px 12px', borderRadius: 8, border: '1px solid rgba(134,239,172,.3)', background: 'rgba(255,255,255,.08)', color: '#86efac', fontSize: 11, fontWeight: 700, cursor: 'pointer' };
+const vbtn: React.CSSProperties = { padding: '6px 12px', borderRadius: 8, border: '1px solid #14532d', background: 'rgba(255,255,255,.92)', color: '#14532d', fontSize: 11, fontWeight: 700, cursor: 'pointer' };
 
 function rebuildBoard(group: THREE.Group, doc: CircuitCanvasDocument) {
   // clear

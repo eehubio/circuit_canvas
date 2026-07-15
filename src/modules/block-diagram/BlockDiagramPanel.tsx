@@ -34,7 +34,18 @@ export function BlockDiagramPanel({ isFullscreen, onToggleFullscreen }: { isFull
   const labelDragRef = useRef({ active: false, id: '', sx: 0, sy: 0, dx: 0, dy: 0 });
 
   // first generate
-  useEffect(() => { if (hasComps || blocks.length > 0) regen(); }, [coreSig]);
+  const sigRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (sigRef.current === null) {
+      sigRef.current = coreSig;
+      // 首帧：文档已有框图（如导入的 JSON）时不注入自动块，导出与文件一致
+      if (blocks.length > 0) return;
+    }
+    if (sigRef.current === coreSig && blocks.length > 0) return;
+    sigRef.current = coreSig;
+    if (hasComps || blocks.length > 0) regen();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coreSig]);
 
   // wheel zoom
   useEffect(() => {
@@ -172,6 +183,12 @@ export function BlockDiagramPanel({ isFullscreen, onToggleFullscreen }: { isFull
           const svg = svgRef.current; if (!svg) return;
           const clone = svg.cloneNode(true) as SVGSVGElement;
           clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+          // 稳定固有尺寸：按图元包围盒写 viewBox（Word/矢量软件/转换工具可正确缩放）
+          const maxX = Math.max(...blocks.map((b) => b.x + b.w), 200) + 40;
+          const maxY = Math.max(...blocks.map((b) => b.y + b.h), 120) + 40;
+          clone.setAttribute('viewBox', `0 0 ${maxX} ${maxY}`);
+          clone.setAttribute('width', String(maxX));
+          clone.setAttribute('height', String(maxY));
           const blob = new Blob(['<?xml version="1.0" encoding="UTF-8"?>\n' + clone.outerHTML], { type: 'image/svg+xml' });
           const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'block-diagram.svg'; a.click(); URL.revokeObjectURL(a.href);
         }} style={tb}>⬇ 导出SVG</button>

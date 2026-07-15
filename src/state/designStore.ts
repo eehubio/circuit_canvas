@@ -334,6 +334,7 @@ export const useDesignStore = create<DesignState>()(
             : /LED/i.test(k.footprintName) ? 'LED'
             : /^D\d/.test(k.reference) ? 'Diode'
             : 'KiCad导入';
+          const mref = data.modelRefs?.[k.footprintName];
           const placed = searchResultToPlaced({
             componentId: `kicad_${k.reference}`,
             mpn: k.value,
@@ -343,6 +344,8 @@ export const useDesignStore = create<DesignState>()(
             family,
             description: `KiCad 工程导入 · ${k.footprintName}`,
             pins: 2,
+            // 内嵌 (model) 引用 → 拉取 KiCad 官方 3D（LFS 经代理解析）
+            stepUrl: mref ? `/api/kicadlib?path=step&lib=${encodeURIComponent(mref.lib3d)}&name=${encodeURIComponent(mref.name3d)}` : undefined,
           } as ComponentSearchResult, k.reference);
           placed.placement = {
             ...placed.placement,

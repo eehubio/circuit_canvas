@@ -158,7 +158,7 @@ export function LibraryPreview({ c }: { c: PlacedComponent }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7 }}>
             <span style={{ flex: 1, fontSize: 9.5, color: '#94a3b8' }}>{c.display?.stepUrl ? tr('STEP 源文件') : tr('ezPLM 未提供该器件的 STEP 文件')}</span>
             {c.display?.stepUrl
-              ? <a href={`/api/ezplm?path=file&url=${encodeURIComponent(c.display.stepUrl)}&dl=${encodeURIComponent(c.mpn + '.step')}`} style={{ ...dlBtn, padding: '4px 10px', textDecoration: 'none' }}>⬇ .step</a>
+              ? <button onClick={() => downloadStep(c.display!.stepUrl!, c.mpn)} style={{ ...dlBtn, padding: '4px 10px' }}>⬇ .step</button>
               : <button disabled style={{ ...dlBtn, opacity: 0.45, cursor: 'not-allowed', padding: '4px 10px' }}>⬇ .step</button>}
           </div>
         </div>
@@ -171,3 +171,25 @@ const cell: React.CSSProperties = { background: '#fff', borderRadius: 8, border:
 const cellTitle: React.CSSProperties = { fontSize: 10, fontWeight: 700, color: '#475569' };
 const preview: React.CSSProperties = { minHeight: 70, maxHeight: 130, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: '#fafafa', borderRadius: 6, padding: 4 };
 const dlBtn: React.CSSProperties = { fontSize: 10, padding: '4px 0', borderRadius: 5, border: '1px solid #c6e2d0', background: '#f0f9f4', color: '#1f5c3b', fontWeight: 700, cursor: 'pointer' };
+
+/** 受控 STEP 下载：fetch→blob，失败（签名过期/401）提示重新搜索器件刷新，不中断当前页面 */
+async function downloadStep(stepUrl: string, mpn: string) {
+  try {
+    const url = stepUrl.startsWith('/') ? stepUrl : `/api/ezplm?path=file&url=${encodeURIComponent(stepUrl)}`;
+    const r = await fetch(url);
+    if (!r.ok) {
+      let detail = '';
+      try { detail = String((await r.json())?.error ?? ''); } catch { /* 非 JSON */ }
+      alert(`STEP 下载失败 HTTP ${r.status}${detail ? ' · ' + detail : ''}\n签名链接可能已过期——重新搜索该器件后再试。`);
+      return;
+    }
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${mpn}.step`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (e) {
+    alert('STEP 下载失败：' + (e as Error).message);
+  }
+}

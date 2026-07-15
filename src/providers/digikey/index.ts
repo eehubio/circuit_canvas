@@ -31,6 +31,12 @@ export async function digikeyAvailable(): Promise<boolean> {
 const offerCache = new Map<string, DigikeyOffer | 'loading'>();
 
 /** 查询单个型号的价格/库存（按 mpn 会话内缓存，避免重复消耗配额） */
+/** 同步读缓存：报告/CSV 与 BOM 面板复用同一价格快照（未查询过的返回 null） */
+export function digikeyOfferCached(mpn: string): DigikeyOffer | null {
+  const c = offerCache.get(mpn);
+  return c && c !== 'loading' && c.found ? c : null;
+}
+
 export async function fetchDigikeyOffer(mpn: string): Promise<DigikeyOffer | null> {
   if (!mpn || !(await digikeyAvailable())) return null;
   const cached = offerCache.get(mpn);

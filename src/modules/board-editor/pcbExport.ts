@@ -74,8 +74,11 @@ function footprintBlock(c: PlacedComponent): string {
   const refLayer = isBottom ? 'B.SilkS' : 'F.SilkS';
   const fabLayer = isBottom ? 'B.Fab' : 'F.Fab';
   const bodyH = fp?.bodyH ?? c.footprint.geometry.bodyHeightMm;
-  L.push(`    (fp_text reference "${c.reference}" (at 0 ${F(-(bodyH / 2 + 1.2))} ${kicadRot}) (layer "${refLayer}")${c.refDesDisplay?.hidden ? ' hide' : ''} (effects (font (size 0.8 0.8) (thickness 0.12))${isBottom ? ' (justify mirror)' : ''}))`);
-  L.push(`    (fp_text value "${c.mpn.replace(/"/g, '')}" (at 0 ${F(bodyH / 2 + 1.2)} ${kicadRot}) (layer "${fabLayer}") (effects (font (size 0.8 0.8) (thickness 0.12))${isBottom ? ' (justify mirror)' : ''}))`);
+  // 位号/值放在 本体+焊盘 总范围之外（避免丝印压焊盘 DRC）
+  const extTop = fp ? Math.max(...fp.pads.map((p2) => Math.abs(p2.y) + p2.h / 2), Math.abs(fp.bodyCy ?? 0) + fp.bodyH / 2) : bodyH / 2;
+  const silkY = extTop + 1.5;
+  L.push(`    (fp_text reference "${c.reference}" (at 0 ${F(-silkY)} ${kicadRot}) (layer "${refLayer}")${c.refDesDisplay?.hidden ? ' hide' : ''} (effects (font (size 0.8 0.8) (thickness 0.12))${isBottom ? ' (justify mirror)' : ''}))`);
+  L.push(`    (fp_text value "${c.mpn.replace(/"/g, '')}" (at 0 ${F(silkY)} ${kicadRot}) (layer "${fabLayer}") (effects (font (size 0.8 0.8) (thickness 0.12))${isBottom ? ' (justify mirror)' : ''}))`);
   if (fp) {
     // 丝印本体框
     const hw = fp.bodyW / 2, hh = fp.bodyH / 2, bcx = fp.bodyCx ?? 0, bcy = fp.bodyCy ?? 0;

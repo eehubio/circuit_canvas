@@ -38,6 +38,8 @@ export interface KicadImportResult {
   skipped: string[];
   /** PCB 文件内嵌的完整封装定义（KiCad 文件自包含）：注册为覆盖后所有导入器件焊盘精确 */
   footprintDefs: Record<string, PadFootprint>;
+  /** 各封装名 → KiCad 官方 3D 引用（3dshapes 目录基名 + 模型基名），来自内嵌 (model) */
+  modelRefs: Record<string, { lib3d: string; name3d: string }>;
 }
 
 /** 读取 footprint 的文本属性：v7+ (property "Reference" "U1") / v6 (fp_text reference U1 …) */
@@ -87,6 +89,7 @@ export function parseKicadPcb(text: string): KicadImportResult {
   const comps: KicadImportedComp[] = [];
   const skipped: string[] = [];
   const footprintDefs: Record<string, PadFootprint> = {};
+  const modelRefs: Record<string, { lib3d: string; name3d: string }> = {};
   let hasMountingHoles = false;
   for (const fp of fps) {
     const lib = String(fp[1] ?? '');
@@ -96,6 +99,11 @@ export function parseKicadPcb(text: string): KicadImportResult {
     if (!footprintDefs[fpName]) {
       const def = parseFootprintNode(fp);
       if (def && def.pads.length) footprintDefs[fpName] = def;
+      // 内嵌 (model "…/X.3dshapes/Y.wrl|step") → 官方 3D 引用
+      const mdl = find(fp, 'model');
+      const mpath = mdl ? String(mdl[1] ?? '') : '';
+      const mm = mpath.match(/([^/\\]+)\.3dshapes[/\\]([^/\\]+)\.(step|stp|wrl)$/i);
+      if (mm) modelRefs[fpName] = { lib3d: mm[1], name3d: mm[2] };
     }
     const at = find(fp, 'at');
     const layerRaw = String(find(fp, 'layer')?.[1] ?? 'F.Cu');
@@ -124,5 +132,5 @@ export function parseKicadPcb(text: string): KicadImportResult {
   const widthMm = Math.max(20, Math.ceil((maxX - ox + pad)));
   const heightMm = Math.max(20, Math.ceil((maxY - oy + pad)));
 
-  return { widthMm, heightMm, comps, hasMountingHoles, skipped, footprintDefs };
+  return { widthMm, heightMm, comps, hasMountingHoles, skipped, footprintDefs, modelRefs };
 }
