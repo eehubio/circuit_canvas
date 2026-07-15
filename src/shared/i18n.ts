@@ -30,6 +30,15 @@ export const useLangStore = create<LangState>((set) => ({
 
 /* ───────────── 固定文案词典（key = 中文原文） ───────────── */
 const DICT: Record<string, string> = {
+  '自动整理': 'Auto Arrange', '按电气规则重新自动布局全部器件（可撤销）': 'Re-layout all parts by electrical rules (undoable)',
+  '已自动保存': 'Auto-saved', '设计已自动保存在本浏览器（localStorage），导出设计可得到可分享的 JSON 文件': 'Design auto-saves in this browser (localStorage); use Export for a shareable JSON file',
+  '勾选后确认时跳过电阻/电容/电感等无源器件': 'When checked, passives (R/C/L) are skipped on confirm',
+  '已开启': 'ON', '矩形': 'Rectangle', '方形': 'Square', '圆形': 'Circle', 'L形': 'L-shape',
+  '板宽 (mm)': 'Board width (mm)', '板高 (mm)': 'Board height (mm)',
+  '网络或服务异常，请稍后重试；若持续失败请检查 Vercel 的 EZPLM_API_KEY 配置': 'Network/service error — retry later; if persistent, check EZPLM_API_KEY in Vercel',
+  '演示目录未收录该型号 —— 配置 EZPLM_API_KEY 接入实时库，或用「定制模块」自行创建': 'Not in demo catalog — set EZPLM_API_KEY for the live library, or build it in Custom Parts',
+  'ezPLM 库未收录该型号 —— 可换关键词，或用「定制模块」上传 datasheet 创建': 'Not found in ezPLM — try other keywords, or create it in Custom Parts from a datasheet',
+  '画布上已有该型号，可重复添加': 'Already on canvas — add again for another instance',
   // ── 顾问面板 / 3D 视图 ──
   '系统补全建议': 'System Completeness', '子电路推荐': 'Sub-circuit Recs', 'PCB设计规格': 'PCB Design Specs', '设计风险': 'Design Risks',
   '添加器件后，AI 分析系统还缺什么': 'Add parts — AI analyzes what the system still needs',

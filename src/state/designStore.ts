@@ -31,6 +31,12 @@ interface DesignState {
   // actions
   addComponent: (r: ComponentSearchResult) => void;
   removeComponent: (instanceId: string) => void;
+  /** 批量删除（框选/多选后 Delete） */
+  removeComponents: (instanceIds: string[]) => void;
+  /** 框选结果整批设置多选 */
+  setMultiSel: (ids: string[]) => void;
+  /** 一键整理：对画布现有器件重新自动布局（进撤销历史） */
+  autoArrange: () => void;
   moveComponent: (instanceId: string, xMm: number, yMm: number) => void;
   rotateComponent: (instanceId: string) => void;
   setBoardSize: (w: number, h: number) => void;
@@ -99,6 +105,29 @@ export const useDesignStore = create<DesignState>()(
         placed.placement.yMm = pos.y;
         s.doc.components.push(placed);
         s.doc = touchDocument(refreshDerived(s.doc));
+        s.overlaps = findOverlaps(s.doc.components);
+      }),
+
+    removeComponents: (ids) =>
+      set((s) => {
+        if (!ids.length) return;
+        snapshot(s);
+        const kill = new Set(ids);
+        s.doc.components = s.doc.components.filter((c) => !kill.has(c.instanceId));
+        s.multiSel = [];
+        if (s.selectedId && kill.has(s.selectedId)) s.selectedId = null;
+        s.doc = touchDocument(refreshDerived(s.doc));
+        s.overlaps = findOverlaps(s.doc.components);
+      }),
+
+    setMultiSel: (ids) => set((s) => { s.multiSel = ids; }),
+
+    autoArrange: () =>
+      set((s) => {
+        if (!s.doc.components.length) return;
+        snapshot(s);
+        s.doc.components = autoPlaceAll(s.doc.components, s.doc.board);
+        s.doc = touchDocument(s.doc);
         s.overlaps = findOverlaps(s.doc.components);
       }),
 

@@ -13,5 +13,13 @@ export default defineConfig({
       '@modules': path.resolve(__dirname, 'src/modules'),
     },
   },
-  build: { outDir: 'dist', assetsDir: 'assets' },
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
+    rollupOptions: {
+      output: {
+        manualChunks: { three: ['three'], vendor: ['react', 'react-dom', 'zustand', 'immer', 'zod'] },
+      },
+    },
+  },
 })

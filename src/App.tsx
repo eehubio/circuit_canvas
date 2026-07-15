@@ -53,6 +53,8 @@ export default function App() {
   const clearAll = useDesignStore((s) => s.clearAll);
   const rotate = useDesignStore((s) => s.rotateComponent);
   const remove = useDesignStore((s) => s.removeComponent);
+  const removeMany = useDesignStore((s) => s.removeComponents);
+  const autoArrange = useDesignStore((s) => s.autoArrange);
   const setBoardSize = useDesignStore((s) => s.setBoardSize);
   const setBoardShape = useDesignStore((s) => s.setBoardShape);
   const setBoardCut = useDesignStore((s) => s.setBoardCut);
@@ -87,6 +89,30 @@ export default function App() {
   const [wizard, setWizard] = useState<{ open: boolean; mpn?: string } | null>(null);
   const [wizardTick, setWizardTick] = useState(0);
   useEffect(() => { bootCustomLib(); }, []);
+  // 自动保存（本地）：doc 变更 800ms 防抖写 localStorage；启动时若有存档且当前为空则恢复
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+  const loadDocumentRef = useRef(false);
+  useEffect(() => {
+    if (loadDocumentRef.current) return;
+    loadDocumentRef.current = true;
+    try {
+      const saved = localStorage.getItem('cc_doc_autosave');
+      if (saved && useDesignStore.getState().doc.components.length === 0) {
+        const parsed = JSON.parse(saved) as { doc: Parameters<typeof loadDocument>[0]; at: string };
+        if (parsed.doc?.components?.length) { loadDocument(parsed.doc); setSavedAt(parsed.at); }
+      }
+    } catch { /* 存档损坏则忽略 */ }
+  }, [loadDocument]);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        const at = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+        localStorage.setItem('cc_doc_autosave', JSON.stringify({ doc, at }));
+        setSavedAt(at);
+      } catch { /* 空间不足等 */ }
+    }, 800);
+    return () => clearTimeout(t);
+  }, [doc]);
   const [linkRow, setLinkRow] = useState<string | null>(null);
   const [linkKw, setLinkKw] = useState('');
   const [linkResults, setLinkResults] = useState<Awaited<ReturnType<typeof searchEzplmParts>>['items']>([]);
@@ -126,13 +152,19 @@ export default function App() {
       if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
       if ((e.key === 'r' || e.key === 'R') && selectedId) { e.preventDefault(); rotate(selectedId); }
       if ((e.key === 'l' || e.key === 'L') && selectedId) { e.preventDefault(); flipLayer(selectedId); }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) { e.preventDefault(); remove(selectedId); }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        const { multiSel } = useDesignStore.getState();
+        if (multiSel.length) { e.preventDefault(); removeMany(multiSel); return; }
+        if (selectedId) { e.preventDefault(); remove(selectedId); }
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [selectedId, undo, redo, rotate, remove, flipLayer]);
 
   const [aiProposal, setAiProposal] = useState<{ rationale: string; source?: string; fallbackReason?: string; details: (NonNullable<Awaited<ReturnType<typeof providers.components.getComponentDetail>>> & { mapSource?: string })[] } | null>(null);
+  const [coreOnly, setCoreOnly] = useState(false);
+  useEffect(() => { if (aiProposal) setCoreOnly(false); }, [aiProposal != null]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const genScheme = async () => {
     if (!aiPrompt.trim()) return;
@@ -165,7 +197,8 @@ export default function App() {
 
   const confirmScheme = () => {
     if (!aiProposal) return;
-    placeScheme(aiProposal.details, { requirement: aiPrompt, rationale: aiProposal.rationale });
+    const details = coreOnly ? aiProposal.details.filter((x) => x.category !== 'passive') : aiProposal.details;
+    placeScheme(details, { requirement: aiPrompt, rationale: aiProposal.rationale });
     setAiProposal(null);
   };
 
@@ -199,6 +232,8 @@ export default function App() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          {savedAt && <span title={t('设计已自动保存在本浏览器（localStorage），导出设计可得到可分享的 JSON 文件')}
+            style={{ fontSize: 10, color: '#94a3b8', alignSelf: 'center', marginRight: 4 }}>✓ {t('已自动保存')} {savedAt}</span>}
           <button onClick={toggleLang} title={lang === 'zh' ? 'Switch to English' : '切换为中文'}
             style={{ ...hbtn, fontWeight: 800 }}>{lang === 'zh' ? '中 | EN' : 'EN | 中'}</button>
           <button onClick={() => setPcbExportOpen(true)} style={hbtn}>🏭 {t('导出PCB')}</button>
@@ -239,6 +274,7 @@ export default function App() {
             <button onClick={undo} style={tbtn}>↩ {t('撤销')}</button>
             <button onClick={redo} style={tbtn}>↪ {t('重做')}</button>
             <button onClick={clearAll} style={tbtn}>🧹 {t('清除')}</button>
+            <button onClick={autoArrange} title={t('按电气规则重新自动布局全部器件（可撤销）')} style={tbtn}>✨ {t('自动整理')}</button>
             <div style={{ width: 1, height: 18, background: '#E8F3EE', margin: '0 4px' }} />
             <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid #E8F3EE' }}>
               {(['2d', '3d'] as const).map((v) => (
@@ -285,9 +321,9 @@ export default function App() {
           <div style={{ display: 'flex', background: '#fff', borderTop: '1px solid #E8F3EE', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 16px', fontSize: 12 }}>
               <span style={{ fontWeight: 600, color: COLORS.green }}>📐 PCB</span>
-              <NumInput value={doc.board.widthMm} onChange={(v) => setBoardSize(v, doc.board.heightMm)} />
+              <NumInput value={doc.board.widthMm} onChange={(v) => setBoardSize(v, doc.board.heightMm)} label={t('板宽 (mm)')} />
               <span style={{ color: '#cbd5e1' }}>×</span>
-              <NumInput value={doc.board.heightMm} onChange={(v) => setBoardSize(doc.board.widthMm, v)} />
+              <NumInput value={doc.board.heightMm} onChange={(v) => setBoardSize(doc.board.widthMm, v)} label={t('板高 (mm)')} />
               <div style={{ width: 1, height: 16, background: '#E8F3EE', margin: '0 2px' }} />
               {SHAPES.map((s) => (
                 <button key={s.id} title={s.name} onClick={() => setBoardShape(s.id)}
@@ -436,11 +472,13 @@ export default function App() {
               ))}
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
-              <button onClick={() => setAiProposal({ ...aiProposal, details: aiProposal.details.filter((x) => x.category !== 'passive') })}
-                title="移除电阻/电容/电感等无源器件，只保留核心器件"
-                style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #fde68a', background: '#fffbeb', color: '#b45309', fontSize: 12, fontWeight: 700, cursor: 'pointer', marginRight: 'auto' }}>{t('仅加载核心器件')}</button>
+              <label title={t('勾选后确认时跳过电阻/电容/电感等无源器件')}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: `1px solid ${coreOnly ? '#b45309' : '#fde68a'}`, background: coreOnly ? '#fef3c7' : '#fffbeb', color: '#b45309', fontSize: 12, fontWeight: 700, cursor: 'pointer', marginRight: 'auto', userSelect: 'none' }}>
+                <input type="checkbox" checked={coreOnly} onChange={(e) => setCoreOnly(e.target.checked)} style={{ accentColor: '#b45309' }} />
+                {t('仅加载核心器件')}{coreOnly ? ` ✓ ${t('已开启')}` : ''}
+              </label>
               <button onClick={() => setAiProposal(null)} style={{ padding: '8px 18px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, cursor: 'pointer' }}>{t('取消')}</button>
-              <button onClick={confirmScheme} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: COLORS.green, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>{tr('确认上画布')} ({aiProposal.details.length})</button>
+              <button onClick={confirmScheme} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: COLORS.green, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>{tr('确认上画布')} ({(coreOnly ? aiProposal.details.filter((x) => x.category !== 'passive') : aiProposal.details).length})</button>
             </div>
           </div>
         </div>
@@ -850,10 +888,10 @@ function ComponentImage({ c, imageUrl }: { c: PlacedComponentT; imageUrl?: strin
   );
 }
 
-function NumInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+function NumInput({ value, onChange, label }: { value: number; onChange: (v: number) => void; label?: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#f8fafc', borderRadius: 6, padding: '3px 6px', border: '1px solid #E8F3EE' }}>
-      <input type="number" value={value} min={20} max={500} step={5} onChange={(e) => onChange(Math.max(20, Math.min(500, Number(e.target.value) || 20)))}
+      <input aria-label={label} title={label} type="number" value={value} min={20} max={500} step={5} onChange={(e) => onChange(Math.max(20, Math.min(500, Number(e.target.value) || 20)))}
         style={{ width: 44, border: 'none', background: 'transparent', fontSize: 12, fontWeight: 600, color: COLORS.green, outline: 'none', textAlign: 'center', fontFamily: 'monospace' }} />
       <span style={{ color: '#94a3b8', fontSize: 10 }}>mm</span>
     </div>

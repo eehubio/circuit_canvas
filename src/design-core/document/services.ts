@@ -50,15 +50,27 @@ export function searchResultToPlaced(r: ComponentSearchResult, reference: string
 
 /** 从文档生成 BOM。 */
 export function buildBom(doc: CircuitCanvasDocument): BomLine[] {
-  return doc.components.map((c) => ({
-    reference: c.reference,
-    mpn: c.mpn,
-    manufacturer: c.manufacturer,
-    footprint: c.footprint.name,
-    quantity: c.quantity,
-    unitPrice: c.unitPrice,
-    description: c.display?.description,
-  }));
+  // 按 型号+封装 聚合：同型号多实例 → 一行，数量累计，位号串联（R1,R2,R3）
+  const lines = new Map<string, BomLine>();
+  for (const c of doc.components) {
+    const key = `${c.mpn}__${c.footprint.name}`;
+    const ex = lines.get(key);
+    if (ex) {
+      ex.quantity += c.quantity;
+      ex.reference = `${ex.reference},${c.reference}`;
+    } else {
+      lines.set(key, {
+        reference: c.reference,
+        mpn: c.mpn,
+        manufacturer: c.manufacturer,
+        footprint: c.footprint.name,
+        quantity: c.quantity,
+        unitPrice: c.unitPrice,
+        description: c.display?.description,
+      });
+    }
+  }
+  return [...lines.values()];
 }
 
 export function bomTotal(bom: BomLine[]): number {

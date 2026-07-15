@@ -37,8 +37,13 @@ export function BoardCanvas2D() {
   const setPan = (v: { x: number; y: number } | ((p: { x: number; y: number }) => { x: number; y: number })) => setPanRaw((p) => { const n = typeof v === 'function' ? v(p) : v; viewMemory.pan = n; return n; });
   const containerRef = useRef<HTMLDivElement>(null);
   const panRef = useRef({ active: false, sx: 0, sy: 0, px: 0, py: 0, moved: false });
-  const dragRef = useRef({ active: false, id: '', sx: 0, sy: 0, startX: 0, startY: 0, mode: 'comp' as 'comp' | 'refdes' });
+  const marqueeRef = useRef<{ active: boolean; x0: number; y0: number } | null>(null);
+  const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const setMultiSel = useDesignStore((st) => st.setMultiSel);
+  const dragRef = useRef<{ active: boolean; id: string; sx: number; sy: number; startX: number; startY: number; mode: 'comp' | 'refdes'; group?: { id: string; startX: number; startY: number }[] }>({ active: false, id: '', sx: 0, sy: 0, startX: 0, startY: 0, mode: 'comp' });
 
+  const panLive = useRef(pan); panLive.current = pan;
+  const zoomLive = useRef(zoom); zoomLive.current = zoom;
   const bw = doc.board.widthMm * PX_PER_MM;
   const bh = doc.board.heightMm * PX_PER_MM;
 
@@ -69,14 +74,40 @@ export function BoardCanvas2D() {
         const dxMm = (e.clientX - d.sx) / zoom / PX_PER_MM;
         const dyMm = (e.clientY - d.sy) / zoom / PX_PER_MM;
         if (d.mode === 'refdes') moveRefDes(d.id, d.startX + dxMm, d.startY + dyMm);
+        else if (d.group) d.group.forEach((g: { id: string; startX: number; startY: number }) => move(g.id, g.startX + dxMm, g.startY + dyMm));
         else move(d.id, d.startX + dxMm, d.startY + dyMm);
+      } else if (marqueeRef.current?.active) {
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (rect) setMarquee({ x0: marqueeRef.current.x0, y0: marqueeRef.current.y0, x1: e.clientX - rect.left, y1: e.clientY - rect.top });
       } else if (panRef.current.active) {
         const dx = e.clientX - panRef.current.sx, dy = e.clientY - panRef.current.sy;
         if (Math.abs(dx) > 3 || Math.abs(dy) > 3) panRef.current.moved = true;
         setPan({ x: panRef.current.px + dx, y: panRef.current.py + dy });
       }
     };
-    const onMU = () => { dragRef.current.active = false; panRef.current.active = false; };
+    const onMU = () => {
+      dragRef.current.active = false;
+      panRef.current.active = false;
+      if (marqueeRef.current?.active) {
+        marqueeRef.current = null;
+        setMarquee((mq) => {
+          if (mq && (Math.abs(mq.x1 - mq.x0) > 6 || Math.abs(mq.y1 - mq.y0) > 6)) {
+            // 框内器件（中心点判定，仅当前层）
+            const { doc, activeLayer } = useDesignStore.getState();
+            const [lx, hx] = [Math.min(mq.x0, mq.x1), Math.max(mq.x0, mq.x1)];
+            const [ly, hy] = [Math.min(mq.y0, mq.y1), Math.max(mq.y0, mq.y1)];
+            const ids = doc.components.filter((c) => {
+              if (c.placement.side !== activeLayer) return false;
+              const cx = panLive.current.x + (ORIGIN.x + c.placement.xMm * PX_PER_MM) * zoomLive.current;
+              const cy = panLive.current.y + (ORIGIN.y + c.placement.yMm * PX_PER_MM) * zoomLive.current;
+              return cx >= lx && cx <= hx && cy >= ly && cy <= hy;
+            }).map((c) => c.instanceId);
+            setMultiSel(ids);
+          }
+          return null;
+        });
+      }
+    };
     window.addEventListener('mousemove', onMM);
     window.addEventListener('mouseup', onMU);
     return () => { window.removeEventListener('mousemove', onMM); window.removeEventListener('mouseup', onMU); };
@@ -84,7 +115,17 @@ export function BoardCanvas2D() {
 
   const onCompDown = useCallback((e: React.MouseEvent, c: PlacedComponent) => {
     e.stopPropagation();
-    if (e.ctrlKey || e.metaKey) { toggleMulti(c.instanceId); return; }
+    if (e.ctrlKey || e.metaKey || e.shiftKey) { toggleMulti(c.instanceId); return; }
+    const { multiSel: sel, doc: d } = useDesignStore.getState();
+    if (sel.includes(c.instanceId) && sel.length > 1) {
+      // 拖动多选组：整组移动
+      const group = sel.map((id) => {
+        const g = d.components.find((x) => x.instanceId === id)!;
+        return { id, startX: g.placement.xMm, startY: g.placement.yMm };
+      });
+      dragRef.current = { active: true, id: c.instanceId, sx: e.clientX, sy: e.clientY, startX: c.placement.xMm, startY: c.placement.yMm, mode: 'comp', group } as typeof dragRef.current & { group: typeof group };
+      return;
+    }
     select(c.instanceId);
     dragRef.current = { active: true, id: c.instanceId, sx: e.clientX, sy: e.clientY, startX: c.placement.xMm, startY: c.placement.yMm, mode: 'comp' };
   }, [select, toggleMulti]);
@@ -96,13 +137,27 @@ export function BoardCanvas2D() {
   }, []);
 
   const onBgDown = (e: React.MouseEvent) => {
-    if (e.button === 0) panRef.current = { active: true, sx: e.clientX, sy: e.clientY, px: pan.x, py: pan.y, moved: false };
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (e.button === 0 && e.shiftKey && rect) {
+      // Shift+左键拖拽 = 框选
+      marqueeRef.current = { active: true, x0: e.clientX - rect.left, y0: e.clientY - rect.top };
+      setMarquee({ x0: e.clientX - rect.left, y0: e.clientY - rect.top, x1: e.clientX - rect.left, y1: e.clientY - rect.top });
+      return;
+    }
+    if (e.button === 0 || e.button === 2) {
+      panRef.current = { active: true, sx: e.clientX, sy: e.clientY, px: pan.x, py: pan.y, moved: false };
+    }
   };
   const onBgClick = () => { if (!panRef.current.moved) select(null); };
 
   return (
-    <div ref={containerRef} style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#F8F9FA' }}>
+    <div ref={containerRef} onContextMenu={(e) => e.preventDefault()} style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#F8F9FA' }}>
       <svg width="100%" height="100%" onMouseDown={onBgDown} onClick={onBgClick}>
+        {marquee && (
+          <rect x={Math.min(marquee.x0, marquee.x1)} y={Math.min(marquee.y0, marquee.y1)}
+            width={Math.abs(marquee.x1 - marquee.x0)} height={Math.abs(marquee.y1 - marquee.y0)}
+            fill="rgba(37,99,235,.08)" stroke="#2563eb" strokeWidth={1} strokeDasharray="5 3" />
+        )}
         <defs>
           <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M20 0L0 0 0 20" fill="none" stroke="#e5e7eb" strokeWidth=".5" /></pattern>
         </defs>
