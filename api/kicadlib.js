@@ -29,6 +29,18 @@ function getCached(key) {
   return hit && Date.now() - hit.at < TTL ? hit.data : null;
 }
 
+/** 提取文件中第一个顶层 (symbol "…") 平衡括号块（一文件一符号的新布局兜底） */
+function firstSymbolBlock(text) {
+  const i = text.indexOf('(symbol "');
+  if (i < 0) return null;
+  let depth = 0;
+  for (let j = i; j < text.length; j++) {
+    if (text[j] === '(') depth++;
+    else if (text[j] === ')') { depth--; if (depth === 0) return text.slice(i, j + 1); }
+  }
+  return null;
+}
+
 /** 从 .kicad_sym 全文提取顶层 (symbol "NAME" …) 平衡括号块 */
 function extractSymbolBlock(text, name) {
   const needle = `(symbol "${name}"`;
@@ -280,13 +292,17 @@ export default async function handler(req, res) {
 
       let text = await fileText(nm);
       let block = null;
+      let stage = '';
       if (text) {
-        block = extractSymbolBlock(text, nm) ?? (text.trim().startsWith('(symbol') ? text.trim() : null);
+        // ① 按名精确提取 ② 文件首个符号块（一文件一符号，文件名≠符号名时兜底）③ 裸符号文件
+        block = extractSymbolBlock(text, nm) ?? firstSymbolBlock(text) ?? (text.trim().startsWith('(symbol') ? text.trim() : null);
+        if (!block) stage = `文件已取到但无符号块（开头：${text.slice(0, 60).replace(/\s+/g, ' ')}）`;
       } else {
+        stage = `符号文件不存在（${lib}.kicad_symdir/${nm}.kicad_sym）`;
         // 旧布局兜底：整库单文件内提取
-        try { const whole = await symLibText(lib); block = extractSymbolBlock(whole, nm); } catch { /* 下面统一 404 */ }
+        try { const whole = await symLibText(lib); block = extractSymbolBlock(whole, nm); } catch { /* 保持 stage */ }
       }
-      if (!block) return res.status(404).send(JSON.stringify({ error: 'symbol not found' }));
+      if (!block) return res.status(404).send(JSON.stringify({ error: stage || 'symbol not found' }));
 
       // extends 继承：父符号在同目录的同名文件里（新布局）或同一大文件里（旧布局）
       const ext = block.match(/\(extends "([^"]+)"\)/);

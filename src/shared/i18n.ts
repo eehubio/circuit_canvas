@@ -30,6 +30,7 @@ export const useLangStore = create<LangState>((set) => ({
 
 /* ───────────── 固定文案词典（key = 中文原文） ───────────── */
 const DICT: Record<string, string> = {
+  '加载符号…': 'Loading symbol…', '解析成功但 0 管脚': 'parsed but 0 pins', '格式无法解析': 'unparseable format', '开头': 'head',
   '加载符号库列表…': 'Loading symbol libraries…', '可稍后重试': 'retry later',
   '已选中': 'Selected', '拖动任一可整组移动 · Delete 删除': 'drag any to move group · Delete to remove',
   'R 旋转 · L 换层 · Delete 删除 · Shift+拖拽框选 · 拖位号可移动': 'R rotate · L flip · Delete remove · Shift+drag to box-select · drag refdes to move',

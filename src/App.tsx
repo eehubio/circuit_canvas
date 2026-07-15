@@ -810,11 +810,19 @@ function FootprintPartEditor({ c, onBuild }: { c: PlacedComponentT; onBuild?: (m
     catch { setKsMsg(tr('网络错误，无法访问 KiCad 官方库')); }
   };
   const ksPick = async (name: string) => {
-    setKsMsg('');
+    setKsMsg(tr('加载符号…'));
     try {
-      const text = await fetch(`/api/kicadlib?path=sym&lib=${encodeURIComponent(ksLib)}&name=${encodeURIComponent(name)}`).then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.text(); });
+      const r = await fetch(`/api/kicadlib?path=sym&lib=${encodeURIComponent(ksLib)}&name=${encodeURIComponent(name)}`);
+      if (!r.ok) {
+        let d = '';
+        try { d = String((await r.json())?.error ?? ''); } catch { /* 非 JSON */ }
+        throw new Error(`HTTP ${r.status}${d ? ' · ' + d : ''}`);
+      }
+      const text = await r.text();
       const parsed = parseKicadSym(text);
-      if (!parsed || !parsed.pins.length) throw new Error(tr('符号解析失败'));
+      if (!parsed || !parsed.pins.length) {
+        throw new Error(tr('符号解析失败') + `（${parsed ? tr('解析成功但 0 管脚') : tr('格式无法解析')}；${tr('开头')}：${text.slice(0, 50).replace(/\s+/g, ' ')}）`);
+      }
       const key = `KICADSYM:${ksLib}:${name}`;
       registerSymbolOverride(key, parsed);
       linkSymbol(c.instanceId, { mpn: key });
