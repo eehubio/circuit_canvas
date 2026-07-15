@@ -80,8 +80,10 @@ function StatusBadge({ st }: { st: LibFileStatus }) {
 }
 
 export function LibraryPreview({ c }: { c: PlacedComponent }) {
-  useLibFileStore((s) => s.version); // 文件到位时自动刷新状态与预览
-  const sym = useMemo(() => symbolFor(c), [c.componentId]);
+  const libVersion = useLibFileStore((s) => s.version); // 文件到位时自动刷新状态与预览
+  // 依赖必须含 libVersion（符号注册后重算）与关联字段（换绑后重算）——
+  // 此前只依赖 componentId，注册成功后 memo 仍返回注册前的空态渲染（诊断✓预览✗的根因）
+  const sym = useMemo(() => symbolFor(c), [c.componentId, c.display?.symbolFromMpn, c.customSymbolSvg, libVersion]);
   const pads = padFootprintFor(c.footprint.name);
 
   // 符号 SVG（含边距）；fit=true 用于面板内自适应预览，false 用于下载原尺寸
