@@ -30,6 +30,7 @@ export const useLangStore = create<LangState>((set) => ({
 
 /* ───────────── 固定文案词典（key = 中文原文） ───────────── */
 const DICT: Record<string, string> = {
+  '官方 3D 库未收录该封装 · 参数化预览': 'No official 3D model for this footprint · parametric preview',
   'STEP 失败': 'STEP failed', '参数化预览': 'parametric preview', 'STEP 源文件': 'STEP source file',
   'KiCad封装库': 'KiCad Footprints', '尚未关联原理图符号': 'No schematic symbol linked yet',
   '用上方「从 ezPLM 库关联」/「KiCad 符号库」/「创建」赋予真实符号': 'Link one via ezPLM / KiCad symbol library / Create above',

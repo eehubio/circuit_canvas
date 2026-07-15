@@ -137,6 +137,8 @@ export function Component3DPreview({ c }: { c: PlacedComponent }) {
   const st = stepStatusFor(c.display?.stepUrl);
   const label = st === 'ready' ? [tr('ezPLM 真实 STEP 模型 ✓'), '#166534', '#dcfce7']
     : st === 'loading' ? [tr('STEP 转换中…（首次需下载 3D 引擎）· 暂为参数化'), '#854d0e', '#fef9c3']
+    : st === 'failed' && /无匹配模型|no step model/.test(stepFailReasonFor(c.display?.stepUrl) ?? '')
+      ? [tr('官方 3D 库未收录该封装 · 参数化预览'), '#64748b', '#f1f5f9']
     : st === 'failed' ? [tr('STEP 失败') + '：' + (stepFailReasonFor(c.display?.stepUrl)?.slice(0, 60) ?? '未知') + ' · ' + tr('参数化预览'), '#991b1b', '#fee2e2']
     : c.display?.stepUrl ? [tr('准备转换 STEP…'), '#854d0e', '#fef9c3']
     : [tr('参数化 3D 预览'), '#64748b', '#f1f5f9'];

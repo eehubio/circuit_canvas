@@ -97,7 +97,13 @@ export function ensureStepModel(url: string | undefined) {
       let buf = bytesCache.get(url);
       if (!buf) {
         const resp = await fetch(url.startsWith('/') ? url : `/api/ezplm?path=file&url=${encodeURIComponent(url)}`);
-        if (!resp.ok) throw new Error(`文件拉取失败 HTTP ${resp.status}（签名链接可能已过期，重新搜索该器件可刷新）`);
+        if (!resp.ok) {
+          // 透传服务端详情（如「3D 库中无匹配模型（Connector_USB.3dshapes 共 N 个）」）
+          let detail = '';
+          try { detail = String((await resp.json())?.error ?? ''); } catch { /* 非 JSON */ }
+          const hint = url.startsWith('/') ? '' : '（签名链接可能已过期，重新搜索该器件可刷新）';
+          throw new Error(detail ? `HTTP ${resp.status} · ${detail}` : `文件拉取失败 HTTP ${resp.status}${hint}`);
+        }
         buf = new Uint8Array(await resp.arrayBuffer());
         if (buf.length > 0 && buf[0] === 0x7b) throw new Error('代理返回错误: ' + new TextDecoder().decode(buf.slice(0, 120)));
       }
@@ -106,7 +112,13 @@ export function ensureStepModel(url: string | undefined) {
         if (head.startsWith('version https://git-lfs')) throw new Error('拿到的是 Git LFS 指针而非模型——服务端代理未部署最新版（api/kicadlib.js 的 LFS 解析）');
         if (!/ISO-10303/.test(head)) throw new Error('内容不是 STEP 格式（' + head.slice(0, 30).replace(/\s+/g, ' ') + '…）');
       }
-      const occt = await getOcct().catch((e) => { throw new Error('WASM 引擎加载失败: ' + String(e).slice(0, 120)); });
+      const occt = await getOcct().catch((e) => {
+        const msg = String(e);
+        if (/EvalError|Content Security Policy|unsafe-eval/i.test(msg)) {
+          throw new Error('3D 引擎被 CSP 拦截——vercel.json 的 script-src 需含 unsafe-eval（该修复需部署 vercel.json 才生效）');
+        }
+        throw new Error('WASM 引擎加载失败: ' + msg.slice(0, 120));
+      });
       const result = occt.ReadStepFile(buf, null);
       if (!result?.success || !result.meshes?.length) throw new Error('STEP 解析失败（文件格式异常）');
 
