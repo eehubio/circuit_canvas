@@ -825,6 +825,7 @@ function FootprintPartEditor({ c, onBuild }: { c: PlacedComponentT; onBuild?: (m
       }
       const key = `KICADSYM:${ksLib}:${name}`;
       registerSymbolOverride(key, parsed);
+      try { localStorage.setItem('cc_ksym_' + key, text); } catch { /* 空间不足忽略 */ }
       linkSymbol(c.instanceId, { mpn: key });
       setKsMsg(`✓ ${tr('已关联符号')} ${name}`);
       setKsOpen(false);

@@ -6,7 +6,7 @@
  */
 import type { PlacedComponent } from '../../design-core/document/types';
 import { padFootprintFor as padFootprintForSym } from '../../design-core/geometry/footprint-pads';
-import { symbolOverrideFor, symbolUnitsOverrideFor, type ParsedSymbol } from '../../design-core/geometry/lib-file-registry';
+import { symbolOverrideFor, symbolUnitsOverrideFor, type ParsedSymbol , ensureKicadSymbol} from '../../design-core/geometry/lib-file-registry';
 
 const STROKE = '#334155';
 const PIN = '#7c2d12';
@@ -227,6 +227,7 @@ export function symbolFor(c: PlacedComponent): SymbolDef {
   if (c.customSymbolSvg) return customSvgSymbol(c.customSymbolSvg);
   // ezPLM 真实符号文件解析结果优先（真实引脚名）
   const symKey = c.display?.symbolFromMpn ?? c.mpn; // 仅关联符号时借用库中型号的符号
+  ensureKicadSymbol(symKey); // KICADSYM: 前缀且内存缺失时自动重拉（刷新/导入后自愈）
   // 封装占位器件：没有真实管脚定义，画电阻/IC 都是误导 —— 显式空态，引导去关联
   if (c.display?.family === 'Footprint' && !c.customSymbolSvg && !symbolOverrideFor(symKey)) {
     return unlinkedSymbol();

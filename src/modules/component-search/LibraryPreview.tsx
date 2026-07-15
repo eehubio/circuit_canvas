@@ -4,7 +4,7 @@
  * 符号与封装为 SVG（可下载）；3D 为参数化 Three.js 模型（截图下载在 3D 视图中进行）。
  */
 import { tr } from '../../shared/i18n';
-import { symbolOverrideFor } from '../../design-core/geometry/lib-file-registry';
+import { symbolOverrideFor, ensureKicadSymbol } from '../../design-core/geometry/lib-file-registry';
 import { useMemo, useState, useRef, useEffect } from 'react';
 import type { PlacedComponent } from '../../design-core/document/types';
 import { symbolFor } from '../schematic/symbols';
@@ -94,6 +94,7 @@ export function LibraryPreview({ c }: { c: PlacedComponent }) {
   );
 
   // 占位器件且无任何符号来源 → 空态（不展示误导性默认符号）
+  ensureKicadSymbol(c.display?.symbolFromMpn);
   const symUnlinked = c.display?.family === 'Footprint' && !c.customSymbolSvg && !symbolOverrideFor(c.display?.symbolFromMpn ?? c.mpn);
 
   // 封装 SVG
