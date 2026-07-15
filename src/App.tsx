@@ -794,8 +794,13 @@ function FootprintPartEditor({ c, onBuild }: { c: PlacedComponentT; onBuild?: (m
   const ksToggle = async () => {
     setKsOpen(!ksOpen);
     if (!ksOpen && !ksLibs.length) {
-      try { const j = await fetch('/api/kicadlib?path=symlibs').then((r) => r.json()); setKsLibs(j.libs ?? []); }
-      catch { setKsMsg(tr('网络错误，无法访问 KiCad 官方库')); }
+      setKsMsg(tr('加载符号库列表…'));
+      try {
+        const r = await fetch('/api/kicadlib?path=symlibs');
+        const j = await r.json();
+        if (Array.isArray(j.libs) && j.libs.length) { setKsLibs(j.libs); setKsMsg(''); }
+        else setKsMsg((j.error ? `${j.error}` : `HTTP ${r.status}`) + '（' + tr('可稍后重试') + '）');
+      } catch (e) { setKsMsg(tr('网络错误，无法访问 KiCad 官方库') + '：' + (e as Error).message); }
     }
   };
   const ksPickLib = async (lib: string) => {

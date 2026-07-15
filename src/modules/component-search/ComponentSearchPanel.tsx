@@ -56,6 +56,11 @@ export function ComponentSearchPanel() {
         return;
       }
     }
+    // 无关键词且未选分类：不转储默认目录，显示引导空态（避免"17 个预设"误导）
+    if (!keyword.trim() && !category && !orgOnly) {
+      if (seq === searchSeq.current) { setResults([]); setSearchErr('none'); }
+      return;
+    }
     // 型号搜索专注 ezPLM 库；通用封装从「KiCad封装库」tab 取
     let res: { items: ComponentSearchResult[] };
     try {

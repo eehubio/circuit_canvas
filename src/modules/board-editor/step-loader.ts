@@ -150,23 +150,27 @@ export function ensureStepModel(url: string | undefined) {
         else geo.computeVertexNormals();
         if (m.index) geo.setIndex(m.index.array);
 
-        // STEP 原色（若非黑且非纯白，说明作者确实指定了颜色，予以尊重）
+        // STEP 原色（作者指定且有意义时尊重）
         const raw = Array.isArray(m.color) && m.color.length >= 3 ? new THREE.Color(m.color[0], m.color[1], m.color[2]) : null;
-        const rawIsMeaningful = raw ? (raw.r + raw.g + raw.b > 0.25 && raw.r + raw.g + raw.b < 2.85) : false;
+        const sum = raw ? raw.r + raw.g + raw.b : 0;
+        const rawIsMeaningful = raw ? (sum > 0.25 && sum < 2.7 && (Math.max(raw.r, raw.g, raw.b) - Math.min(raw.r, raw.g, raw.b) > 0.04 || sum < 1.2)) : false;
 
-        // 引脚判定：位于模型底部区域 且 体积远小于主体
+        // 形态特征
+        const volRatio = info.vol / maxVol;
         const nearBottom = info.minZ < botZ + height * 0.42;
-        const isLead = info.vol < maxVol * 0.32 && nearBottom;
+        const spansHeight = info.dz > height * 0.55;              // 纵向贯穿 → 外壳/主体
+        const isLead = volRatio < 0.28 && nearBottom && !spansHeight;
+        const isShell = volRatio > 0.45 && spansHeight;           // 大且高 → 金属外壳
 
         let mat: THREE.MeshStandardMaterial;
-        if (isLead) {
-          // 亮银引脚（镀锡/镀金脚）
-          mat = new THREE.MeshStandardMaterial({ color: 0xd8dce3, metalness: 0.92, roughness: 0.24, envMapIntensity: 1.2 });
-        } else if (rawIsMeaningful) {
-          mat = new THREE.MeshStandardMaterial({ color: raw!, metalness: 0.25, roughness: 0.62 });
+        if (rawIsMeaningful) {
+          mat = new THREE.MeshStandardMaterial({ color: raw!, metalness: 0.35, roughness: 0.55 });
+        } else if (isLead) {
+          mat = new THREE.MeshStandardMaterial({ color: 0xe0c068, metalness: 0.9, roughness: 0.28, envMapIntensity: 1.2 }); // 金脚
+        } else if (isShell) {
+          mat = new THREE.MeshStandardMaterial({ color: 0xc8ccd2, metalness: 0.88, roughness: 0.3, envMapIntensity: 1.1 }); // 金属外壳（亮银）
         } else {
-          // 塑封体：深灰哑光（不是纯黑，避免"黑黢黢"看不出体积）
-          mat = new THREE.MeshStandardMaterial({ color: 0x3b3f46, metalness: 0.18, roughness: 0.72 });
+          mat = new THREE.MeshStandardMaterial({ color: 0x33373e, metalness: 0.15, roughness: 0.78 }); // 塑封体（深灰）
         }
         group.add(new THREE.Mesh(geo, mat));
       }

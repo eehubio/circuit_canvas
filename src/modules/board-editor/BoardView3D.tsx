@@ -196,6 +196,12 @@ function rebuildBoard(group: THREE.Group, doc: CircuitCanvasDocument) {
       const r = doc.board.shape === 'rounded' ? Math.min(W, H) * 0.08 : 1.5;
       roundedRectShape(shape, W, H, r);
     }
+    // 定位孔挖穿板身：作为 Shape 的 holes（真实通孔，不是实心塞子）
+    for (const c of mountingHoleCenters(doc.board)) {
+      const hole = new THREE.Path();
+      hole.absarc(c.x - W / 2, c.y - H / 2, HOLE_DIAMETER_MM / 2, 0, Math.PI * 2, true);
+      shape.holes.push(hole);
+    }
     const geo = new THREE.ExtrudeGeometry(shape, { depth: boardThk, bevelEnabled: false });
     geo.rotateX(Math.PI / 2); // 让挤出方向朝 y
     boardMesh = new THREE.Mesh(geo, MAT.pcbGreen);
@@ -203,11 +209,25 @@ function rebuildBoard(group: THREE.Group, doc: CircuitCanvasDocument) {
   }
   group.add(boardMesh);
 
-  // 安装孔（由文档开关控制）
-  for (const c of mountingHoleCenters(doc.board)) {
-    const hole = new THREE.Mesh(new THREE.CylinderGeometry(HOLE_DIAMETER_MM / 2, HOLE_DIAMETER_MM / 2, boardThk + 0.2, 20), MAT.metalCan);
-    hole.position.set(c.x - W / 2, 0, c.y - H / 2);
-    group.add(hole);
+  // 定位孔镀铜环（annular ring）：只画薄壁孔壁，不填实心
+  if (doc.board.shape !== 'circle') {
+    for (const c of mountingHoleCenters(doc.board)) {
+      const r = HOLE_DIAMETER_MM / 2;
+      const ringGeo = new THREE.CylinderGeometry(r, r, boardThk + 0.02, 24, 1, true); // openEnded 空心壁
+      const ring = new THREE.Mesh(ringGeo, MAT.gold);
+      ring.material.side = THREE.DoubleSide;
+      ring.position.set(c.x - W / 2, boardThk / 2, c.y - H / 2);
+      group.add(ring);
+    }
+  } else {
+    // 圆形板用 CylinderGeometry，无法 Shape 挖孔 → 用深色薄环示意孔位
+    for (const c of mountingHoleCenters(doc.board)) {
+      const r = HOLE_DIAMETER_MM / 2;
+      const ringGeo = new THREE.CylinderGeometry(r, r, boardThk + 0.05, 24, 1, true);
+      const ring = new THREE.Mesh(ringGeo, new THREE.MeshStandardMaterial({ color: 0x1a1a1a, side: THREE.DoubleSide, roughness: 0.9 }));
+      ring.position.set(c.x - W / 2, -boardThk / 2, c.y - H / 2);
+      group.add(ring);
+    }
   }
 
   // 器件：2D 坐标 (xMm,yMm) 是相对板左上角；转成以板中心为原点
