@@ -17,6 +17,7 @@ const FP_PROJECT = encodeURIComponent('kicad/libraries/kicad-footprints');
 const P3D_RAW = 'https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/master';
 const FP_RAW = 'https://gitlab.com/kicad/libraries/kicad-footprints/-/raw/master';
 const SYM_PROJECT = encodeURIComponent('kicad/libraries/kicad-symbols');
+const P3D_PROJECT = encodeURIComponent('kicad/libraries/kicad-packages3D');
 const SYM_RAW = 'https://gitlab.com/kicad/libraries/kicad-symbols/-/raw/master';
 
 const SAFE = /^[A-Za-z0-9._\-]+$/; // 库名/封装名白名单（防路径穿越）
@@ -109,8 +110,31 @@ export default async function handler(req, res) {
     if (path === 'step') {
       // lib = 3dshapes 目录基名（来自 mod 内 (model) 引用），name = 模型文件基名
       if (!SAFE.test(String(lib)) || !SAFE.test(String(name))) return res.status(400).send(JSON.stringify({ error: 'bad params' }));
-      const r = await fetch(`${P3D_RAW}/${lib}.3dshapes/${encodeURIComponent(String(name))}.step`, { headers: { 'User-Agent': 'circuit-canvas' } });
-      if (!r.ok) return res.status(404).send(JSON.stringify({ error: 'no step model' }));
+      let r = await fetch(`${P3D_RAW}/${lib}.3dshapes/${encodeURIComponent(String(name))}.step`, { headers: { 'User-Agent': 'circuit-canvas' } });
+      if (!r.ok) {
+        // 模糊匹配兜底：官方 3D 文件名与封装名可能不完全一致（大小写/后缀变体）
+        const key3d = `3dtree:${lib}`;
+        let names = getCached(key3d);
+        if (!names) {
+          const out = [];
+          for (let page = 1; page <= 30; page++) {
+            const tr2 = await fetch(`${GL_API}/${P3D_PROJECT}/repository/tree?path=${encodeURIComponent(lib + '.3dshapes')}&per_page=100&page=${page}&ref=master`, { headers: { 'User-Agent': 'circuit-canvas' } });
+            if (!tr2.ok) break;
+            const items = await tr2.json();
+            out.push(...items);
+            if (items.length < 100) break;
+          }
+          names = out.filter((t) => t.type === 'blob' && t.name.endsWith('.step')).map((t) => t.name.replace(/\.step$/, ''));
+          cache.set(key3d, { at: Date.now(), data: names });
+        }
+        const want = String(name).toLowerCase();
+        const hit = names.find((n) => n.toLowerCase() === want)
+          ?? names.find((n) => n.toLowerCase().startsWith(want) || want.startsWith(n.toLowerCase()))
+          ?? names.find((n) => n.toLowerCase().includes(want) || want.includes(n.toLowerCase()));
+        if (!hit) return res.status(404).send(JSON.stringify({ error: `3D 库中无匹配模型（${lib}.3dshapes 共 ${names.length} 个）` }));
+        r = await fetch(`${P3D_RAW}/${lib}.3dshapes/${encodeURIComponent(hit)}.step`, { headers: { 'User-Agent': 'circuit-canvas' } });
+        if (!r.ok) return res.status(404).send(JSON.stringify({ error: 'no step model' }));
+      }
       let buf = Buffer.from(await r.arrayBuffer());
       // kicad-packages3D 用 Git LFS：raw 端点返回的是指针文本，需经 LFS Batch API 换真实地址
       const head = buf.slice(0, 200).toString('utf8');
