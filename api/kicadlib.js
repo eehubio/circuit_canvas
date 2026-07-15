@@ -201,7 +201,11 @@ export default async function handler(req, res) {
                 out.push(...items);
                 if (items.length < 100) break;
               }
-              const libs = out.filter((t) => t.type === 'blob' && String(t.name).endsWith('.kicad_sym')).map((t) => t.name.replace(/\.kicad_sym$/, ''));
+              // 新布局：X.kicad_symdir 目录（一符号一文件）；旧布局：X.kicad_sym 单文件——两者都认
+              const libs = [
+                ...out.filter((t) => t.type === 'tree' && String(t.name).endsWith('.kicad_symdir')).map((t) => t.name.replace(/\.kicad_symdir$/, '')),
+                ...out.filter((t) => t.type === 'blob' && String(t.name).endsWith('.kicad_sym')).map((t) => t.name.replace(/\.kicad_sym$/, '')),
+              ];
               if (libs.length) { data = libs; symProj.workingRef = ref; break outer; }
               if (httpErr) sample.push(httpErr);
               else if (out.length) sample.push(`ref=${ref || '默认'}${sub ? '/' + sub : ''}: ${out.slice(0, 3).map((t) => t.type + ':' + t.name).join(',')}`);
@@ -227,36 +231,80 @@ export default async function handler(req, res) {
       const key = `symlist:${lib}`;
       let data = getCached(key);
       if (!data) {
-        const text = await symLibText(lib);
-        // 顶层符号名（排除 _N_M 子单元定义）
-        data = [...text.matchAll(/\(symbol "([^"]+)"/g)].map((m) => m[1]).filter((n) => !/_\d+_\d+$/.test(n));
-        data = [...new Set(data)];
-        cache.set(key, { at: Date.now(), data });
+        const pj = await resolveSymProject();
+        const ref = pj.workingRef !== undefined ? pj.workingRef : pj.branch;
+        const out = [];
+        for (let page = 1; page <= 30; page++) {
+          const qs = `per_page=100&page=${page}&path=${encodeURIComponent(lib + '.kicad_symdir')}` + (ref ? `&ref=${encodeURIComponent(ref)}` : '');
+          const r = await fetch(`${GL_API}/${pj.id}/repository/tree?${qs}`, { headers: { 'User-Agent': 'circuit-canvas' } });
+          if (!r.ok) break;
+          const items = await r.json();
+          if (!Array.isArray(items)) break;
+          out.push(...items);
+          if (items.length < 100) break;
+        }
+        data = out.filter((t) => t.type === 'blob' && String(t.name).endsWith('.kicad_sym')).map((t) => t.name.replace(/\.kicad_sym$/, ''));
+        if (!data.length) {
+          // 旧布局兜底：单文件多符号 → 提取顶层符号名
+          try {
+            const text = await symLibText(lib);
+            data = [...new Set([...text.matchAll(/\(symbol "([^"]+)"/g)].map((m) => m[1]).filter((n) => !/_\d+_\d+$/.test(n)))];
+          } catch { /* 保持空 */ }
+        }
+        if (data.length) cache.set(key, { at: Date.now(), data });
       }
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
-      res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
+      res.setHeader('Cache-Control', data.length ? 's-maxage=3600, stale-while-revalidate=86400' : 'no-store');
       return res.status(200).send(JSON.stringify({ items: data }));
     }
 
     if (path === 'sym') {
       if (!SAFE.test(String(lib))) return res.status(400).send(JSON.stringify({ error: 'bad lib' }));
-      const text = await symLibText(lib);
-      let block = extractSymbolBlock(text, String(name));
+      const nm = String(name ?? '');
+      if (!nm || nm.includes('..') || /[/\\]/.test(nm) || nm.length > 200) return res.status(400).send(JSON.stringify({ error: 'bad name' }));
+
+      const pj = await resolveSymProject();
+      const ref = pj.workingRef !== undefined ? pj.workingRef : pj.branch;
+      const fileText = async (fname) => {
+        const key = `symf:${lib}/${fname}`;
+        let t = getCached(key);
+        if (!t) {
+          const fp2 = `${lib}.kicad_symdir/${fname}.kicad_sym`;
+          const r = await fetch(`${GL_API}/${pj.id}/repository/files/${encodeURIComponent(fp2)}/raw${ref ? `?ref=${encodeURIComponent(ref)}` : '?ref=HEAD'}`, { headers: { 'User-Agent': 'circuit-canvas' } });
+          if (!r.ok) return null;
+          t = await r.text();
+          cache.set(key, { at: Date.now(), data: t });
+        }
+        return t;
+      };
+
+      let text = await fileText(nm);
+      let block = null;
+      if (text) {
+        block = extractSymbolBlock(text, nm) ?? (text.trim().startsWith('(symbol') ? text.trim() : null);
+      } else {
+        // 旧布局兜底：整库单文件内提取
+        try { const whole = await symLibText(lib); block = extractSymbolBlock(whole, nm); } catch { /* 下面统一 404 */ }
+      }
       if (!block) return res.status(404).send(JSON.stringify({ error: 'symbol not found' }));
-      // 一层 extends 继承：几何在父符号里，把父块的子单元拼进来
+
+      // extends 继承：父符号在同目录的同名文件里（新布局）或同一大文件里（旧布局）
       const ext = block.match(/\(extends "([^"]+)"\)/);
       if (ext) {
-        const parent = extractSymbolBlock(text, ext[1]);
+        let parent = null;
+        const ptext = await fileText(ext[1]);
+        if (ptext) parent = extractSymbolBlock(ptext, ext[1]) ?? (ptext.trim().startsWith('(symbol') ? ptext.trim() : null);
+        if (!parent) { try { const whole = await symLibText(lib); parent = extractSymbolBlock(whole, ext[1]); } catch { /* 忽略 */ } }
         if (parent) {
-          // 取父块中的子 symbol 定义（单元几何），重命名前缀为子符号名
+          const esc = ext[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
           const units = [];
-          const re = new RegExp(`\\(symbol "${ext[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_(\\d+_\\d+)"`, 'g');
+          const re = new RegExp(`\\(symbol "${esc}_(\\d+_\\d+)"`, 'g');
           let m;
           while ((m = re.exec(parent))) {
             let depth = 0;
             for (let j = m.index; j < parent.length; j++) {
               if (parent[j] === '(') depth++;
-              else if (parent[j] === ')') { depth--; if (depth === 0) { units.push(parent.slice(m.index, j + 1).replace(new RegExp(`"${ext[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_`, 'g'), `"${name}_`)); break; } }
+              else if (parent[j] === ')') { depth--; if (depth === 0) { units.push(parent.slice(m.index, j + 1).replace(new RegExp(`"${esc}_`, 'g'), `"${nm}_`)); break; } }
             }
           }
           if (units.length) block = block.replace(/\)\s*$/, '\n' + units.join('\n') + ')');
@@ -264,7 +312,7 @@ export default async function handler(req, res) {
       }
       res.setHeader('Content-Type', 'text/plain; charset=utf-8');
       res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=604800');
-      return res.status(200).send(`(kicad_symbol_lib ${block})`);
+      return res.status(200).send(block.trim().startsWith('(kicad_symbol_lib') ? block : `(kicad_symbol_lib ${block})`);
     }
 
     return res.status(400).send(JSON.stringify({ error: 'unknown path' }));
