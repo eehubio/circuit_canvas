@@ -6,6 +6,7 @@
 import { tr } from '../../shared/i18n';
 import { useRef, useEffect } from 'react';
 import * as THREE from 'three';
+import { buildStudioEnvironment } from './studio-env';
 import { useDesignStore } from '../../state/designStore';
 import { buildComponent3D, MAT } from './footprint3d';
 import { mountingHoleCenters, HOLE_DIAMETER_MM, lshapeCut } from '../../design-core/collision';
@@ -49,17 +50,12 @@ export function BoardView3D() {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.15;
+    renderer.toneMappingExposure = 1.35;
     mount.appendChild(renderer.domElement);
 
     // lights
-    // 环境反射（金属引脚高光）+ 三点光
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    const envScene = new THREE.Scene();
-    envScene.background = new THREE.Color(0xeef3f8);
-    envScene.add(new THREE.Mesh(new THREE.SphereGeometry(500, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.BackSide })));
-    const envRT = pmrem.fromScene(envScene, 0.04);
-    scene.environment = envRT.texture;
+    // studio 环境反射（金属高光层次）+ 三点光
+    scene.environment = buildStudioEnvironment(renderer);
     scene.add(new THREE.AmbientLight(0xffffff, 0.5));
     const key = new THREE.DirectionalLight(0xffffff, 1.25); key.position.set(60, 120, 80); scene.add(key);
     const fill = new THREE.DirectionalLight(0xdbe7f5, 0.5); fill.position.set(-80, 60, -40); scene.add(fill);

@@ -166,11 +166,11 @@ export function ensureStepModel(url: string | undefined) {
         if (rawIsMeaningful) {
           mat = new THREE.MeshStandardMaterial({ color: raw!, metalness: 0.35, roughness: 0.55 });
         } else if (isLead) {
-          mat = new THREE.MeshStandardMaterial({ color: 0xe0c068, metalness: 0.9, roughness: 0.28, envMapIntensity: 1.2 }); // 金脚
+          mat = new THREE.MeshStandardMaterial({ color: 0xe6c66a, metalness: 0.95, roughness: 0.22, envMapIntensity: 1.6 }); // 金脚
         } else if (isShell) {
-          mat = new THREE.MeshStandardMaterial({ color: 0xc8ccd2, metalness: 0.88, roughness: 0.3, envMapIntensity: 1.1 }); // 金属外壳（亮银）
+          mat = new THREE.MeshStandardMaterial({ color: 0xdfe3e8, metalness: 0.95, roughness: 0.18, envMapIntensity: 1.7 }); // 金属外壳（亮银，强反射）
         } else {
-          mat = new THREE.MeshStandardMaterial({ color: 0x33373e, metalness: 0.15, roughness: 0.78 }); // 塑封体（深灰）
+          mat = new THREE.MeshStandardMaterial({ color: 0x2b2e34, metalness: 0.1, roughness: 0.68, envMapIntensity: 0.9 }); // 塑封体（深灰）
         }
         group.add(new THREE.Mesh(geo, mat));
       }

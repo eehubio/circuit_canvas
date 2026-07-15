@@ -6,6 +6,7 @@
 import { tr } from '../../shared/i18n';
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { buildStudioEnvironment } from '../board-editor/studio-env';
 import type { PlacedComponent } from '../../design-core/document/types';
 import { buildComponent3D } from '../board-editor/footprint3d';
 import { stepStatusFor, stepFailReasonFor } from '../board-editor/step-loader';
@@ -33,25 +34,12 @@ export function Component3DPreview({ c }: { c: PlacedComponent }) {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.18;
+    renderer.toneMappingExposure = 1.4;
     el.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    // 环境反射：给金属引脚提供高光来源（无 HDR 文件，用渐变天空盒近似 studio 环境）
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    const envScene = new THREE.Scene();
-    envScene.background = new THREE.Color(0xf2f6fa);
-    const envTop = new THREE.Mesh(
-      new THREE.SphereGeometry(50, 12, 8),
-      new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.BackSide }),
-    );
-    envScene.add(envTop);
-    const softBox = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.MeshBasicMaterial({ color: 0xffffff }));
-    softBox.position.set(0, 22, 8);
-    softBox.rotation.x = -Math.PI / 2.2;
-    envScene.add(softBox);
-    const envRT = pmrem.fromScene(envScene, 0.04);
-    scene.environment = envRT.texture;
+    // studio 环境反射（明暗分区 → 金属高光有层次，非平灰）
+    scene.environment = buildStudioEnvironment(renderer);
 
     // 三点光：主光 + 补光 + 轮廓光
     scene.add(new THREE.AmbientLight(0xffffff, 0.55));
@@ -126,8 +114,7 @@ export function Component3DPreview({ c }: { c: PlacedComponent }) {
         if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
         else mat?.dispose();
       });
-      envRT.texture.dispose();
-      pmrem.dispose();
+      scene.environment?.dispose();
       renderer.dispose();
       el.removeChild(renderer.domElement);
     };
