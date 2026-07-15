@@ -78,8 +78,8 @@ function footprintBlock(c: PlacedComponent): string {
   L.push(`    (fp_text value "${c.mpn.replace(/"/g, '')}" (at 0 ${F(bodyH / 2 + 1.2)} ${kicadRot}) (layer "${fabLayer}") (effects (font (size 0.8 0.8) (thickness 0.12))${isBottom ? ' (justify mirror)' : ''}))`);
   if (fp) {
     // 丝印本体框
-    const hw = fp.bodyW / 2, hh = fp.bodyH / 2;
-    L.push(`    (fp_rect (start ${F(-hw)} ${F(-hh)}) (end ${F(hw)} ${F(hh)}) (stroke (width 0.12) (type solid)) (layer "${refLayer}"))`);
+    const hw = fp.bodyW / 2, hh = fp.bodyH / 2, bcx = fp.bodyCx ?? 0, bcy = fp.bodyCy ?? 0;
+    L.push(`    (fp_rect (start ${F(bcx - hw)} ${F(bcy - hh)}) (end ${F(bcx + hw)} ${F(bcy + hh)}) (stroke (width 0.12) (type solid)) (layer "${refLayer}"))`);
     for (const p of fp.pads) {
       if (p.round) {
         const drill = Math.max(0.8, p.w - 0.6);

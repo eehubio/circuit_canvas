@@ -4,6 +4,7 @@
  * 符号与封装为 SVG（可下载）；3D 为参数化 Three.js 模型（截图下载在 3D 视图中进行）。
  */
 import { tr } from '../../shared/i18n';
+import { symbolOverrideFor } from '../../design-core/geometry/lib-file-registry';
 import { useMemo, useState, useRef, useEffect } from 'react';
 import type { PlacedComponent } from '../../design-core/document/types';
 import { symbolFor } from '../schematic/symbols';
@@ -92,15 +93,18 @@ export function LibraryPreview({ c }: { c: PlacedComponent }) {
     </svg>
   );
 
+  // 占位器件且无任何符号来源 → 空态（不展示误导性默认符号）
+  const symUnlinked = c.display?.family === 'Footprint' && !c.customSymbolSvg && !symbolOverrideFor(c.display?.symbolFromMpn ?? c.mpn);
+
   // 封装 SVG
   const makeFpSvg = (fit: boolean) => pads ? (() => {
-    const halfW = Math.max(...pads.pads.map((p) => Math.abs(p.x) + p.w / 2), pads.bodyW / 2) * PX_PER_MM + 10;
-    const halfH = Math.max(...pads.pads.map((p) => Math.abs(p.y) + p.h / 2), pads.bodyH / 2) * PX_PER_MM + 10;
+    const halfW = Math.max(...pads.pads.map((p) => Math.abs(p.x) + p.w / 2), Math.abs(pads.bodyCx ?? 0) + pads.bodyW / 2) * PX_PER_MM + 10;
+    const halfH = Math.max(...pads.pads.map((p) => Math.abs(p.y) + p.h / 2), Math.abs(pads.bodyCy ?? 0) + pads.bodyH / 2) * PX_PER_MM + 10;
     return (
       <svg xmlns="http://www.w3.org/2000/svg" width={halfW * 2} height={halfH * 2} viewBox={`${-halfW} ${-halfH} ${halfW * 2} ${halfH * 2}`}
         style={fit ? { width: '100%', height: '100%' } : undefined} preserveAspectRatio="xMidYMid meet">
         <rect x={-halfW} y={-halfH} width={halfW * 2} height={halfH * 2} fill="#f0f9f4" />
-        <rect x={-pads.bodyW * PX_PER_MM / 2} y={-pads.bodyH * PX_PER_MM / 2} width={pads.bodyW * PX_PER_MM} height={pads.bodyH * PX_PER_MM} rx={2} fill="none" stroke="#1a6b3c" strokeWidth={1} />
+        <rect x={((pads.bodyCx ?? 0) - pads.bodyW / 2) * PX_PER_MM} y={((pads.bodyCy ?? 0) - pads.bodyH / 2) * PX_PER_MM} width={pads.bodyW * PX_PER_MM} height={pads.bodyH * PX_PER_MM} rx={2} fill="none" stroke="#1a6b3c" strokeWidth={1} />
         {pads.pads.map((p, i) => (
           <rect key={i} x={(p.x - p.w / 2) * PX_PER_MM} y={(p.y - p.h / 2) * PX_PER_MM} width={p.w * PX_PER_MM} height={p.h * PX_PER_MM} rx={p.round ? p.w * PX_PER_MM / 2 : 0.8} fill="#c08a2d" stroke="#8a6420" strokeWidth={0.3} />
         ))}
@@ -122,12 +126,21 @@ export function LibraryPreview({ c }: { c: PlacedComponent }) {
       <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.green, marginBottom: 8 }}>📚 PCB 设计库文件</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={cell}>
-          <div style={{ ...cellTitle, display: 'flex', alignItems: 'center', gap: 6 }}>{tr('原理图符号')} <StatusBadge st={symbolFileStatus(c.mpn, c.display?.symbolFileUrl)} /></div>
-          <ZoomPanBox>{symSvg}</ZoomPanBox>
-          <div style={{ display: 'flex', gap: 4 }}>
-            <button onClick={() => downloadText(buildKicadSym(c), `${c.mpn}.kicad_sym`)} style={{ ...dlBtn, flex: 1 }}>⬇ .kicad_sym</button>
-            <button onClick={() => dl(makeSymSvg(false), `${c.mpn}-symbol.svg`)} style={{ ...dlBtn, flex: 1 }}>⬇ SVG</button>
-          </div>
+          <div style={{ ...cellTitle, display: 'flex', alignItems: 'center', gap: 6 }}>{tr('原理图符号')} {!symUnlinked && <StatusBadge st={symbolFileStatus(c.display?.symbolFromMpn ?? c.mpn, c.display?.symbolFileUrl)} />}</div>
+          {symUnlinked ? (
+            <div style={{ padding: '18px 12px', textAlign: 'center', borderRadius: 8, background: '#f8fafc', border: '1px dashed #cbd5e1' }}>
+              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700 }}>{tr('尚未关联原理图符号')}</div>
+              <div style={{ fontSize: 9.5, color: '#94a3b8', marginTop: 4 }}>{tr('用上方「从 ezPLM 库关联」/「KiCad 符号库」/「创建」赋予真实符号')}</div>
+            </div>
+          ) : (
+            <>
+              <ZoomPanBox>{symSvg}</ZoomPanBox>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button onClick={() => downloadText(buildKicadSym(c), `${c.mpn}.kicad_sym`)} style={{ ...dlBtn, flex: 1 }}>⬇ .kicad_sym</button>
+                <button onClick={() => dl(makeSymSvg(false), `${c.mpn}-symbol.svg`)} style={{ ...dlBtn, flex: 1 }}>⬇ SVG</button>
+              </div>
+            </>
+          )}
         </div>
         <div style={cell}>
           <div style={{ ...cellTitle, display: 'flex', alignItems: 'center', gap: 6 }}>{tr('PCB 封装')} <StatusBadge st={footprintFileStatus(c.footprint.name, c.display?.footprintFileUrl)} /></div>

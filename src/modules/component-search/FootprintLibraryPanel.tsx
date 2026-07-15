@@ -7,21 +7,16 @@ import { tr } from '../../shared/i18n';
 import { parseKicadMod } from '../../design-core/geometry/kicad-file-parser';
 import { registerFootprintOverride } from '../../design-core/geometry/lib-file-registry';
 import { useState, useEffect } from 'react';
-import { getProviders } from '../../providers/factory';
 import { useDesignStore } from '../../state/designStore';
-import { FOOTPRINT_CATEGORIES } from '../../providers/mock/data';
 import { COLORS } from '../../shared/theme';
-import type { FootprintOption, ComponentSearchResult } from '../../providers/types';
+import type { ComponentSearchResult } from '../../providers/types';
 
-const providers = getProviders();
 
 export function FootprintLibraryPanel() {
-  const [cat, setCat] = useState<string | null>(null);
-  const [list, setList] = useState<FootprintOption[]>([]);
   const addComponent = useDesignStore((s) => s.addComponent);
 
   // ── KiCad 官方库（gitlab.com/kicad/libraries，按需拉取，不打包） ──
-  const [klOpen, setKlOpen] = useState(false);
+  const [klOpen, setKlOpen] = useState(true);
   const [klLibs, setKlLibs] = useState<string[]>([]);
   const [klLib, setKlLib] = useState('');
   const [klItems, setKlItems] = useState<string[]>([]);
@@ -29,6 +24,8 @@ export function FootprintLibraryPanel() {
   const [klBusy, setKlBusy] = useState<'' | 'libs' | 'items' | 'add'>('');
   const [klErr, setKlErr] = useState('');
 
+  useEffect(() => { klLoadLibs(); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const klLoadLibs = async () => {
     if (klLibs.length) return;
     setKlBusy('libs'); setKlErr('');
@@ -72,31 +69,8 @@ export function FootprintLibraryPanel() {
   };
   const klFiltered = klKw.trim() ? klItems.filter((n) => n.toLowerCase().includes(klKw.trim().toLowerCase())) : klItems;
 
-  useEffect(() => { providers.components.listFootprints(cat ?? undefined).then(setList); }, [cat]);
-
-  const addFootprint = (f: FootprintOption) => {
-    // 封装 → 自定义器件（无型号，仅封装占位，用于纯布板评估）
-    const cat2 = f.category === 'smd_chip' ? 'passive' : f.category === 'conn' || f.category === 'tht' ? 'connector' : 'ic';
-    const r: ComponentSearchResult = {
-      componentId: `fp_${f.footprintId}_${Date.now()}`,
-      mpn: f.name, manufacturer: '—', category: cat2 as ComponentSearchResult['category'],
-      defaultFootprintName: f.name, family: 'Footprint', description: `封装占位：${f.name}（来源 ${f.source}）`,
-      pins: f.geometry.padCount,
-    };
-    addComponent(r);
-  };
-
   return (
     <div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-        {FOOTPRINT_CATEGORIES.map((c) => (
-          <button key={c.id} onClick={() => setCat(cat === c.id ? null : c.id)}
-            style={{ padding: '4px 10px', borderRadius: 16, fontSize: 11, fontWeight: 600, cursor: 'pointer', border: `1px solid ${cat === c.id ? COLORS.green : '#dbe6dd'}`, background: cat === c.id ? COLORS.greenBg : '#fff', color: cat === c.id ? COLORS.green : '#64748b' }}>
-            {c.icon} {tr(c.name)}
-          </button>
-        ))}
-      </div>
-      <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 8 }}>{tr('共')} {list.length} {tr('个封装 · 点击 + 直接放到画布')}</div>
       {/* KiCad 官方库：一万多个封装按需拉取 */}
       <div style={{ marginBottom: 10, borderRadius: 10, border: '1px solid #e2e8f0', background: '#fff', overflow: 'hidden' }}>
         <div onClick={() => { setKlOpen(!klOpen); if (!klOpen) klLoadLibs(); }}
@@ -134,15 +108,6 @@ export function FootprintLibraryPanel() {
           </div>
         )}
       </div>
-      {list.map((f) => (
-        <div key={f.footprintId} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', marginBottom: 6, borderRadius: 8, border: '1px solid #e5e7eb', background: '#fff' }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{f.name}</div>
-            <div style={{ fontSize: 10, color: '#94a3b8' }}>{f.source} · {f.geometry.padCount}{tr('脚')} · {f.geometry.bodyWidthMm}×{f.geometry.bodyHeightMm}mm</div>
-          </div>
-          <button onClick={() => addFootprint(f)} style={{ width: 26, height: 26, borderRadius: 6, border: 'none', background: COLORS.green, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>+</button>
-        </div>
-      ))}
     </div>
   );
 }

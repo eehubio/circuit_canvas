@@ -2,7 +2,6 @@
  * modules/component-search/ComponentSearchPanel.tsx
  * 元器件搜索面板 —— 通过 ComponentDataProvider 检索，结果加入画布。
  */
-import { MOCK_COMPONENTS } from '../../providers/mock/data';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { getProviders } from '../../providers/factory';
 import { searchEzplmParts, ezplmLiveAvailable } from '../../providers/ezplm-live';
@@ -57,8 +56,7 @@ export function ComponentSearchPanel() {
         return;
       }
     }
-    // 任何模式下（demo/standalone/integrated）默认目录都不允许为空：
-    // provider 失败或空关键词无结果时，回退内置常用件目录（阻容感/LED/排针等）
+    // 型号搜索专注 ezPLM 库；通用封装从「KiCad封装库」tab 取
     let res: { items: ComponentSearchResult[] };
     try {
       res = await providers.components.searchComponents({ keyword, category: category ?? undefined, orgOnly }, ctx);
@@ -66,13 +64,6 @@ export function ComponentSearchPanel() {
       res = { items: [] };
     }
     if (seq !== searchSeq.current) return;
-    if (!res.items.length && !orgOnly) {
-      const kw = keyword.trim().toLowerCase();
-      const fallback = MOCK_COMPONENTS.filter((c) =>
-        (!category || c.category === category) &&
-        (!kw || c.mpn.toLowerCase().includes(kw) || (c.description ?? '').toLowerCase().includes(kw)));
-      if (fallback.length) { setResults(fallback as unknown as ComponentSearchResult[]); return; }
-    }
     setResults(res.items);
   }, [keyword, category, orgOnly]);
 
@@ -104,6 +95,11 @@ export function ComponentSearchPanel() {
       <input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder={t('搜索型号、封装、关键词...')}
         style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid #dbe6dd', fontSize: 13, outline: 'none', boxSizing: 'border-box', marginBottom: 10 }} />
       <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 8 }}>{t('找到')} {results.length} {t('个结果')}</div>
+      {results.length === 0 && keyword.trim() === '' && (
+        <div style={{ padding: '14px 12px', borderRadius: 8, background: '#f8fafc', border: '1px dashed #e2e8f0', fontSize: 11, color: '#94a3b8', textAlign: 'center' }}>
+          {tr('输入型号/关键词检索 ezPLM 实时库；通用封装请用「KiCad封装库」tab')}
+        </div>
+      )}
       {results.length === 0 && keyword.trim() !== '' && (
         <div style={{ padding: '10px 12px', borderRadius: 8, background: searchErr === 'network' ? '#fef2f2' : '#fffbeb', border: `1px solid ${searchErr === 'network' ? '#fecaca' : '#fde68a'}`, fontSize: 11, color: searchErr === 'network' ? '#b91c1c' : '#92400e', marginBottom: 8 }}>
           {searchErr === 'network'

@@ -234,13 +234,14 @@ function ComponentGlyph({ comp, selected, multi, overlap, inactive, hideRefDes, 
     const copper = isBottom ? '#3b82c4' : '#c08a2d';
     const copperStroke = isBottom ? '#1d4e8a' : '#8a6420';
     const bodyStroke = overlap ? '#ef4444' : selected ? '#2563eb' : isBottom ? '#3b82c4' : disp.color;
-    const halfW = (Math.max(...pads.pads.map((p) => Math.abs(p.x) + p.w / 2), pads.bodyW / 2)) * PX_PER_MM;
-    const halfH = (Math.max(...pads.pads.map((p) => Math.abs(p.y) + p.h / 2), pads.bodyH / 2)) * PX_PER_MM;
+    const bcx = (pads.bodyCx ?? 0) * PX_PER_MM, bcy = (pads.bodyCy ?? 0) * PX_PER_MM;
+    const halfW = (Math.max(...pads.pads.map((p) => Math.abs(p.x) + p.w / 2), Math.abs(pads.bodyCx ?? 0) + pads.bodyW / 2)) * PX_PER_MM;
+    const halfH = (Math.max(...pads.pads.map((p) => Math.abs(p.y) + p.h / 2), Math.abs(pads.bodyCy ?? 0) + pads.bodyH / 2)) * PX_PER_MM;
     return (
       <g transform={`translate(${cx},${cy}) rotate(${rot})${isBottom ? ' scale(-1,1)' : ''}`} opacity={inactive ? 0.35 : 1}
         onMouseDown={onMouseDown} onClick={(e) => e.stopPropagation()} style={{ cursor: 'grab' }}>
         {(selected || multi) && <rect x={-halfW - 4} y={-halfH - 4} width={halfW * 2 + 8} height={halfH * 2 + 8} rx={3} fill="none" stroke={multi ? '#f59e0b' : '#2563eb'} strokeWidth={1.5} strokeDasharray="5 3" />}
-        <rect x={-pads.bodyW * PX_PER_MM / 2} y={-pads.bodyH * PX_PER_MM / 2} width={pads.bodyW * PX_PER_MM} height={pads.bodyH * PX_PER_MM} rx={2}
+        <rect x={bcx - pads.bodyW * PX_PER_MM / 2} y={bcy - pads.bodyH * PX_PER_MM / 2} width={pads.bodyW * PX_PER_MM} height={pads.bodyH * PX_PER_MM} rx={2}
           fill={overlap ? 'rgba(239,68,68,.06)' : 'rgba(148,163,184,.08)'} stroke={bodyStroke} strokeWidth={selected ? 1.4 : 0.9} />
         {pads.pads.map((p, i) => (
           <rect key={i} x={(p.x - p.w / 2) * PX_PER_MM} y={(p.y - p.h / 2) * PX_PER_MM} width={p.w * PX_PER_MM} height={p.h * PX_PER_MM}

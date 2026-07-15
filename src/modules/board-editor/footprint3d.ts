@@ -146,6 +146,8 @@ function makeFromPads(fp: import('../../design-core/geometry/footprint-pads').Pa
   const isBall = fp.pads.every((p) => p.round) && /(WLCSP|BGA|CSP)/.test(N);
   const bodyT = isBall ? 0.6 : /(QFN|DFN|SON)/.test(N) ? 0.9 : 1.2;
   const body = new THREE.Mesh(new THREE.BoxGeometry(fp.bodyW, bodyT, fp.bodyH), MAT.blackBody);
+  body.position.x = fp.bodyCx ?? 0;
+  body.position.z = fp.bodyCy ?? 0;
   body.position.y = bodyT / 2 + (isBall ? 0.3 : 0.06);
   g.add(body);
   // 引脚1凹点

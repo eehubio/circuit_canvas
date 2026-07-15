@@ -30,6 +30,11 @@ export const useLangStore = create<LangState>((set) => ({
 
 /* ───────────── 固定文案词典（key = 中文原文） ───────────── */
 const DICT: Record<string, string> = {
+  'KiCad封装库': 'KiCad Footprints', '尚未关联原理图符号': 'No schematic symbol linked yet',
+  '用上方「从 ezPLM 库关联」/「KiCad 符号库」/「创建」赋予真实符号': 'Link one via ezPLM / KiCad symbol library / Create above',
+  'KiCad 官方符号库': 'KiCad Official Symbol Libraries', '选择符号库…': 'Select a symbol library…', '筛选符号名…': 'Filter symbols…',
+  '符号解析失败': 'symbol parse failed', '已关联符号': 'symbol linked:',
+  '输入型号/关键词检索 ezPLM 实时库；通用封装请用「KiCad封装库」tab': 'Search the ezPLM live library by MPN/keyword; for generic footprints use the KiCad Footprints tab',
   'KiCad 官方封装库': 'KiCad Official Footprint Libraries',
   '来源 gitlab.com/kicad/libraries · 按需拉取封装与 3D，不占本地空间': 'From gitlab.com/kicad/libraries · footprints & 3D fetched on demand',
   '加载库列表…': 'Loading libraries…', '选择封装库…': 'Select a library…', '在库内筛选封装名…': 'Filter footprints in library…',

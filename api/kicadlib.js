@@ -16,6 +16,8 @@ const GL_API = 'https://gitlab.com/api/v4/projects';
 const FP_PROJECT = encodeURIComponent('kicad/libraries/kicad-footprints');
 const P3D_RAW = 'https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/master';
 const FP_RAW = 'https://gitlab.com/kicad/libraries/kicad-footprints/-/raw/master';
+const SYM_PROJECT = encodeURIComponent('kicad/libraries/kicad-symbols');
+const SYM_RAW = 'https://gitlab.com/kicad/libraries/kicad-symbols/-/raw/master';
 
 const SAFE = /^[A-Za-z0-9._\-]+$/; // 库名/封装名白名单（防路径穿越）
 const cache = new Map(); // key → { at, data }
@@ -24,6 +26,31 @@ const TTL = 60 * 60 * 1000;
 function getCached(key) {
   const hit = cache.get(key);
   return hit && Date.now() - hit.at < TTL ? hit.data : null;
+}
+
+/** 从 .kicad_sym 全文提取顶层 (symbol "NAME" …) 平衡括号块 */
+function extractSymbolBlock(text, name) {
+  const needle = `(symbol "${name}"`;
+  const i = text.indexOf(needle);
+  if (i < 0) return null;
+  let depth = 0;
+  for (let j = i; j < text.length; j++) {
+    if (text[j] === '(') depth++;
+    else if (text[j] === ')') { depth--; if (depth === 0) return text.slice(i, j + 1); }
+  }
+  return null;
+}
+
+async function symLibText(lib) {
+  const key = `symfile:${lib}`;
+  let data = getCached(key);
+  if (!data) {
+    const r = await fetch(`${SYM_RAW}/${lib}.kicad_sym`, { headers: { 'User-Agent': 'circuit-canvas' } });
+    if (!r.ok) throw new Error(`symbol lib ${r.status}`);
+    data = await r.text();
+    cache.set(key, { at: Date.now(), data });
+  }
+  return data;
 }
 
 async function glTree(path) {
@@ -89,6 +116,71 @@ export default async function handler(req, res) {
       res.setHeader('Content-Type', 'application/octet-stream');
       res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=604800');
       return res.status(200).send(buf);
+    }
+
+    if (path === 'symlibs') {
+      let data = getCached('symlibs');
+      if (!data) {
+        // 符号库是根目录下的 *.kicad_sym 单文件
+        const out = [];
+        for (let page = 1; page <= 10; page++) {
+          const r = await fetch(`${GL_API}/${SYM_PROJECT}/repository/tree?per_page=100&page=${page}&ref=master`, { headers: { 'User-Agent': 'circuit-canvas' } });
+          if (!r.ok) throw new Error(`GitLab API ${r.status}`);
+          const items = await r.json();
+          out.push(...items);
+          if (items.length < 100) break;
+        }
+        data = out.filter((t) => t.type === 'blob' && t.name.endsWith('.kicad_sym')).map((t) => t.name.replace(/\.kicad_sym$/, ''));
+        cache.set('symlibs', { at: Date.now(), data });
+      }
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
+      return res.status(200).send(JSON.stringify({ libs: data }));
+    }
+
+    if (path === 'symlist') {
+      if (!SAFE.test(String(lib))) return res.status(400).send(JSON.stringify({ error: 'bad lib' }));
+      const key = `symlist:${lib}`;
+      let data = getCached(key);
+      if (!data) {
+        const text = await symLibText(lib);
+        // 顶层符号名（排除 _N_M 子单元定义）
+        data = [...text.matchAll(/\(symbol "([^"]+)"/g)].map((m) => m[1]).filter((n) => !/_\d+_\d+$/.test(n));
+        data = [...new Set(data)];
+        cache.set(key, { at: Date.now(), data });
+      }
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
+      return res.status(200).send(JSON.stringify({ items: data }));
+    }
+
+    if (path === 'sym') {
+      if (!SAFE.test(String(lib))) return res.status(400).send(JSON.stringify({ error: 'bad lib' }));
+      const text = await symLibText(lib);
+      let block = extractSymbolBlock(text, String(name));
+      if (!block) return res.status(404).send(JSON.stringify({ error: 'symbol not found' }));
+      // 一层 extends 继承：几何在父符号里，把父块的子单元拼进来
+      const ext = block.match(/\(extends "([^"]+)"\)/);
+      if (ext) {
+        const parent = extractSymbolBlock(text, ext[1]);
+        if (parent) {
+          // 取父块中的子 symbol 定义（单元几何），重命名前缀为子符号名
+          const units = [];
+          const re = new RegExp(`\\(symbol "${ext[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_(\\d+_\\d+)"`, 'g');
+          let m;
+          while ((m = re.exec(parent))) {
+            let depth = 0;
+            for (let j = m.index; j < parent.length; j++) {
+              if (parent[j] === '(') depth++;
+              else if (parent[j] === ')') { depth--; if (depth === 0) { units.push(parent.slice(m.index, j + 1).replace(new RegExp(`"${ext[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_`, 'g'), `"${name}_`)); break; } }
+            }
+          }
+          if (units.length) block = block.replace(/\)\s*$/, '\n' + units.join('\n') + ')');
+        }
+      }
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=604800');
+      return res.status(200).send(`(kicad_symbol_lib ${block})`);
     }
 
     return res.status(400).send(JSON.stringify({ error: 'unknown path' }));

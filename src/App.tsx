@@ -23,7 +23,8 @@ import { CustomPartWizard } from './modules/component-search/CustomPartWizard';
 import { loadCustomParts, deleteCustomPart, customPartToResult, bootCustomLib, type CustomPart } from './design-core/custom-lib';
 import { parseKicadPcb } from './design-core/geometry/kicad-pcb-import';
 import { useT, useLangStore, useTranslated, tr } from './shared/i18n';
-import { registerFootprintOverride } from './design-core/geometry/lib-file-registry';
+import { registerFootprintOverride, registerSymbolOverride } from './design-core/geometry/lib-file-registry';
+import { parseKicadSym } from './design-core/geometry/lib-file-registry';
 import type { PlacedComponent as PlacedComponentT } from './design-core/document/types';
 import { BoardCanvas2D } from './modules/board-editor/BoardCanvas2D';
 import { BoardView3D } from './modules/board-editor/BoardView3D';
@@ -259,7 +260,7 @@ export default function App() {
               </button>
             </div>
             <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
-              {([['model', '🔍 ' + t('型号搜索')], ['footprint', '📦 ' + t('封装库')], ['custom', '🛠 ' + t('定制模块')]] as const).map(([id, label]) => (
+              {([['model', '🔍 ' + t('型号搜索')], ['footprint', '📦 ' + t('KiCad封装库')], ['custom', '🛠 ' + t('定制模块')]] as const).map(([id, label]) => (
                 <button key={id} onClick={() => setLeftTab(id)} style={{ flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 700, cursor: 'pointer', border: `1px solid ${leftTab === id ? COLORS.green : '#dbe6dd'}`, borderRadius: 8, background: leftTab === id ? COLORS.greenBg : '#fff', color: leftTab === id ? COLORS.green : '#64748b' }}>{label}</button>
               ))}
             </div>
@@ -789,6 +790,41 @@ function FootprintPartEditor({ c, onBuild }: { c: PlacedComponentT; onBuild?: (m
       setResults(r.items); setBusy(false);
     }, 250);
   }, []);
+  // ── KiCad 官方符号库选择 ──
+  const [ksOpen, setKsOpen] = useState(false);
+  const [ksLibs, setKsLibs] = useState<string[]>([]);
+  const [ksLib, setKsLib] = useState('');
+  const [ksItems, setKsItems] = useState<string[]>([]);
+  const [ksKw, setKsKw] = useState('');
+  const [ksMsg, setKsMsg] = useState('');
+  const ksToggle = async () => {
+    setKsOpen(!ksOpen);
+    if (!ksOpen && !ksLibs.length) {
+      try { const j = await fetch('/api/kicadlib?path=symlibs').then((r) => r.json()); setKsLibs(j.libs ?? []); }
+      catch { setKsMsg(tr('网络错误，无法访问 KiCad 官方库')); }
+    }
+  };
+  const ksPickLib = async (lib: string) => {
+    setKsLib(lib); setKsItems([]); setKsKw(''); setKsMsg('');
+    if (!lib) return;
+    try { const j = await fetch(`/api/kicadlib?path=symlist&lib=${encodeURIComponent(lib)}`).then((r) => r.json()); setKsItems(j.items ?? []); }
+    catch { setKsMsg(tr('网络错误，无法访问 KiCad 官方库')); }
+  };
+  const ksPick = async (name: string) => {
+    setKsMsg('');
+    try {
+      const text = await fetch(`/api/kicadlib?path=sym&lib=${encodeURIComponent(ksLib)}&name=${encodeURIComponent(name)}`).then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.text(); });
+      const parsed = parseKicadSym(text);
+      if (!parsed || !parsed.pins.length) throw new Error(tr('符号解析失败'));
+      const key = `KICADSYM:${ksLib}:${name}`;
+      registerSymbolOverride(key, parsed);
+      linkSymbol(c.instanceId, { mpn: key });
+      setKsMsg(`✓ ${tr('已关联符号')} ${name}`);
+      setKsOpen(false);
+    } catch (e) { setKsMsg(tr('添加失败：') + (e as Error).message); }
+  };
+  const ksFiltered = ksKw.trim() ? ksItems.filter((n) => n.toLowerCase().includes(ksKw.trim().toLowerCase())) : ksItems;
+
   const openMode = (m: 'full' | 'symbol' | 'footprint') => {
     const next = mode === m ? null : m;
     setMode(next);
@@ -845,6 +881,32 @@ function FootprintPartEditor({ c, onBuild }: { c: PlacedComponentT; onBuild?: (m
                 </div>
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* KiCad 官方符号库：为占位器件挑一个真实原理图符号 */}
+      <div style={{ marginTop: 8, padding: 8, borderRadius: 6, background: '#fff', border: '1px solid #bae6fd' }}>
+        <div onClick={ksToggle} style={{ fontSize: 10, fontWeight: 700, color: '#0369a1', cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}>
+          <span>📐 {tr('KiCad 官方符号库')}</span><span>{ksOpen ? '▾' : '▸'}</span>
+        </div>
+        {ksOpen && (
+          <div style={{ marginTop: 6 }}>
+            {ksLibs.length > 0 && (
+              <select value={ksLib} onChange={(e) => ksPickLib(e.target.value)} style={{ width: '100%', padding: '5px 8px', borderRadius: 5, border: '1px solid #e0f2fe', fontSize: 11, marginBottom: 5, boxSizing: 'border-box' }}>
+                <option value="">{tr('选择符号库…')}（{ksLibs.length}）</option>
+                {ksLibs.map((l) => <option key={l} value={l}>{l}</option>)}
+              </select>
+            )}
+            {ksLib && <input value={ksKw} onChange={(e) => setKsKw(e.target.value)} placeholder={tr('筛选符号名…')}
+              style={{ width: '100%', padding: '5px 8px', borderRadius: 5, border: '1px solid #e0f2fe', fontSize: 11, marginBottom: 5, boxSizing: 'border-box', outline: 'none' }} />}
+            <div style={{ maxHeight: 150, overflow: 'auto' }}>
+              {ksFiltered.slice(0, 100).map((n) => (
+                <div key={n} onClick={() => ksPick(n)}
+                  style={{ padding: '4px 8px', marginBottom: 3, borderRadius: 5, background: '#f0f9ff', fontSize: 10.5, fontFamily: 'monospace', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={n}>{n}</div>
+              ))}
+            </div>
+            {ksMsg && <div style={{ fontSize: 10, color: ksMsg.startsWith('✓') ? '#16a34a' : '#b91c1c', marginTop: 4 }}>{ksMsg}</div>}
           </div>
         )}
       </div>

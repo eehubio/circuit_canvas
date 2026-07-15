@@ -227,6 +227,10 @@ export function symbolFor(c: PlacedComponent): SymbolDef {
   if (c.customSymbolSvg) return customSvgSymbol(c.customSymbolSvg);
   // ezPLM 真实符号文件解析结果优先（真实引脚名）
   const symKey = c.display?.symbolFromMpn ?? c.mpn; // 仅关联符号时借用库中型号的符号
+  // 封装占位器件：没有真实管脚定义，画电阻/IC 都是误导 —— 显式空态，引导去关联
+  if (c.display?.family === 'Footprint' && !c.customSymbolSvg && !symbolOverrideFor(symKey)) {
+    return unlinkedSymbol();
+  }
   const parsed = symbolOverrideFor(symKey);
   if (parsed) return parsedSymbol(parsed);
   // ezPLM 实时物料：族/引脚名未知，按真实引脚数生成编号符号（不套内置模板）
@@ -289,4 +293,20 @@ export function symbolUnitsFor(c: PlacedComponent): SymbolDef[] {
     if (units && units.length > 1) return units.map(parsedSymbol);
   }
   return [symbolFor(c)];
+}
+
+/** 未关联符号的占位：虚线框 + 提示（在详情面板关联 ezPLM / KiCad 符号 / 创建后替换） */
+function unlinkedSymbol(): SymbolDef {
+  const w = 120, h = 50;
+  return {
+    w, h, ports: [], stubLen: 0,
+    render: (ref) => (
+      <g>
+        <rect x={0} y={0} width={w} height={h} rx={6} fill="#f8fafc" stroke="#cbd5e1" strokeWidth={1.2} strokeDasharray="5 4" />
+        <text x={w / 2} y={h / 2 - 4} textAnchor="middle" fontSize={9} fill="#94a3b8">{'\u672a\u5173\u8054\u7b26\u53f7'}</text>
+        <text x={w / 2} y={h / 2 + 8} textAnchor="middle" fontSize={7.5} fill="#cbd5e1">{'\u5728\u53f3\u4fa7\u5173\u8054\u5668\u4ef6 / \u7b26\u53f7'}</text>
+        <text x={w / 2} y={-4} textAnchor="middle" fontSize={9} fontWeight={700} fill="#0e7490" fontFamily="monospace">{ref}</text>
+      </g>
+    ),
+  };
 }
