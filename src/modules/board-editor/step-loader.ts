@@ -40,6 +40,17 @@ const modelCache = new Map<string, THREE.Group>(); // key: stepUrl
 const bytesCache = new Map<string, Uint8Array>();   // 预取的文件字节（规避签名链接过期）
 const inflight = new Set<string>();
 const failed = new Set<string>();
+const failReason = new Map<string, string>();
+const failAt = new Map<string, number>();
+/** 拉取类失败 60s 可重试（部署修复/网络恢复后无需刷新页面）；解析类失败永久 */
+function failExpired(url: string): boolean {
+  const at = failAt.get(url);
+  const reason = failReason.get(url) ?? '';
+  return at != null && !reason.includes('解析') && Date.now() - at > 60_000;
+}
+export function stepFailReasonFor(url: string | undefined): string | undefined {
+  return url ? failReason.get(url) : undefined;
+}
 let lastError = '';
 
 /** 单个 STEP 链接的状态（详情面板 3D 预览用） */
@@ -74,7 +85,11 @@ export function stepModelFor(url: string | undefined): THREE.Group | undefined {
 
 /** 按需拉取并转换 STEP（幂等）；完成后 bump 版本触发 3D 重建 */
 export function ensureStepModel(url: string | undefined) {
-  if (!url || modelCache.has(url) || inflight.has(url) || failed.has(url)) return;
+  if (!url || modelCache.has(url) || inflight.has(url)) return;
+  if (failed.has(url)) {
+    if (!failExpired(url)) return;
+    failed.delete(url); failReason.delete(url); failAt.delete(url); // 到期重试
+  }
   inflight.add(url);
   useLibFileStore.getState().bump(); // 让「转换中」状态可见
   (async () => {
@@ -85,6 +100,11 @@ export function ensureStepModel(url: string | undefined) {
         if (!resp.ok) throw new Error(`文件拉取失败 HTTP ${resp.status}（签名链接可能已过期，重新搜索该器件可刷新）`);
         buf = new Uint8Array(await resp.arrayBuffer());
         if (buf.length > 0 && buf[0] === 0x7b) throw new Error('代理返回错误: ' + new TextDecoder().decode(buf.slice(0, 120)));
+      }
+      {
+        const head = new TextDecoder().decode(buf.slice(0, 60));
+        if (head.startsWith('version https://git-lfs')) throw new Error('拿到的是 Git LFS 指针而非模型——服务端代理未部署最新版（api/kicadlib.js 的 LFS 解析）');
+        if (!/ISO-10303/.test(head)) throw new Error('内容不是 STEP 格式（' + head.slice(0, 30).replace(/\s+/g, ' ') + '…）');
       }
       const occt = await getOcct().catch((e) => { throw new Error('WASM 引擎加载失败: ' + String(e).slice(0, 120)); });
       const result = occt.ReadStepFile(buf, null);
@@ -150,6 +170,8 @@ export function ensureStepModel(url: string | undefined) {
     } catch (e) {
       failed.add(url);
       lastError = String(e instanceof Error ? e.message : e).slice(0, 160);
+      failReason.set(url, lastError);
+      failAt.set(url, Date.now());
       console.warn('[step] STEP 模型加载失败，使用参数化模型:', url.slice(0, 80), lastError);
       useLibFileStore.getState().bump(); // 失败状态也要驱动 UI 更新
     } finally {

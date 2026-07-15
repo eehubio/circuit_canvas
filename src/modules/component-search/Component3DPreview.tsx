@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { PlacedComponent } from '../../design-core/document/types';
 import { buildComponent3D } from '../board-editor/footprint3d';
-import { stepStatusFor } from '../board-editor/step-loader';
+import { stepStatusFor, stepFailReasonFor } from '../board-editor/step-loader';
 import { useLibFileStore } from '../../design-core/geometry/lib-file-registry';
 
 export function Component3DPreview({ c }: { c: PlacedComponent }) {
@@ -137,7 +137,7 @@ export function Component3DPreview({ c }: { c: PlacedComponent }) {
   const st = stepStatusFor(c.display?.stepUrl);
   const label = st === 'ready' ? [tr('ezPLM 真实 STEP 模型 ✓'), '#166534', '#dcfce7']
     : st === 'loading' ? [tr('STEP 转换中…（首次需下载 3D 引擎）· 暂为参数化'), '#854d0e', '#fef9c3']
-    : st === 'failed' ? [tr('STEP 转换失败 · 参数化预览'), '#991b1b', '#fee2e2']
+    : st === 'failed' ? [tr('STEP 失败') + '：' + (stepFailReasonFor(c.display?.stepUrl)?.slice(0, 60) ?? '未知') + ' · ' + tr('参数化预览'), '#991b1b', '#fee2e2']
     : c.display?.stepUrl ? [tr('准备转换 STEP…'), '#854d0e', '#fef9c3']
     : [tr('参数化 3D 预览'), '#64748b', '#f1f5f9'];
 
