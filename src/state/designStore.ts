@@ -103,7 +103,7 @@ export const useDesignStore = create<DesignState>()(
     addComponent: (r) =>
       set((s) => {
         snapshot(s);
-        const placed = searchResultToPlaced(r, nextReference(r.category, s.doc.components));
+        const placed = searchResultToPlaced(r, nextReference(r, s.doc.components));
         placed.placement.side = s.activeLayer;
         // 只与同层器件避让
         const sameLayer = s.doc.components.filter((c) => c.placement.side === s.activeLayer);
@@ -369,7 +369,7 @@ export const useDesignStore = create<DesignState>()(
         if (intent) s.doc.designIntent = { ...intent, generatedAt: new Date().toISOString() };
         let placed: PlacedComponent[] = [];
         for (const r of results) {
-          const p = searchResultToPlaced(r, nextReference(r.category, placed));
+          const p = searchResultToPlaced(r, nextReference(r, placed));
           placed.push(p);
         }
         placed = autoPlaceAll(placed, s.doc.board, DEFAULT_PLACEMENT_RULES);

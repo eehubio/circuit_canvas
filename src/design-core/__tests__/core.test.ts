@@ -83,8 +83,11 @@ describe('design review', () => {
     expect(titles.some((t) => t.includes('电源'))).toBe(true);
   });
 
-  it('nextReference increments per category', () => {
+  it('nextReference 按 KiCad 习惯编号', () => {
     const placed = [searchResultToPlaced(asResult('cap100nf'), 'C1')];
-    expect(nextReference('passive', placed)).toBe('C2');
+    // 电容按关键词 → C 序列递增
+    expect(nextReference({ category: 'passive', mpn: 'CAP-1uF' }, placed)).toBe('C2');
+    // 电阻按关键词 → R 序列独立起步
+    expect(nextReference({ category: 'passive', mpn: 'RES-10KΩ' }, placed)).toBe('R1');
   });
 });
