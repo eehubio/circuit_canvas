@@ -59,6 +59,8 @@ interface DesignState {
   /** 工程导入：按位号批量挂载原理图符号，返回命中数 */
   assignSymbolsByReference: (map: Record<string, string>) => number;
   setSchematicSheet: (sheet: CircuitCanvasDocument['schematicSheet']) => void;
+  /** 给全部同封装且尚无 3D 的器件挂 stepUrl（无源器件自动关联 KiCad 官方库用） */
+  setStepUrlByFootprint: (footprintName: string, stepUrl: string) => void;
   /** 仅关联 PCB 封装（借用库中器件的封装，型号/符号不变） */
   linkFootprintFrom: (instanceId: string, src: { footprintName: string; footprintFileUrl?: string; stepUrl?: string; pins?: number }) => void;
   select: (id: string | null) => void;
@@ -285,6 +287,17 @@ export const useDesignStore = create<DesignState>()(
         s.doc = touchDocument(s.doc);
       }),
 
+    setStepUrlByFootprint: (footprintName, stepUrl) =>
+      set((s) => {
+        let hit = false;
+        for (const c of s.doc.components) {
+          if (c.footprint.name !== footprintName || c.display?.stepUrl) continue;
+          c.display = { ...(c.display ?? {}), stepUrl };
+          hit = true;
+        }
+        if (hit) s.doc = touchDocument(s.doc);
+      }),
+
     setSchematicSheet: (sheet) =>
       set((s) => {
         s.doc.schematicSheet = sheet;
@@ -338,10 +351,16 @@ export const useDesignStore = create<DesignState>()(
       set((s) => {
         snapshot(s);
         s.doc.components = [];
+        // 清画布 = 清整个设计上下文：框图、连接、导入的原理图原样视图一并清空
+        s.doc.functionalBlocks = [];
+        s.doc.connections = [];
+        s.doc.schematicSheet = undefined;
         s.doc = touchDocument(refreshDerived(s.doc));
         s.selectedId = null;
         s.multiSel = [];
         s.overlaps = new Set();
+        // 原理图编辑状态（位置/连线）同步复位
+        import('../modules/schematic/schematicStore').then((m) => m.useSchematicStore.getState().reset()).catch(() => { /* 忽略 */ });
       }),
 
     placeScheme: (results, intent) =>

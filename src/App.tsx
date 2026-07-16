@@ -23,6 +23,7 @@ import { CustomPartWizard } from './modules/component-search/CustomPartWizard';
 import { loadCustomParts, deleteCustomPart, customPartToResult, bootCustomLib, type CustomPart } from './design-core/custom-lib';
 import { parseKicadPcb } from './design-core/geometry/kicad-pcb-import';
 import { parseKicadSch } from './design-core/geometry/kicad-sch-import';
+import { autoKicadFootprint } from './design-core/geometry/auto-kicad-footprint';
 import { useT, useLangStore, useTranslated, tr } from './shared/i18n';
 import { registerFootprintOverride, registerSymbolOverride, symbolOverrideFor } from './design-core/geometry/lib-file-registry';
 import { parseKicadSym } from './design-core/geometry/lib-file-registry';
@@ -122,6 +123,29 @@ export default function App() {
   const [linkKw, setLinkKw] = useState('');
   const [linkResults, setLinkResults] = useState<Awaited<ReturnType<typeof searchEzplmParts>>['items']>([]);
   const [linkBusy, setLinkBusy] = useState(false);
+  const [linkIsRec, setLinkIsRec] = useState(false); // 当前结果是否为自动推荐
+
+  /** 智能推荐：AI 型号逐级截短检索（GD32F103C8T6 → GD32F103C8 → GD32F103 → GD32），
+   *  再叠加封装关键词，并集去重取前 6 —— "不能精准匹配"的也给出近似候选 */
+  const autoRecommend = async (mpn: string, footprint?: string) => {
+    setLinkBusy(true); setLinkIsRec(true);
+    const seen = new Set<string>();
+    const out: typeof linkResults = [];
+    const tryKw = async (kw: string) => {
+      if (!kw || kw.length < 3 || out.length >= 6) return;
+      const r = await searchEzplmParts(kw, 6).catch(() => ({ available: false, items: [] as typeof linkResults }));
+      for (const it of r.items) {
+        if (seen.has(it.componentId) || out.length >= 6) continue;
+        seen.add(it.componentId); out.push(it);
+      }
+    };
+    const stem = mpn.replace(/[^A-Za-z0-9]/g, '');
+    const cuts = [mpn, stem, stem.slice(0, 10), stem.slice(0, 8), stem.slice(0, 6), stem.slice(0, 4)];
+    for (const c of [...new Set(cuts)]) { await tryKw(c); if (out.length >= 4) break; }
+    if (footprint && out.length < 6) await tryKw(footprint.split('_')[0].split('-')[0]);
+    setLinkResults(out);
+    setLinkBusy(false);
+  };
   const linkSeq = useRef(0);
   /** 关联搜索（防抖 250ms + 序号守卫，避免旧响应覆盖新结果） */
   const searchLink = useCallback((kw: string) => {
@@ -205,11 +229,25 @@ export default function App() {
     const details = coreOnly ? aiProposal.details.filter((x) => x.category !== 'passive') : aiProposal.details;
     placeScheme(details, { requirement: aiPrompt, rationale: aiProposal.rationale });
     setAiProposal(null);
+    // 无源器件/连接器：ezPLM 未收录 → 异步按封装名自动关联 KiCad 官方库（精确焊盘 + 真实 3D）
+    setTimeout(() => {
+      const comps = useDesignStore.getState().doc.components;
+      const seen = new Set<string>();
+      for (const c of comps) {
+        if (!['passive', 'connector', 'electromech'].includes(c.category)) continue;
+        if (c.display?.stepUrl || c.display?.footprintFileUrl) continue;
+        const fp = c.footprint.name;
+        if (seen.has(fp)) continue;
+        seen.add(fp);
+        autoKicadFootprint(fp).then((stepUrl) => { if (stepUrl) setStepUrlByFootprint(fp, stepUrl); }).catch(() => { /* 兜底参数化 */ });
+      }
+    }, 50);
   };
 
   const importKicad = useDesignStore((s) => s.importKicad);
   const assignSymbolsByReference = useDesignStore((s) => s.assignSymbolsByReference);
   const setSchematicSheet = useDesignStore((s) => s.setSchematicSheet);
+  const setStepUrlByFootprint = useDesignStore((s) => s.setStepUrlByFootprint);
   const importPcbText = (text: string): { comps: number; skipped: number } => {
     const data = parseKicadPcb(text);
     // 注册 PCB 内嵌封装定义 → 导入器件焊盘精确、3D 按真实焊盘构建
@@ -490,7 +528,7 @@ export default function App() {
                       <button onClick={() => {
                         const open = linkRow === d.componentId;
                         setLinkRow(open ? null : d.componentId);
-                        if (!open) { setLinkKw(d.mpn); setLinkResults([]); searchLink(d.mpn); }
+                        if (!open) { setLinkKw(''); setLinkResults([]); autoRecommend(d.mpn, (d as { footprintName?: string; defaultFootprintName?: string }).footprintName ?? (d as { defaultFootprintName?: string }).defaultFootprintName); }
                       }}
                         title="在 ezPLM 库中搜索并关联到真实器件"
                         style={{ border: '1px solid #bae6fd', background: '#f0f9ff', color: '#0369a1', borderRadius: 5, padding: '2px 8px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>🔗 {tr('关联库器件')}</button>
@@ -506,10 +544,13 @@ export default function App() {
                   {linkRow === d.componentId && (
                     <div style={{ marginTop: 6, padding: 8, borderRadius: 6, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
                       <input autoFocus placeholder={tr('搜索 ezPLM 型号…')} value={linkKw}
-                        onChange={(e) => { setLinkKw(e.target.value); searchLink(e.target.value); }}
+                        onChange={(e) => { setLinkKw(e.target.value); setLinkIsRec(false); searchLink(e.target.value); }}
                         style={{ width: '100%', padding: '5px 8px', borderRadius: 5, border: '1px solid #e2e8f0', fontSize: 11, outline: 'none', boxSizing: 'border-box' }} />
                       {linkBusy && <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>{tr('搜索中…')}</div>}
-                      {!linkBusy && linkKw.trim() && !linkResults.length && <div style={{ fontSize: 10, color: '#b45309', marginTop: 4 }}>ezPLM 库中无匹配 —— 可点「🛠 创建」自行构建该器件</div>}
+                      {!linkBusy && linkResults.length > 0 && linkIsRec && !linkKw.trim() && (
+                        <div style={{ fontSize: 10, color: '#0369a1', marginTop: 4, fontWeight: 700 }}>💡 {tr('按型号词干与封装找到的近似料，点击选用：')}</div>
+                      )}
+                      {!linkBusy && (linkKw.trim() || linkIsRec) && !linkResults.length && <div style={{ fontSize: 10, color: '#b45309', marginTop: 4 }}>ezPLM 库中无匹配 —— 可点「🛠 创建」自行构建该器件</div>}
                       {linkResults.map((r) => (
                         <div key={r.componentId} onClick={() => {
                           setAiProposal({ ...aiProposal, details: aiProposal.details.map((x) => x.componentId === d.componentId ? ({ ...r, mapSource: 'ezPLM云端' } as unknown as typeof x) : x) });

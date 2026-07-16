@@ -30,6 +30,7 @@ export const useLangStore = create<LangState>((set) => ({
 
 /* ───────────── 固定文案词典（key = 中文原文） ───────────── */
 const DICT: Record<string, string> = {
+  '按型号词干与封装找到的近似料，点击选用：': 'Close matches by MPN stem & footprint — click to use:',
   'KiCad 原图': 'KiCad Original', '自动生成': 'Auto Layout',
   '压缩包内未找到 .kicad_pcb 文件': 'No .kicad_pcb found in the zip',
   '工程导入完成': 'Project imported', '个跳过': 'skipped', '张': 'sheet(s)', '个符号': 'symbol(s)',
