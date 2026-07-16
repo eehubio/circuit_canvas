@@ -112,6 +112,30 @@ const num = (l: SExpr[] | undefined, i: number) => (l ? parseFloat(String(l[i]))
 /** KiCad 符号 mm(Y上) → 画布 px(Y下)，2.54mm 引脚栅格 ↔ 10px 栅格 */
 const S = 10 / 2.54;
 
+/** 三点弧 → 折线采样 path（16 段）：px 空间求圆心，扫向经中点校验，避免 SVG 弧 flag 边界问题 */
+function arcToPath(p1: { x: number; y: number }, pm: { x: number; y: number }, p2: { x: number; y: number }): string | null {
+  const ax = p1.x, ay = p1.y, bx = pm.x, by = pm.y, cx = p2.x, cy = p2.y;
+  const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+  if (Math.abs(d) < 1e-6) return `M${ax.toFixed(1)},${ay.toFixed(1)} L${cx.toFixed(1)},${cy.toFixed(1)}`; // 三点共线退化为直线
+  const ux = ((ax * ax + ay * ay) * (by - cy) + (bx * bx + by * by) * (cy - ay) + (cx * cx + cy * cy) * (ay - by)) / d;
+  const uy = ((ax * ax + ay * ay) * (cx - bx) + (bx * bx + by * by) * (ax - cx) + (cx * cx + cy * cy) * (bx - ax)) / d;
+  const r = Math.hypot(ax - ux, ay - uy);
+  const a1 = Math.atan2(ay - uy, ax - ux);
+  const amid = Math.atan2(by - uy, bx - ux);
+  const a2 = Math.atan2(cy - uy, cx - ux);
+  const norm = (t: number) => { let v = t; while (v < 0) v += Math.PI * 2; return v % (Math.PI * 2); };
+  // 逆时针扫过量；若中点不在该方向弧上则反向
+  let sweep = norm(a2 - a1);
+  if (norm(amid - a1) > sweep + 1e-9) sweep = sweep - Math.PI * 2;
+  const N = 16;
+  const pts: string[] = [];
+  for (let i = 0; i <= N; i++) {
+    const t = a1 + (sweep * i) / N;
+    pts.push(`${i === 0 ? 'M' : 'L'}${(ux + r * Math.cos(t)).toFixed(1)},${(uy + r * Math.sin(t)).toFixed(1)}`);
+  }
+  return pts.join(' ');
+}
+
 export function parseKicadSym(text: string): ParsedSymbol | null {
   try {
     const roots = parseSExpr(text);
@@ -120,14 +144,14 @@ export function parseKicadSym(text: string): ParsedSymbol | null {
     if (!symRoot) return null;
 
     // 按【单元】分组收集图形与引脚（多单元符号如双运放 LM358：_1_1/_2_1/_3_1；_0_* 为公共图形）
-    interface RawUnit { rects: SExpr[][]; polys: SExpr[][]; circles: SExpr[][]; pins: SExpr[][] }
+    interface RawUnit { rects: SExpr[][]; polys: SExpr[][]; circles: SExpr[][]; arcs: SExpr[][]; pins: SExpr[][] }
     const units = new Map<number, RawUnit>();
     const unitOf = (name: string): number => {
       const m = name.match(/_(\d+)_\d+$/);
       return m ? parseInt(m[1], 10) : 1;
     };
     const bucket = (u: number): RawUnit => {
-      if (!units.has(u)) units.set(u, { rects: [], polys: [], circles: [], pins: [] });
+      if (!units.has(u)) units.set(u, { rects: [], polys: [], circles: [], arcs: [], pins: [] });
       return units.get(u)!;
     };
     // 根符号直挂的图形归单元 1
@@ -135,6 +159,7 @@ export function parseKicadSym(text: string): ParsedSymbol | null {
     rootB.rects.push(...findAll(symRoot, 'rectangle'));
     rootB.polys.push(...findAll(symRoot, 'polyline'));
     rootB.circles.push(...findAll(symRoot, 'circle'));
+    rootB.arcs.push(...findAll(symRoot, 'arc'));
     rootB.pins.push(...findAll(symRoot, 'pin'));
     for (const sub of findAll(symRoot, 'symbol')) {
       const u = unitOf(String(sub[1] ?? ''));
@@ -142,6 +167,7 @@ export function parseKicadSym(text: string): ParsedSymbol | null {
       b.rects.push(...findAll(sub, 'rectangle'));
       b.polys.push(...findAll(sub, 'polyline'));
       b.circles.push(...findAll(sub, 'circle'));
+      b.arcs.push(...findAll(sub, 'arc'));
       b.pins.push(...findAll(sub, 'pin'));
     }
     // 公共单元 0 合并进最小编号的实际单元
@@ -149,7 +175,7 @@ export function parseKicadSym(text: string): ParsedSymbol | null {
     if (units.has(0) && realUnits.length) {
       const tgt = bucket(realUnits[0]), src = units.get(0)!;
       tgt.rects.push(...src.rects); tgt.polys.push(...src.polys);
-      tgt.circles.push(...src.circles); tgt.pins.push(...src.pins);
+      tgt.circles.push(...src.circles); tgt.arcs.push(...src.arcs); tgt.pins.push(...src.pins);
       units.delete(0);
     }
     const g = 2.54;
@@ -181,6 +207,13 @@ export function parseKicadSym(text: string): ParsedSymbol | null {
         xy.forEach((q) => grow(q.x, q.y));
         return xy;
       }).filter((xy) => xy.length >= 2);
+      const arcs = b.arcs.map((ar) => {
+        const s1 = find(ar, 'start'), m1 = find(ar, 'mid'), e1 = find(ar, 'end');
+        if (!s1 || !m1 || !e1) return null;
+        const a = { x1: num(s1, 1), y1: num(s1, 2), xm: num(m1, 1), ym: num(m1, 2), x2: num(e1, 1), y2: num(e1, 2) };
+        grow(a.x1, a.y1); grow(a.xm, a.ym); grow(a.x2, a.y2);
+        return a;
+      }).filter((a): a is NonNullable<typeof a> => !!a);
       const circles = b.circles.map((ci) => {
         const c1 = find(ci, 'center');
         const r1 = num(find(ci, 'radius'), 1);
@@ -188,9 +221,9 @@ export function parseKicadSym(text: string): ParsedSymbol | null {
         grow(cx - r1, cy - r1); grow(cx + r1, cy + r1);
         return { cx, cy, r: r1 };
       });
-      if (!pins.length && !rects.length && !polys.length) return null;
+      if (!pins.length && !rects.length && !polys.length && !arcs.length) return null;
       if (!Number.isFinite(minX)) { minX = 0; maxX = 0; minY = 0; maxY = 0; }
-      return { pins, rects, polys, circles, minX, maxX, minY, maxY };
+      return { pins, rects, polys, circles, arcs, minX, maxX, minY, maxY };
     }).filter((x): x is NonNullable<typeof x> => !!x);
     if (!parsedUnits.length || !parsedUnits.some((u) => u.pins.length)) return null;
 
@@ -216,6 +249,10 @@ export function parseKicadSym(text: string): ParsedSymbol | null {
         const a = toPx(ci.cx, ci.cy);
         out.circles.push({ x: a.x, y: a.y, r: ci.r * S2 });
       }
+      for (const ar of un.arcs) {
+        const d = arcToPath(toPx(ar.x1, ar.y1), toPx(ar.xm, ar.ym), toPx(ar.x2, ar.y2));
+        if (d) out.polys.push(d);
+      }
       for (const p of un.pins) {
         const tip = toPx(p.x, p.y), end = toPx(p.ex, p.ey);
         out.pins.push({
@@ -230,7 +267,10 @@ export function parseKicadSym(text: string): ParsedSymbol | null {
       unitSymbols.push({
         w: wh.w, h: wh.h,
         rects: un.rects.map((r) => { const a = toPx0(Math.min(r.x1, r.x2), Math.max(r.y1, r.y2)); return { x: a.x, y: a.y, w: Math.abs(r.x2 - r.x1) * S2, h: Math.abs(r.y2 - r.y1) * S2 }; }),
-        polys: un.polys.map((pl) => pl.map((q, i) => { const a = toPx0(q.x, q.y); return `${i === 0 ? 'M' : 'L'}${a.x.toFixed(1)},${a.y.toFixed(1)}`; }).join(' ')),
+        polys: [
+          ...un.polys.map((pl) => pl.map((q, i) => { const a = toPx0(q.x, q.y); return `${i === 0 ? 'M' : 'L'}${a.x.toFixed(1)},${a.y.toFixed(1)}`; }).join(' ')),
+          ...un.arcs.map((ar) => arcToPath(toPx0(ar.x1, ar.y1), toPx0(ar.xm, ar.ym), toPx0(ar.x2, ar.y2))).filter((d): d is string => !!d),
+        ],
         circles: un.circles.map((ci) => { const a = toPx0(ci.cx, ci.cy); return { x: a.x, y: a.y, r: ci.r * S2 }; }),
         pins: un.pins.map((pp) => {
           const tip = toPx0(pp.x, pp.y), end = toPx0(pp.ex, pp.ey);
