@@ -70,7 +70,9 @@ export function BomPanel({ isFullscreen, onToggleFullscreen }: { isFullscreen?: 
             {bom.map((l, i) => (
               <tr key={l.reference + i} style={{ borderBottom: '1px solid #f1f5f9' }}>
                 <td style={{ padding: '7px 10px', color: '#94a3b8' }}>{i + 1}</td>
-                <td style={{ padding: '7px 10px', fontWeight: 600, color: COLORS.green }}>{l.reference}</td>
+                <td style={{ padding: '7px 10px', fontWeight: 600, color: COLORS.green, maxWidth: 260 }}>
+                  <RefCell refs={l.reference} />
+                </td>
                 <td style={{ padding: '7px 10px', fontFamily: 'monospace' }}>{l.mpn}</td>
                 <td style={{ padding: '7px 10px', color: '#64748b' }}>{l.manufacturer}</td>
                 <td style={{ padding: '7px 10px', color: '#64748b' }}>{l.footprint}</td>
@@ -96,5 +98,22 @@ export function BomPanel({ isFullscreen, onToggleFullscreen }: { isFullscreen?: 
         </table>
       )}
     </div>
+  );
+}
+
+/** 位号单元格：自然排序，超过 8 个折叠为「前8 +N」，点击展开/悬停查看全部 */
+function RefCell({ refs }: { refs: string }) {
+  const [open, setOpen] = useState(false);
+  const list = refs.split(',').map((r) => r.trim()).filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  if (list.length <= 8 || open) {
+    return <span style={{ wordBreak: 'break-all', fontSize: list.length > 8 ? 10.5 : undefined, cursor: list.length > 8 ? 'pointer' : undefined }}
+      onClick={() => list.length > 8 && setOpen(false)} title={list.join(', ')}>{list.join(', ')}</span>;
+  }
+  return (
+    <span style={{ cursor: 'pointer' }} title={list.join(', ')} onClick={() => setOpen(true)}>
+      {list.slice(0, 8).join(', ')}
+      <span style={{ marginLeft: 4, padding: '1px 6px', borderRadius: 8, background: '#ecfdf5', color: '#059669', fontSize: 10, fontWeight: 700 }}>+{list.length - 8}</span>
+    </span>
   );
 }

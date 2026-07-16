@@ -279,7 +279,19 @@ function setKsymStatus(key: string, st: string) {
   useLibFileStore.getState().bump();
 }
 export function ensureKicadSymbol(key: string | undefined): void {
-  if (!key || !key.startsWith('KICADSYM:') || symbolOverrideFor(key) || ksymInflight.has(key)) return;
+  if (!key || symbolOverrideFor(key) || ksymInflight.has(key)) return;
+  // KICADSCH:*（工程 zip 内嵌符号）只有 localStorage 一个复原源
+  if (key.startsWith('KICADSCH:')) {
+    try {
+      const cached = localStorage.getItem('cc_ksym_' + key);
+      if (cached) {
+        const ps = parseKicadSym(cached);
+        if (ps && ps.pins.length) registerSymbolOverride(key, ps);
+      }
+    } catch { /* 忽略 */ }
+    return;
+  }
+  if (!key.startsWith('KICADSYM:')) return;
   const parts = key.split(':');
   const lib = parts[1];
   const name = parts.slice(2).join(':');

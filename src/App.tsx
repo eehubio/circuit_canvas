@@ -22,6 +22,7 @@ import { ensureStepBytes } from './modules/board-editor/step-loader';
 import { CustomPartWizard } from './modules/component-search/CustomPartWizard';
 import { loadCustomParts, deleteCustomPart, customPartToResult, bootCustomLib, type CustomPart } from './design-core/custom-lib';
 import { parseKicadPcb } from './design-core/geometry/kicad-pcb-import';
+import { parseKicadSch } from './design-core/geometry/kicad-sch-import';
 import { useT, useLangStore, useTranslated, tr } from './shared/i18n';
 import { registerFootprintOverride, registerSymbolOverride, symbolOverrideFor } from './design-core/geometry/lib-file-registry';
 import { parseKicadSym } from './design-core/geometry/lib-file-registry';
@@ -207,16 +208,59 @@ export default function App() {
   };
 
   const importKicad = useDesignStore((s) => s.importKicad);
+  const assignSymbolsByReference = useDesignStore((s) => s.assignSymbolsByReference);
+  const importPcbText = (text: string): { comps: number; skipped: number } => {
+    const data = parseKicadPcb(text);
+    // 注册 PCB 内嵌封装定义 → 导入器件焊盘精确、3D 按真实焊盘构建
+    for (const [name, def] of Object.entries(data.footprintDefs)) registerFootprintOverride(name, def);
+    importKicad(data);
+    return { comps: data.comps.length, skipped: data.skipped.length };
+  };
+
+  /** 从 .kicad_sch 文本提取内嵌符号并按位号挂到已导入器件（原理图区随即显示真符号） */
+  const applySchText = (text: string): { symbols: number; linked: number } => {
+    const sch = parseKicadSch(text);
+    let symbols = 0;
+    const refKeyMap: Record<string, string> = {};
+    for (const [libId, block] of Object.entries(sch.libSymbols)) {
+      const parsed = parseKicadSym(`(kicad_symbol_lib ${block})`);
+      if (!parsed || !parsed.pins.length) continue;
+      const key = `KICADSCH:${libId}`;
+      registerSymbolOverride(key, parsed);
+      try { localStorage.setItem('cc_ksym_' + key, `(kicad_symbol_lib ${block})`); } catch { /* 空间不足忽略 */ }
+      symbols++;
+      for (const [ref, lid] of Object.entries(sch.refToLibId)) if (lid === libId) refKeyMap[ref] = key;
+    }
+    const linked = assignSymbolsByReference(refKeyMap);
+    return { symbols, linked };
+  };
+
   const onImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
     try {
-      if (/\.kicad_pcb$/i.test(f.name)) {
-        const data = parseKicadPcb(await f.text());
-        // 注册 PCB 内嵌封装定义 → 导入器件焊盘精确、3D 按真实焊盘构建
-        for (const [name, def] of Object.entries(data.footprintDefs)) registerFootprintOverride(name, def);
-        importKicad(data);
-        if (data.skipped.length) alert(`已导入 ${data.comps.length} 个器件；${data.skipped.length} 个封装缺少位置信息被跳过`);
+      if (/\.zip$/i.test(f.name)) {
+        // KiCad 工程压缩包：解压 → PCB 上画布 + 原理图符号逐器件挂载
+        const { unzipSync, strFromU8 } = await import('fflate');
+        const entries = unzipSync(new Uint8Array(await f.arrayBuffer()));
+        const names = Object.keys(entries).filter((n) => !n.startsWith('__MACOSX') && !n.endsWith('/'));
+        const pcbName = names.filter((n) => /\.kicad_pcb$/i.test(n)).sort((a, b) => entries[b].length - entries[a].length)[0];
+        const schNames = names.filter((n) => /\.kicad_sch$/i.test(n));
+        if (!pcbName) throw new Error(t('压缩包内未找到 .kicad_pcb 文件'));
+        const r = importPcbText(strFromU8(entries[pcbName]));
+        let symTotal = 0, linkTotal = 0;
+        for (const sn of schNames) {
+          const rr = applySchText(strFromU8(entries[sn]));
+          symTotal += rr.symbols; linkTotal += rr.linked;
+        }
+        alert(`${t('工程导入完成')}：PCB ${r.comps} ${t('个器件')}${r.skipped ? `（${r.skipped} ${t('个跳过')}）` : ''}${schNames.length ? ` · ${t('原理图')} ${schNames.length} ${t('张')}，${symTotal} ${t('个符号')}，${linkTotal} ${t('个器件已挂真符号')}` : ` · ${t('包内无原理图，符号用名字解析')}`}`);
+      } else if (/\.kicad_pcb$/i.test(f.name)) {
+        const r = importPcbText(await f.text());
+        if (r.skipped) alert(`已导入 ${r.comps} 个器件；${r.skipped} 个封装缺少位置信息被跳过`);
+      } else if (/\.kicad_sch$/i.test(f.name)) {
+        // 单独补挂原理图（画布已有对应位号的器件时）
+        const rr = applySchText(await f.text());
+        alert(`${t('原理图符号提取完成')}：${rr.symbols} ${t('个符号')}，${rr.linked} ${t('个器件已挂载')}`);
       } else {
         loadDocument(await importDocumentFromFile(f));
       }
@@ -244,7 +288,7 @@ export default function App() {
           <button onClick={() => exportMarkdownReport(doc)} style={hbtn}>📄 {t('方案报告')}</button>
           <button onClick={() => exportDocument(doc)} style={hbtn}>⬇ {t('导出设计')}</button>
           <button onClick={() => fileRef.current?.click()} style={hbtn}>⬆ {t('导入设计')}</button>
-          <input ref={fileRef} type="file" accept=".json,.kicad_pcb" style={{ display: 'none' }} onChange={onImport} />
+          <input ref={fileRef} type="file" accept=".json,.kicad_pcb,.kicad_sch,.zip" style={{ display: 'none' }} onChange={onImport} />
         </div>
       </header>
 
@@ -603,7 +647,7 @@ function CompDetail({ iid, onBuild }: { iid: string; onBuild?: (mpn: string) => 
       {c.display?.description && <div style={{ fontSize: 12, color: '#475569', marginTop: 10 }}><TrSpan text={c.display.description} /></div>}
 
       {/* 封装占位器件：补型号 + 上传自定义原理图符号 */}
-      {c.display?.family === 'Footprint' && <FootprintPartEditor c={c} onBuild={onBuild} />}
+      {(c.display?.family === 'Footprint' || (!c.display?.symbolFileUrl && !c.display?.symbolFromMpn && !c.customSymbolSvg)) && <FootprintPartEditor c={c} onBuild={onBuild} />}
 
       <LibraryPreview c={c} />
 
@@ -768,6 +812,7 @@ function FootprintPartEditor({ c, onBuild }: { c: PlacedComponentT; onBuild?: (m
   const setMpn = useDesignStore((s) => s.setComponentMpn);
   const setSvg = useDesignStore((s) => s.setCustomSymbol);
   const linkSymbol = useDesignStore((s) => s.linkSymbolFrom);
+  const linkSymbolByMpn = useDesignStore((s) => s.linkSymbolByMpn);
   const linkFootprint = useDesignStore((s) => s.linkFootprintFrom);
   const addFull = useDesignStore((s) => s.replaceComponentWith);
   // 关联模式：full=整体替换 / symbol=仅借符号 / footprint=仅借封装
@@ -829,7 +874,7 @@ function FootprintPartEditor({ c, onBuild }: { c: PlacedComponentT; onBuild?: (m
       const key = `KICADSYM:${ksLib}:${name}`;
       registerSymbolOverride(key, parsed);
       try { localStorage.setItem('cc_ksym_' + key, text); } catch { /* 空间不足忽略 */ }
-      linkSymbol(c.instanceId, { mpn: key });
+      linkSymbolByMpn(c.mpn, key); // 同型号全部器件一并关联
       setKsMsg(`✓ ${tr('已关联符号')} ${name}`);
       setKsOpen(false);
     } catch (e) { setKsMsg(tr('添加失败：') + (e as Error).message); }

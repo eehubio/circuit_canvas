@@ -54,6 +54,10 @@ interface DesignState {
   replaceComponentWith: (instanceId: string, src: ComponentSearchResult) => void;
   /** 仅关联原理图符号（借用库中器件的符号，型号/封装不变） */
   linkSymbolFrom: (instanceId: string, src: { mpn: string; symbolFileUrl?: string }) => void;
+  /** 同型号全部器件关联同一符号（灯板等重复器件一次到位） */
+  linkSymbolByMpn: (mpn: string, symbolKey: string) => void;
+  /** 工程导入：按位号批量挂载原理图符号，返回命中数 */
+  assignSymbolsByReference: (map: Record<string, string>) => number;
   /** 仅关联 PCB 封装（借用库中器件的封装，型号/符号不变） */
   linkFootprintFrom: (instanceId: string, src: { footprintName: string; footprintFileUrl?: string; stepUrl?: string; pins?: number }) => void;
   select: (id: string | null) => void;
@@ -277,6 +281,32 @@ export const useDesignStore = create<DesignState>()(
         snapshot(s);
         c.display = { ...(c.display ?? {}), symbolFileUrl: src.symbolFileUrl, symbolFromMpn: src.mpn };
         c.customSymbolSvg = undefined; // 库符号优先于此前上传的 SVG
+        s.doc = touchDocument(s.doc);
+      }),
+
+    assignSymbolsByReference: (map) => {
+      let hit = 0;
+      set((s) => {
+        for (const c of s.doc.components) {
+          const key = map[c.reference];
+          if (!key) continue;
+          c.display = { ...(c.display ?? {}), symbolFromMpn: key };
+          c.customSymbolSvg = undefined;
+          hit++;
+        }
+        if (hit) s.doc = touchDocument(s.doc);
+      });
+      return hit;
+    },
+
+    linkSymbolByMpn: (mpn, symbolKey) =>
+      set((s) => {
+        snapshot(s);
+        for (const c of s.doc.components) {
+          if (c.mpn !== mpn) continue;
+          c.display = { ...(c.display ?? {}), symbolFromMpn: symbolKey };
+          c.customSymbolSvg = undefined;
+        }
         s.doc = touchDocument(s.doc);
       }),
 
