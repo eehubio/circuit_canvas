@@ -146,6 +146,20 @@ export const documentSchema = z.object({
     source: z.enum(['demo', 'standalone', 'integrated']),
   }),
   designIntent: z.object({ requirement: z.string(), rationale: z.string(), generatedAt: z.string() }).optional(),
+  /** KiCad 工程导入的原理图原样视图（只读渲染：实例坐标/连线/结点/标签） */
+  schematicSheet: z.object({
+    instances: z.array(z.object({
+      ref: z.string(), libId: z.string(),
+      x: z.number(), y: z.number(), rot: z.number(),
+      mirror: z.string().optional(), unit: z.number().optional(),
+    })),
+    wires: z.array(z.array(z.tuple([z.number(), z.number()]))),
+    junctions: z.array(z.tuple([z.number(), z.number()])),
+    labels: z.array(z.object({ text: z.string(), x: z.number(), y: z.number(), rot: z.number() })),
+    noConnects: z.array(z.tuple([z.number(), z.number()])),
+    /** libId → 符号定义原文（渲染用原始几何） */
+    libSymbols: z.record(z.string()),
+  }).optional(),
   board: boardSchema,
   components: z.array(placedComponentSchema),
   functionalBlocks: z.array(functionalBlockSchema),

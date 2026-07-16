@@ -42,10 +42,10 @@ export function parseSExpr(text: string): SExpr[] {
 const isList = (e: SExpr): e is SExpr[] => Array.isArray(e);
 const head = (e: SExpr): string => (isList(e) ? String(e[0]) : String(e));
 /** 在列表中找第一个以 tag 开头的子列表 */
-function find(list: SExpr[], tag: string): SExpr[] | undefined {
+export function find(list: SExpr[], tag: string): SExpr[] | undefined {
   return list.find((e): e is SExpr[] => isList(e) && head(e) === tag);
 }
-function findAll(list: SExpr[], tag: string): SExpr[][] {
+export function findAll(list: SExpr[], tag: string): SExpr[][] {
   return list.filter((e): e is SExpr[] => isList(e) && head(e) === tag);
 }
 const numAt = (l: SExpr[] | undefined, i: number): number => (l ? parseFloat(String(l[i])) || 0 : 0);

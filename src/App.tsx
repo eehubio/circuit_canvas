@@ -209,6 +209,7 @@ export default function App() {
 
   const importKicad = useDesignStore((s) => s.importKicad);
   const assignSymbolsByReference = useDesignStore((s) => s.assignSymbolsByReference);
+  const setSchematicSheet = useDesignStore((s) => s.setSchematicSheet);
   const importPcbText = (text: string): { comps: number; skipped: number } => {
     const data = parseKicadPcb(text);
     // 注册 PCB 内嵌封装定义 → 导入器件焊盘精确、3D 按真实焊盘构建
@@ -232,6 +233,15 @@ export default function App() {
       for (const [ref, lid] of Object.entries(sch.refToLibId)) if (lid === libId) refKeyMap[ref] = key;
     }
     const linked = assignSymbolsByReference(refKeyMap);
+    // 原理图原样视图数据存入文档（随设计持久化，刷新/导出 JSON 均保留）
+    setSchematicSheet({
+      instances: sch.instances,
+      wires: sch.wires,
+      junctions: sch.junctions,
+      labels: sch.labels,
+      noConnects: sch.noConnects,
+      libSymbols: sch.libSymbols,
+    });
     return { symbols, linked };
   };
 

@@ -30,6 +30,7 @@ export const useLangStore = create<LangState>((set) => ({
 
 /* ───────────── 固定文案词典（key = 中文原文） ───────────── */
 const DICT: Record<string, string> = {
+  'KiCad 原图': 'KiCad Original', '自动生成': 'Auto Layout',
   '压缩包内未找到 .kicad_pcb 文件': 'No .kicad_pcb found in the zip',
   '工程导入完成': 'Project imported', '个跳过': 'skipped', '张': 'sheet(s)', '个符号': 'symbol(s)',
   '个器件已挂真符号': 'component(s) linked to real symbols', '包内无原理图，符号用名字解析': 'no schematic in zip — symbols by name parsing',

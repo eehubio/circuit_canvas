@@ -9,12 +9,15 @@ import { useDesignStore } from '../../state/designStore';
 import { useSchematicStore, type SchNet } from './schematicStore';
 import { symbolFor, symbolUnitsFor } from './symbols';
 import { useLibFileStore } from '../../design-core/geometry/lib-file-registry';
+import { ImportedSchematicView } from './ImportedSchematicView';
 import type { PlacedComponent } from '../../design-core/document/types';
 
 let netCounter = 0;
 const nid = () => `net_${++netCounter}_${Date.now()}`;
 
 export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscreen?: boolean; onToggleFullscreen?: () => void }) {
+  const sheet = useDesignStore((st) => st.doc.schematicSheet);
+  const [schView, setSchView] = useState<'imported' | 'auto'>('imported');
   const items = useDesignStore((s) => s.doc.components);
   const pos = useSchematicStore((s) => s.pos);
   const nets = useSchematicStore((s) => s.nets);
@@ -212,6 +215,14 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
     <div style={{ padding: 12, height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 14, fontWeight: 700 }}>⚡ 原理图</span>
+        {sheet && (
+          <span style={{ display: 'inline-flex', borderRadius: 7, overflow: 'hidden', border: '1px solid #cbd5e1' }}>
+            {([['imported', tr('KiCad 原图')], ['auto', tr('自动生成')]] as const).map(([v, l]) => (
+              <button key={v} onClick={() => setSchView(v)}
+                style={{ padding: '4px 10px', border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer', background: schView === v ? '#1f5c3b' : '#fff', color: schView === v ? '#fff' : '#475569' }}>{l}</button>
+            ))}
+          </span>
+        )}
         <button onClick={() => setLinking(linking ? null : '__pick__')} style={{ ...tb, ...(linking ? { background: '#f0fdf4', color: '#16a34a', borderColor: '#22c55e' } : {}) }}>{linking ? '✕ ' + tr('取消') : '+ ' + tr('连线')}</button>
         <button onClick={() => { if (sel) { setNets((nets || []).filter((n) => n.id !== sel)); setSel(null); } }} disabled={!sel} style={{ ...tb, opacity: sel ? 1 : 0.5 }}>🗑 删除连线(D)</button>
         <button onClick={() => { setNets(genNets()); resetSch(); setSel(null); }} style={tb}>🔄 重新生成</button>
@@ -228,6 +239,7 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
         <div style={{ flex: 1 }} />
         {onToggleFullscreen && <button onClick={onToggleFullscreen} style={tb}>{isFullscreen ? '↙ 退出全屏' : '⛶ 全屏'}</button>}
       </div>
+      {sheet && schView === 'imported' ? <ImportedSchematicView doc={useDesignStore.getState().doc} /> : (<>
       <div ref={wrapRef} style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#fffef9', borderRadius: 8, border: '1px solid #e7e0c9' }}
         onMouseDown={(e) => { if (e.button === 0 && !linking) panRef.current = { active: true, sx: e.clientX, sy: e.clientY, px: pan.x, py: pan.y, moved: false }; }}
         onClick={() => { if (!panRef.current.moved) { setSel(null); setSelSym(null); if (linking) setLinking(null); } }}>
@@ -362,6 +374,7 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
           <button onClick={() => setZoom(Math.min(3, zoom * 1.25))} style={zb}>+</button>
         </div>
       </div>
+      </>)}
     </div>
   );
 }

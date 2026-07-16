@@ -164,6 +164,15 @@ export interface ReviewFinding {
 
 /* ---------- 顶层文档 ---------- */
 export interface CircuitCanvasDocument {
+  /** KiCad 工程导入的原理图原样视图（只读） */
+  schematicSheet?: {
+    instances: { ref: string; libId: string; x: number; y: number; rot: number; mirror?: string; unit?: number }[];
+    wires: [number, number][][];
+    junctions: [number, number][];
+    labels: { text: string; x: number; y: number; rot: number }[];
+    noConnects: [number, number][];
+    libSymbols: Record<string, string>;
+  };
   schemaVersion: string;
   id: string;
   name: string;

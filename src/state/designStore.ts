@@ -58,6 +58,7 @@ interface DesignState {
   linkSymbolByMpn: (mpn: string, symbolKey: string) => void;
   /** 工程导入：按位号批量挂载原理图符号，返回命中数 */
   assignSymbolsByReference: (map: Record<string, string>) => number;
+  setSchematicSheet: (sheet: CircuitCanvasDocument['schematicSheet']) => void;
   /** 仅关联 PCB 封装（借用库中器件的封装，型号/符号不变） */
   linkFootprintFrom: (instanceId: string, src: { footprintName: string; footprintFileUrl?: string; stepUrl?: string; pins?: number }) => void;
   select: (id: string | null) => void;
@@ -281,6 +282,12 @@ export const useDesignStore = create<DesignState>()(
         snapshot(s);
         c.display = { ...(c.display ?? {}), symbolFileUrl: src.symbolFileUrl, symbolFromMpn: src.mpn };
         c.customSymbolSvg = undefined; // 库符号优先于此前上传的 SVG
+        s.doc = touchDocument(s.doc);
+      }),
+
+    setSchematicSheet: (sheet) =>
+      set((s) => {
+        s.doc.schematicSheet = sheet;
         s.doc = touchDocument(s.doc);
       }),
 
