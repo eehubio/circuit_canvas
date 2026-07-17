@@ -158,19 +158,17 @@ export function ensureStepModel(url: string | undefined) {
         // 形态特征
         const volRatio = info.vol / maxVol;
         const nearBottom = info.minZ < botZ + height * 0.42;
-        const spansHeight = info.dz > height * 0.55;              // 纵向贯穿 → 外壳/主体
+        const spansHeight = info.dz > height * 0.55;
         const isLead = volRatio < 0.28 && nearBottom && !spansHeight;
-        const isShell = volRatio > 0.45 && spansHeight;           // 大且高 → 金属外壳
 
+        // 配色与参数化模型统一：深色塑封本体 + 金色引脚（STEP 自带有效颜色时仍尊重原色）
         let mat: THREE.MeshStandardMaterial;
         if (rawIsMeaningful) {
           mat = new THREE.MeshStandardMaterial({ color: raw!, metalness: 0.35, roughness: 0.55 });
         } else if (isLead) {
           mat = new THREE.MeshStandardMaterial({ color: 0xe6c66a, metalness: 0.95, roughness: 0.22, envMapIntensity: 1.6 }); // 金脚
-        } else if (isShell) {
-          mat = new THREE.MeshStandardMaterial({ color: 0xdfe3e8, metalness: 0.95, roughness: 0.18, envMapIntensity: 1.7 }); // 金属外壳（亮银，强反射）
         } else {
-          mat = new THREE.MeshStandardMaterial({ color: 0x22252b, metalness: 0.1, roughness: 0.62, envMapIntensity: 1.0 }); // 塑封体（深灰，白底高对比）
+          mat = new THREE.MeshStandardMaterial({ color: 0x22252b, metalness: 0.12, roughness: 0.6, envMapIntensity: 1.0 }); // 深色塑封（与参数化一致）
         }
         group.add(new THREE.Mesh(geo, mat));
       }

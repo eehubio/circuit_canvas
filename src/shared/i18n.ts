@@ -30,6 +30,10 @@ export const useLangStore = create<LangState>((set) => ({
 
 /* ───────────── 固定文案词典（key = 中文原文） ───────────── */
 const DICT: Record<string, string> = {
+  '加载封装库列表…': 'Loading footprint libraries…',
+  '筛选封装名…': 'Filter footprints…', '加载封装…': 'Loading footprint…',
+  '封装解析失败（无焊盘）': 'Footprint parse failed (no pads)', '已关联封装': 'Footprint linked',
+  '（同型号器件已一并更新）': ' (all parts with same MPN updated)', '关联失败': 'Link failed', '封装列表加载失败': 'Failed to load footprint list',
   '按型号词干与封装找到的近似料，点击选用：': 'Close matches by MPN stem & footprint — click to use:',
   'KiCad 原图': 'KiCad Original', '自动生成': 'Auto Layout',
   '压缩包内未找到 .kicad_pcb 文件': 'No .kicad_pcb found in the zip',

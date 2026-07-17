@@ -23,9 +23,10 @@ import { CustomPartWizard } from './modules/component-search/CustomPartWizard';
 import { loadCustomParts, deleteCustomPart, customPartToResult, bootCustomLib, type CustomPart } from './design-core/custom-lib';
 import { parseKicadPcb } from './design-core/geometry/kicad-pcb-import';
 import { parseKicadSch } from './design-core/geometry/kicad-sch-import';
+import { parseKicadMod } from './design-core/geometry/kicad-file-parser';
 import { autoKicadFootprint } from './design-core/geometry/auto-kicad-footprint';
 import { useT, useLangStore, useTranslated, tr } from './shared/i18n';
-import { registerFootprintOverride, registerSymbolOverride, symbolOverrideFor } from './design-core/geometry/lib-file-registry';
+import { registerFootprintOverride, registerSymbolOverride, symbolOverrideFor, footprintOverrideFor } from './design-core/geometry/lib-file-registry';
 import { parseKicadSym } from './design-core/geometry/lib-file-registry';
 import type { PlacedComponent as PlacedComponentT } from './design-core/document/types';
 import { BoardCanvas2D } from './modules/board-editor/BoardCanvas2D';
@@ -698,7 +699,9 @@ function CompDetail({ iid, onBuild }: { iid: string; onBuild?: (mpn: string) => 
       {c.display?.description && <div style={{ fontSize: 12, color: '#475569', marginTop: 10 }}><TrSpan text={c.display.description} /></div>}
 
       {/* 封装占位器件：补型号 + 上传自定义原理图符号 */}
-      {(c.display?.family === 'Footprint' || (!c.display?.symbolFileUrl && !c.display?.symbolFromMpn && !c.customSymbolSvg)) && <FootprintPartEditor c={c} onBuild={onBuild} />}
+      {(c.display?.family === 'Footprint'
+        || (!c.display?.symbolFileUrl && !c.display?.symbolFromMpn && !c.customSymbolSvg)
+        || (!c.display?.footprintFileUrl && !footprintOverrideFor(c.footprint.name))) && <FootprintPartEditor c={c} onBuild={onBuild} />}
 
       <LibraryPreview c={c} />
 
@@ -883,6 +886,51 @@ function FootprintPartEditor({ c, onBuild }: { c: PlacedComponentT; onBuild?: (m
       setResults(r.items); setBusy(false);
     }, 250);
   }, []);
+  // ── KiCad 官方封装库选择 ──
+  const [kfOpen, setKfOpen] = useState(false);
+  const [kfLibs, setKfLibs] = useState<string[]>([]);
+  const [kfLib, setKfLib] = useState('');
+  const [kfItems, setKfItems] = useState<string[]>([]);
+  const [kfKw, setKfKw] = useState('');
+  const [kfMsg, setKfMsg] = useState('');
+  const linkFootprintByMpn = useDesignStore((s2) => s2.linkFootprintByMpn);
+  const kfToggle = async () => {
+    setKfOpen(!kfOpen);
+    if (!kfOpen && !kfLibs.length) {
+      setKfMsg(tr('加载封装库列表…'));
+      try {
+        const j = await fetch('/api/kicadlib?path=libs').then((r) => r.json());
+        if (Array.isArray(j.libs) && j.libs.length) { setKfLibs(j.libs); setKfMsg(''); }
+        else setKfMsg(String(j.error ?? '空列表'));
+      } catch (e) { setKfMsg(tr('网络错误，无法访问 KiCad 官方库') + '：' + (e as Error).message); }
+    }
+  };
+  const kfPickLib = async (lib: string) => {
+    setKfLib(lib); setKfItems([]); setKfKw(''); setKfMsg('');
+    if (!lib) return;
+    try {
+      const j = await fetch(`/api/kicadlib?path=list&lib=${encodeURIComponent(lib)}`).then((r) => r.json());
+      setKfItems(j.items ?? []);
+    } catch { setKfMsg(tr('封装列表加载失败')); }
+  };
+  const kfPick = async (name: string) => {
+    setKfMsg(tr('加载封装…'));
+    try {
+      const r = await fetch(`/api/kicadlib?path=mod&lib=${encodeURIComponent(kfLib)}&name=${encodeURIComponent(name)}`);
+      if (!r.ok) { let d = ''; try { d = String((await r.json())?.error ?? ''); } catch { /* */ } throw new Error(`HTTP ${r.status}${d ? ' · ' + d : ''}`); }
+      const text = await r.text();
+      const fp = parseKicadMod(text);
+      if (!fp || !fp.pads.length) throw new Error(tr('封装解析失败（无焊盘）'));
+      registerFootprintOverride(name, fp);
+      const modelRef = text.match(/\(model\s+"([^"]+)"/)?.[1];
+      const mm = modelRef?.match(/([^/\\]+)\.3dshapes[/\\]([^/\\]+)\.(step|stp|wrl)$/i);
+      const stepUrl = mm ? `/api/kicadlib?path=step&lib=${encodeURIComponent(mm[1])}&name=${encodeURIComponent(mm[2])}` : undefined;
+      linkFootprintByMpn(c.mpn, { footprintName: name, stepUrl, pins: fp.pads.length }); // 同型号全部
+      setKfMsg('✓ ' + tr('已关联封装') + ' ' + name + tr('（同型号器件已一并更新）'));
+    } catch (e) { setKfMsg(tr('关联失败') + '：' + (e as Error).message); }
+  };
+  const kfFiltered = kfKw.trim() ? kfItems.filter((n) => n.toLowerCase().includes(kfKw.trim().toLowerCase())) : kfItems;
+
   // ── KiCad 官方符号库选择 ──
   const [ksOpen, setKsOpen] = useState(false);
   const [ksLibs, setKsLibs] = useState<string[]>([]);
@@ -1038,6 +1086,31 @@ function FootprintPartEditor({ c, onBuild }: { c: PlacedComponentT; onBuild?: (m
             {ksMsg && <div style={{ fontSize: 10, color: ksMsg.startsWith('✓') ? '#16a34a' : '#b91c1c', marginTop: 4 }}>{ksMsg}</div>}
             <button onClick={runKsDiag} style={{ marginTop: 6, padding: '3px 10px', borderRadius: 5, border: '1px solid #cbd5e1', background: '#f8fafc', color: '#475569', fontSize: 10, cursor: 'pointer' }}>🔍 {tr('诊断符号链路')}</button>
             {ksDiag && <div style={{ fontSize: 9.5, color: '#334155', marginTop: 4, wordBreak: 'break-all', background: '#f8fafc', padding: 6, borderRadius: 5, fontFamily: 'monospace' }}>{ksDiag}</div>}
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: 8, padding: 8, borderRadius: 8, border: '1px solid #fde68a', background: '#fffbeb' }}>
+        <div onClick={kfToggle} style={{ fontSize: 10, fontWeight: 700, color: '#92400e', cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}>
+          <span>📦 {tr('KiCad 官方封装库')}</span><span>{kfOpen ? '▾' : '▸'}</span>
+        </div>
+        {kfOpen && (
+          <div style={{ marginTop: 6 }}>
+            {kfLibs.length > 0 && (
+              <select value={kfLib} onChange={(e) => kfPickLib(e.target.value)} style={{ width: '100%', padding: '5px 8px', borderRadius: 5, border: '1px solid #fde68a', fontSize: 11, marginBottom: 5, boxSizing: 'border-box' }}>
+                <option value="">{tr('选择封装库…')}（{kfLibs.length}）</option>
+                {kfLibs.map((l) => <option key={l} value={l}>{l}</option>)}
+              </select>
+            )}
+            {kfLib && <input value={kfKw} onChange={(e) => setKfKw(e.target.value)} placeholder={tr('筛选封装名…')}
+              style={{ width: '100%', padding: '5px 8px', borderRadius: 5, border: '1px solid #fde68a', fontSize: 11, marginBottom: 5, boxSizing: 'border-box', outline: 'none' }} />}
+            <div style={{ maxHeight: 150, overflow: 'auto' }}>
+              {kfFiltered.slice(0, 100).map((n) => (
+                <div key={n} onClick={() => kfPick(n)}
+                  style={{ padding: '4px 8px', marginBottom: 3, borderRadius: 5, background: '#fffdf5', border: '1px solid #fef3c7', fontSize: 10.5, fontFamily: 'monospace', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={n}>{n}</div>
+              ))}
+            </div>
+            {kfMsg && <div style={{ fontSize: 10, color: kfMsg.startsWith('✓') ? '#16a34a' : '#b91c1c', marginTop: 4 }}>{kfMsg}</div>}
           </div>
         )}
       </div>
