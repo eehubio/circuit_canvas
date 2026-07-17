@@ -43,7 +43,7 @@ export function Component3DPreview({ c }: { c: PlacedComponent }) {
 
     // 三点光：主光 + 补光 + 轮廓光
     scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-    const key = new THREE.DirectionalLight(0xffffff, 1.35);
+    const key = new THREE.DirectionalLight(0xffffff, 1.6);
     key.position.set(5, 9, 6);
     scene.add(key);
     const fill = new THREE.DirectionalLight(0xdce6f2, 0.55);
@@ -134,7 +134,7 @@ export function Component3DPreview({ c }: { c: PlacedComponent }) {
 
   return (
     <div>
-      <div ref={boxRef} title={tr('拖拽旋转 · 滚轮缩放 · 双击复位')} style={{ height: 190, borderRadius: 6, background: 'linear-gradient(180deg,#fdfdfe,#eaf0f6)', cursor: 'grab', overflow: 'hidden' }} />
+      <div ref={boxRef} title={tr('拖拽旋转 · 滚轮缩放 · 双击复位')} style={{ height: 190, borderRadius: 6, background: '#ffffff', cursor: 'grab', overflow: 'hidden' }} />
       <div style={{ marginTop: 5 }}>
         <span style={{ fontSize: 9, padding: '1px 7px', borderRadius: 4, fontWeight: 700, color: label[1], background: label[2] }}>{label[0]}</span>
       </div>

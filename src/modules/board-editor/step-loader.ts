@@ -170,7 +170,7 @@ export function ensureStepModel(url: string | undefined) {
         } else if (isShell) {
           mat = new THREE.MeshStandardMaterial({ color: 0xdfe3e8, metalness: 0.95, roughness: 0.18, envMapIntensity: 1.7 }); // 金属外壳（亮银，强反射）
         } else {
-          mat = new THREE.MeshStandardMaterial({ color: 0x2b2e34, metalness: 0.1, roughness: 0.68, envMapIntensity: 0.9 }); // 塑封体（深灰）
+          mat = new THREE.MeshStandardMaterial({ color: 0x22252b, metalness: 0.1, roughness: 0.62, envMapIntensity: 1.0 }); // 塑封体（深灰，白底高对比）
         }
         group.add(new THREE.Mesh(geo, mat));
       }

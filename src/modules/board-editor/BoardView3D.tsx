@@ -32,12 +32,13 @@ export function BoardView3D() {
     const w = mount.clientWidth, h = mount.clientHeight;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xf1f5f9);
+    // 背景交给 CSS 纯白：scene.background 会被 ACES 色调映射压灰，透明渲染则不受影响
+    scene.background = null;
 
     const camera = new THREE.PerspectiveCamera(45, w / h, 1, 2000);
     let renderer: THREE.WebGLRenderer;
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     } catch {
       // WebGL 不可用：显示降级提示，避免白屏
       const msg = document.createElement('div');
@@ -57,7 +58,7 @@ export function BoardView3D() {
     // studio 环境反射（金属高光层次）+ 三点光
     scene.environment = buildStudioEnvironment(renderer);
     scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-    const key = new THREE.DirectionalLight(0xffffff, 1.25); key.position.set(60, 120, 80); scene.add(key);
+    const key = new THREE.DirectionalLight(0xffffff, 1.5); key.position.set(60, 120, 80); scene.add(key);
     const fill = new THREE.DirectionalLight(0xdbe7f5, 0.5); fill.position.set(-80, 60, -40); scene.add(fill);
     const rim = new THREE.DirectionalLight(0xffffff, 0.6); rim.position.set(-20, 40, -110); scene.add(rim);
 
@@ -144,7 +145,7 @@ export function BoardView3D() {
           </div>
         );
       })()}
-      <div ref={mountRef} style={{ width: '100%', height: '100%', cursor: 'grab' }} />
+      <div ref={mountRef} style={{ width: '100%', height: '100%', cursor: 'grab', background: '#ffffff' }} />
       <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', padding: '5px 14px', borderRadius: 16, background: 'rgba(255,255,255,.92)', border: '1px solid #14532d', color: '#14532d', fontSize: 11, fontWeight: 700, pointerEvents: 'none' }}>
         🖱 {tr('拖拽旋转 · 滚轮缩放 · 真实 3D 封装')}
       </div>
