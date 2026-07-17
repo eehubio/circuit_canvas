@@ -10,6 +10,7 @@ import type { ComponentCategory, CircuitCanvasDocument, PlacedComponent, BoardSh
 import { createDocument, touchDocument } from '../design-core/document/factory';
 import type { ComponentSearchResult } from '../providers/types';
 import { searchResultToPlaced, nextReference, buildBom, runDesignReview } from '../design-core/document/services';
+import { resolveAffinity, signalFlowRank, isCore } from '../design-core/placement/affinity';
 import { solvePlacement, DEFAULT_PLACEMENT_RULES, autoPlaceAll } from '../design-core/placement';
 import { clampComponentToBoard, hasOverlap, findOverlaps, isPositionFree } from '../design-core/collision';
 import { appConfig } from '../config';
@@ -372,7 +373,21 @@ export const useDesignStore = create<DesignState>()(
           const p = searchResultToPlaced(r, nextReference(r, placed));
           placed.push(p);
         }
-        placed = autoPlaceAll(placed, s.doc.board, DEFAULT_PLACEMENT_RULES);
+        // 功能归属：辅件锚定核心（关键词+方案顺序），核心按信号流排队、辅件紧随其核心
+        const affItems = placed.map((c) => ({ reference: c.reference, category: c.category, mpn: c.mpn, description: c.display?.description }));
+        const aff = resolveAffinity(affItems);
+        for (const c of placed) {
+          const coreRef = aff[c.reference];
+          if (coreRef) c.display = { ...(c.display ?? {}), anchorRef: coreRef };
+        }
+        const cores = placed.filter((c) => isCore(c)).sort((a, b) => signalFlowRank(a) - signalFlowRank(b));
+        const ordered: PlacedComponent[] = [];
+        for (const core of cores) {
+          ordered.push(core);
+          ordered.push(...placed.filter((c) => c.display?.anchorRef === core.reference));
+        }
+        for (const c of placed) if (!ordered.includes(c)) ordered.push(c);
+        placed = autoPlaceAll(ordered, s.doc.board, DEFAULT_PLACEMENT_RULES);
         s.doc.components = placed;
         s.doc = touchDocument(refreshDerived(s.doc));
         s.overlaps = findOverlaps(s.doc.components);

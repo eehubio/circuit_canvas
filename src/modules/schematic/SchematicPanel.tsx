@@ -10,6 +10,7 @@ import { useSchematicStore, type SchNet } from './schematicStore';
 import { symbolFor, symbolUnitsFor } from './symbols';
 import { useLibFileStore } from '../../design-core/geometry/lib-file-registry';
 import { ImportedSchematicView } from './ImportedSchematicView';
+import { isCore, signalFlowRank } from '../../design-core/placement/affinity';
 import type { PlacedComponent } from '../../design-core/document/types';
 
 let netCounter = 0;
@@ -54,10 +55,37 @@ export function SchematicPanel({ isFullscreen, onToggleFullscreen }: { isFullscr
 
   const autoLayout = useMemo(() => {
     const out: Record<string, { x: number; y: number }> = {};
-    const cats: Record<string, typeof unitEntries> = {};
-    unitEntries.forEach((e) => { (cats[e.c.category] = cats[e.c.category] || []).push(e); });
-    const colX: Record<string, number> = { connector: 40, power: 240, mcu: 440, ic: 680, passive: 440 };
-    Object.entries(cats).forEach(([cat, list]) => list.forEach((e, i) => { out[e.key] = { x: colX[cat] ?? 430, y: cat === 'passive' ? 260 + i * 60 : 40 + i * 110 }; }));
+    // ── 核心按信号流分列：输入接口 → 电源 → 主控 → 外设IC → 输出接口 ──
+    const coreEntries = unitEntries.filter((e) => isCore(e.c));
+    const auxEntries = unitEntries.filter((e) => !isCore(e.c));
+    const rankOf = (e: (typeof unitEntries)[number]) => signalFlowRank({ reference: e.c.reference, category: e.c.category, mpn: e.c.mpn, description: e.c.display?.description });
+    const byRank: Record<number, typeof unitEntries> = {};
+    coreEntries.forEach((e) => { const r = rankOf(e); (byRank[r] = byRank[r] || []).push(e); });
+    const ranks = Object.keys(byRank).map(Number).sort((a, b) => a - b);
+    const corePos: Record<string, { x: number; y: number }> = {}; // reference → 位置
+    ranks.forEach((r, col) => {
+      byRank[r].forEach((e, row) => {
+        const p2 = { x: 50 + col * 260, y: 40 + row * 220 };
+        out[e.key] = p2;
+        corePos[e.c.reference] = p2;
+      });
+    });
+    // ── 辅件跟随所属核心：核心正下方 3 列小网格；无归属的进末尾杂项区 ──
+    const grouped: Record<string, typeof unitEntries> = {};
+    const orphans: typeof unitEntries = [];
+    auxEntries.forEach((e) => {
+      const coreRef = e.c.display?.anchorRef;
+      if (coreRef && corePos[coreRef]) (grouped[coreRef] = grouped[coreRef] || []).push(e);
+      else orphans.push(e);
+    });
+    Object.entries(grouped).forEach(([coreRef, list]) => {
+      const cp = corePos[coreRef];
+      list.forEach((e, i) => {
+        out[e.key] = { x: cp.x + (i % 3) * 75, y: cp.y + 130 + Math.floor(i / 3) * 65 };
+      });
+    });
+    const miscX = 50 + ranks.length * 260;
+    orphans.forEach((e, i) => { out[e.key] = { x: miscX + (i % 2) * 80, y: 40 + Math.floor(i / 2) * 65 }; });
     return out;
   }, [unitEntries]);
 

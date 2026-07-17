@@ -100,6 +100,8 @@ export interface PlacedComponent {
     datasheetUrl?: string;
     imageUrl?: string;
     stepUrl?: string;
+    /** 辅件归属的核心器件位号（自动布局锚定用） */
+    anchorRef?: string;
     officialUrl?: string;
     footprintFileUrl?: string;
     symbolFileUrl?: string;
