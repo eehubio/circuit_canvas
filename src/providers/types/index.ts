@@ -4,6 +4,7 @@
  */
 import type { ComponentCategory, Money } from '../../design-core/document/types';
 import type { FootprintGeometry } from '../../design-core/geometry/types';
+import type { EdaBuilderProvider } from './eda-builder';
 
 /* ---------- 通用 ---------- */
 export interface AccessContext {
@@ -161,4 +162,5 @@ export interface ProviderRegistry {
   referenceDesigns: ReferenceDesignProvider;
   project: ProjectProvider;
   ai: AiModelProvider;
+  edaBuilder: EdaBuilderProvider;
 }

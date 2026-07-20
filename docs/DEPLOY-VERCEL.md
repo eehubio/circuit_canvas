@@ -53,6 +53,8 @@ vercel --prod
 |---|---|
 | `VITE_APP_MODE` | `standalone` 或 `integrated` |
 | `VITE_API_BASE_URL` | `https://你的后端域名/api` |
+| `VITE_EDA_BUILDER_API_BASE_URL` | `/api` 或 `https://你的后端域名/api` |
+| `EDA_BUILDER_URL` | FastAPI Builder 服务地址，如 `https://eda-builder.example.com` |
 
 改完需 **Redeploy** 生效。
 
@@ -61,6 +63,8 @@ vercel --prod
 **选项 1：后端单独部署在别处**
 把 `server/`（Express）部署到 Railway / Render / 自己的服务器，
 拿到公网地址后填进 `VITE_API_BASE_URL`。注意后端要开 CORS（已内置）。
+若启用 EDA Asset Builder，另需部署 `services/eda-builder`，并在 Express 环境设置
+`EDA_BUILDER_URL`；Express 只做 `/api/v1/eda-builder/*` 代理，不运行 OCR/CAD/KiCad。
 
 **选项 2：integrated 模式直接对接 ezPLM**
 `VITE_API_BASE_URL` 指向 ezPLM 真实后端，不需要部署 server/。

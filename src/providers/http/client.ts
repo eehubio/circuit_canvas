@@ -36,6 +36,9 @@ export class HttpClient {
   async post<T>(path: string, body?: unknown): Promise<T> {
     return this.request<T>('POST', path, body);
   }
+  async patch<T>(path: string, body?: unknown): Promise<T> {
+    return this.request<T>('PATCH', path, body);
+  }
   async put<T>(path: string, body?: unknown): Promise<T> {
     return this.request<T>('PUT', path, body);
   }

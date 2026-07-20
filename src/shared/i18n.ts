@@ -204,6 +204,8 @@ const DICT: Record<string, string> = {
   '定制器件构建向导': 'Custom Part Wizard',
   '保存到定制库': 'Save to Library', '添加管脚': 'Add Pin', '管脚定义': 'Pin Definition',
   '封装参数': 'Package', '封装预览': 'Footprint Preview', '焊盘': 'pads', '模块轮廓（可选）': 'Module Outline (optional)',
+  '自动生成 KiCad 资产': 'Auto-generate KiCad Assets',
+  '手工创建定制器件': 'Create Custom Part Manually',
 };
 
 /** 非 hook 版（深层组件直接调用；语言切换时 App 整树重渲染保证及时生效） */

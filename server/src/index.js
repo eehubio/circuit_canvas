@@ -32,6 +32,48 @@ app.use(express.json({ limit: '5mb' }));
 
 const v1 = express.Router();
 
+/* ---------- EDA Asset Builder Gateway Proxy ---------- */
+async function proxyEdaBuilder(req, res) {
+  const base = (process.env.EDA_BUILDER_URL ?? '').trim().replace(/\/+$/, '');
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  if (!base) {
+    return res.status(501).send(JSON.stringify({
+      error: 'EDA_BUILDER_URL 未配置',
+      code: 'EDA_BUILDER_NOT_CONFIGURED',
+      hint: 'Run services/eda-builder and set EDA_BUILDER_URL=http://localhost:8000',
+    }));
+  }
+
+  const rest = req.originalUrl.replace(/^\/api\/v1\/eda-builder/, '') || '/';
+  const target = `${base}/api/v1/eda-builder${rest}`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Number(process.env.EDA_BUILDER_PROXY_TIMEOUT_MS ?? 30000));
+  try {
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(req.headers.authorization ? { Authorization: req.headers.authorization } : {}),
+      ...(req.headers['idempotency-key'] ? { 'Idempotency-Key': req.headers['idempotency-key'] } : {}),
+    };
+    const upstream = await fetch(target, {
+      method: req.method,
+      headers,
+      signal: controller.signal,
+      body: ['GET', 'HEAD'].includes(req.method) ? undefined : JSON.stringify(req.body ?? {}),
+    });
+    const text = await upstream.text();
+    res.status(upstream.status);
+    res.setHeader('Content-Type', upstream.headers.get('content-type') ?? 'application/json; charset=utf-8');
+    return res.send(text);
+  } catch (err) {
+    const code = err?.name === 'AbortError' ? 'EDA_BUILDER_TIMEOUT' : 'EDA_BUILDER_PROXY_FAILED';
+    return res.status(502).send(JSON.stringify({ error: 'EDA Builder proxy failed', code, detail: String(err).slice(0, 200) }));
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+v1.use('/eda-builder', proxyEdaBuilder);
+
 /* ---------- 身份 ---------- */
 v1.get('/me', (_req, res) => {
   res.json({ userId: 'local-user', displayName: '本地用户', organizationId: 'org-local' });

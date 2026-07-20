@@ -35,12 +35,17 @@ import { BomPanel } from './modules/bom/BomPanel';
 import { AdvisorPanel } from './modules/design-review/AdvisorPanel';
 import { BlockDiagramPanel } from './modules/block-diagram/BlockDiagramPanel';
 import { SchematicPanel } from './modules/schematic/SchematicPanel';
+import { EdaAssetBuilderModal } from './modules/eda-asset-builder/EdaAssetBuilderModal';
+import { registerGeneratedAssetBundle } from './design-core/generated-assets/registerBundle';
+import { registerEdaAssetBuilderPlugin } from './plugins/eda-asset-builder';
+import type { EdaArtifactBundle } from './providers/types/eda-builder';
 import { exportDocument, importDocumentFromFile, autosave, exportMarkdownReport } from './modules/report/persistence';
 import { COLORS, CATEGORY_DISPLAY, fmtMoney } from './shared/theme';
 import type { BoardShapeKind } from './design-core/document/types';
 
 const providers = getProviders();
 const ctx = { userId: 'demo-user', organizationId: 'org-demo' };
+registerEdaAssetBuilderPlugin();
 
 const SHAPES: { id: BoardShapeKind; icon: string; name: string }[] = [
   { id: 'rect', icon: '▭', name: '矩形' },
@@ -71,6 +76,7 @@ export default function App() {
   const flipLayer = useDesignStore((s) => s.flipComponentLayer);
   const toggleAllRefDes = useDesignStore((s) => s.toggleAllRefDes);
   const hideAllRefDes = useDesignStore((s) => s.hideAllRefDes);
+  const addGeneratedComponent = useDesignStore((s) => s.addComponent);
   const toggleRefDesHidden = useDesignStore((s) => s.toggleRefDesHidden);
   // 库文件版本：真实 .kicad_mod/.kicad_sym 解析注册后递增 → 全树切换到精确数据
   useLibFileStore((st) => st.version);
@@ -94,6 +100,7 @@ export default function App() {
   const [pcbExportOpen, setPcbExportOpen] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
   const [wizard, setWizard] = useState<{ open: boolean; mpn?: string } | null>(null);
+  const [edaBuilderOpen, setEdaBuilderOpen] = useState(false);
   const [wizardTick, setWizardTick] = useState(0);
   useEffect(() => { bootCustomLib(); }, []);
   // 自动保存（本地）：doc 变更 800ms 防抖写 localStorage；启动时若有存档且当前为空则恢复
@@ -361,7 +368,7 @@ export default function App() {
                 <button key={id} onClick={() => setLeftTab(id)} style={{ flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 700, cursor: 'pointer', border: `1px solid ${leftTab === id ? COLORS.green : '#dbe6dd'}`, borderRadius: 8, background: leftTab === id ? COLORS.greenBg : '#fff', color: leftTab === id ? COLORS.green : '#64748b' }}>{label}</button>
               ))}
             </div>
-            {leftTab === 'model' ? <ComponentSearchPanel /> : leftTab === 'footprint' ? <FootprintLibraryPanel /> : <CustomLibPanel onOpenWizard={() => setWizard({ open: true })} wizardTick={wizardTick} />}
+            {leftTab === 'model' ? <ComponentSearchPanel /> : leftTab === 'footprint' ? <FootprintLibraryPanel /> : <CustomLibPanel onOpenAssetBuilder={() => setEdaBuilderOpen(true)} onOpenWizard={() => setWizard({ open: true })} wizardTick={wizardTick} />}
           </div>
         </aside>
 
@@ -582,6 +589,19 @@ export default function App() {
         <CustomPartWizard initialMpn={wizard.mpn}
           onSaved={() => { setWizard(null); setWizardTick((t) => t + 1); setLeftTab('custom'); }}
           onClose={() => setWizard(null)} />
+      )}
+
+      {edaBuilderOpen && (
+        <EdaAssetBuilderModal
+          provider={providers.edaBuilder}
+          onClose={() => setEdaBuilderOpen(false)}
+          onPublishToCanvas={async (bundle: EdaArtifactBundle) => {
+            const result = await registerGeneratedAssetBundle(bundle);
+            addGeneratedComponent(result.component);
+            setWizardTick((tick) => tick + 1);
+            setLeftTab('custom');
+          }}
+        />
       )}
 
       {/* Fullscreen overlays */}
@@ -822,14 +842,17 @@ function CompDetail({ iid, onBuild }: { iid: string; onBuild?: (mpn: string) => 
 
 
 /** 定制模块库面板：已保存器件列表 + 新建入口 */
-function CustomLibPanel({ onOpenWizard, wizardTick }: { onOpenWizard: () => void; wizardTick: number }) {
+function CustomLibPanel({ onOpenAssetBuilder, onOpenWizard, wizardTick }: { onOpenAssetBuilder: () => void; onOpenWizard: () => void; wizardTick: number }) {
   const addComponent = useDesignStore((s) => s.addComponent);
   const [, setRefresh] = useState(0);
   const parts = useMemo(() => loadCustomParts(), [wizardTick]);
   return (
     <div>
-      <button onClick={onOpenWizard} style={{ width: '100%', padding: '10px 0', borderRadius: 8, border: 'none', background: COLORS.green, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginBottom: 10 }}>
-        {tr('＋ 新建定制器件（AI 提取 / 手工向导）')}
+      <button onClick={onOpenAssetBuilder} style={{ width: '100%', padding: '10px 0', borderRadius: 8, border: 'none', background: COLORS.green, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginBottom: 8 }}>
+        ⚡ {tr('自动生成 KiCad 资产')}
+      </button>
+      <button onClick={onOpenWizard} style={{ width: '100%', padding: '9px 0', borderRadius: 8, border: '1px solid #dbe6dd', background: '#fff', color: COLORS.green, fontSize: 12, fontWeight: 700, cursor: 'pointer', marginBottom: 10 }}>
+        {tr('手工创建定制器件')}
       </button>
       {parts.length === 0 && <div style={{ textAlign: 'center', padding: 30, color: '#94a3b8', fontSize: 11.5 }}>{tr('还没有定制器件')}<br />{tr('上传 Datasheet 或手工填写管脚即可构建')}</div>}
       {parts.map((p: CustomPart) => (

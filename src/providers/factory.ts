@@ -14,12 +14,14 @@ import {
   MockComponentDataProvider, MockReferenceDesignProvider, MockIdentityProvider,
   LocalStorageProjectProvider, MockAiModelProvider,
 } from './mock';
+import { MockEdaBuilderProvider } from './mock/MockEdaBuilderProvider';
 import { HttpClient } from './http/client';
 import { GeminiAiProvider } from './gemini';
 import {
   EzplmComponentDataProvider, EzplmReferenceDesignProvider,
   EzplmIdentityProvider, EzplmProjectProvider,
 } from './ezplm';
+import { HttpEdaBuilderProvider } from './standalone/HttpEdaBuilderProvider';
 
 import { geminiAvailable } from './gemini';
 import type { AiModelProvider, AiSchemeRequest, AccessContext } from './types';
@@ -68,6 +70,17 @@ function makeHttp(): HttpClient {
   });
 }
 
+function makeEdaBuilderHttp(): HttpClient {
+  return new HttpClient({
+    baseUrl: appConfig.edaBuilderApiBaseUrl ?? appConfig.apiBaseUrl ?? '/api',
+    getAuthHeaders: (): Record<string, string> => {
+      const t = authTokenGetter();
+      return t ? { Authorization: `Bearer ${t}` } : {};
+    },
+    timeoutMs: 30000,
+  });
+}
+
 export function getProviders(): ProviderRegistry {
   if (registry) return registry;
 
@@ -79,6 +92,7 @@ export function getProviders(): ProviderRegistry {
       referenceDesigns: new EzplmReferenceDesignProvider(http),
       project: new EzplmProjectProvider(http),
       ai: makeAi(),
+      edaBuilder: new HttpEdaBuilderProvider(makeEdaBuilderHttp()),
     };
   } else if (appConfig.mode === 'standalone') {
     const http = makeHttp(); // 指向本地后端骨架 (server/)
@@ -88,6 +102,7 @@ export function getProviders(): ProviderRegistry {
       referenceDesigns: new EzplmReferenceDesignProvider(http),
       project: new LocalStorageProjectProvider(),
       ai: makeAi(),
+      edaBuilder: new HttpEdaBuilderProvider(makeEdaBuilderHttp()),
     };
   } else {
     registry = {
@@ -96,6 +111,7 @@ export function getProviders(): ProviderRegistry {
       referenceDesigns: new MockReferenceDesignProvider(),
       project: new LocalStorageProjectProvider(),
       ai: makeAi(),
+      edaBuilder: new MockEdaBuilderProvider(),
     };
   }
   return registry;
